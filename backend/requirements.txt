@@ -1,0 +1,25 @@
+fastapi==0.139.2
+uvicorn[standard]==0.51.0
+SQLAlchemy==2.0.51
+pydantic==2.13.4
+pydantic-settings==2.14.2
+python-pptx==1.0.2
+Jinja2==3.1.6
+python-multipart==0.0.32
+openpyxl==3.1.5
+python-docx==1.2.0
+beautifulsoup4==4.15.0
+bcrypt==4.2.1
+PyJWT==2.10.1
+psycopg2-binary==2.9.10  # Postgres driver for DATABASE_URL in production (SQLite is dev-only)
+
+# test-only
+pytest==9.1.1
+httpx==0.28.1
+
+# §7 scraping — fetch_rendered_html needs a Chromium binary available at
+# runtime (`playwright install chromium`, or point PLAYWRIGHT_BROWSERS_PATH
+# at a pre-installed one) and outbound network access to arbitrary listing
+# sites. Not exercised by the test suite, which covers parse_html/
+# parse_area_subdivision/extract_price_raw as pure functions instead.
+playwright==1.61.0

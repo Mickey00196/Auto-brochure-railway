@@ -1,0 +1,33 @@
+from app.routers import (
+    addons,
+    assistant,
+    buildings,
+    clients,
+    comparison,
+    dashboard,
+    export,
+    imports,
+    match,
+    neighbourhoods,
+    proposals,
+    qa,
+    seed,
+    units,
+)
+
+all_routers = [
+    buildings.router,
+    units.router,
+    addons.router,
+    neighbourhoods.router,
+    clients.router,
+    proposals.router,
+    comparison.router,
+    qa.router,
+    export.router,
+    match.router,
+    dashboard.router,
+    assistant.router,
+    seed.router,
+    imports.router,
+]
