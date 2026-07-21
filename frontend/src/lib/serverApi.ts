@@ -22,17 +22,30 @@ import { internalApiBaseUrl } from "./internalApiBaseUrl";
  * via each page's existing fallback. */
 export const INTERNAL_API_BASE_URL = internalApiBaseUrl();
 
+// A misconfigured/unreachable INTERNAL_API_BASE_URL (wrong internal
+// hostname, backend mid-restart) would otherwise hang each request
+// indefinitely rather than failing fast with the "Could not reach the API"
+// message every page already renders for this case.
+const BACKEND_TIMEOUT_MS = 10_000;
+
 async function serverRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const token = (await cookies()).get("session")?.value;
-  const res = await fetch(`${INTERNAL_API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init?.headers,
-    },
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${INTERNAL_API_BASE_URL}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init?.headers,
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
+    });
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    throw new Error(`${init?.method ?? "GET"} ${path} failed: could not reach backend at ${INTERNAL_API_BASE_URL} (${reason})`);
+  }
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`${init?.method ?? "GET"} ${path} failed (${res.status}): ${body}`);

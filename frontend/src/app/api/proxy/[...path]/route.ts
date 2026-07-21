@@ -11,6 +11,10 @@ import { internalApiBaseUrl } from "@/lib/internalApiBaseUrl";
  * directly instead — see src/lib/serverApi.ts. */
 const INTERNAL_API_BASE_URL = internalApiBaseUrl();
 
+// A misconfigured/unreachable INTERNAL_API_BASE_URL would otherwise hang
+// every proxied request indefinitely instead of surfacing a clear error.
+const BACKEND_TIMEOUT_MS = 10_000;
+
 async function forward(request: Request, path: string[], search: string): Promise<Response> {
   const token = (await cookies()).get("session")?.value;
   if (!token) {
@@ -20,15 +24,25 @@ async function forward(request: Request, path: string[], search: string): Promis
   const targetUrl = `${INTERNAL_API_BASE_URL}/${path.join("/")}${search}`;
   const hasBody = !["GET", "HEAD"].includes(request.method);
 
-  const res = await fetch(targetUrl, {
-    method: request.method,
-    headers: {
-      "Content-Type": request.headers.get("content-type") ?? "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: hasBody ? await request.arrayBuffer() : undefined,
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(targetUrl, {
+      method: request.method,
+      headers: {
+        "Content-Type": request.headers.get("content-type") ?? "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: hasBody ? await request.arrayBuffer() : undefined,
+      cache: "no-store",
+      signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
+    });
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    return NextResponse.json(
+      { detail: `Could not reach backend at ${INTERNAL_API_BASE_URL}: ${reason}` },
+      { status: 502 },
+    );
+  }
 
   const responseHeaders = new Headers();
   const contentType = res.headers.get("content-type");

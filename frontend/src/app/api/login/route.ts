@@ -4,6 +4,9 @@ import { internalApiBaseUrl } from "@/lib/internalApiBaseUrl";
 
 const INTERNAL_API_BASE_URL = internalApiBaseUrl();
 const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // matches the backend's 7-day JWT expiry
+// A misconfigured/unreachable INTERNAL_API_BASE_URL would otherwise hang the
+// login request indefinitely instead of surfacing a clear error.
+const BACKEND_TIMEOUT_MS = 10_000;
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
@@ -11,12 +14,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Email and password are required" }, { status: 400 });
   }
 
-  const res = await fetch(`${INTERNAL_API_BASE_URL}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: body.email, password: body.password }),
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${INTERNAL_API_BASE_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: body.email, password: body.password }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
+    });
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    return NextResponse.json(
+      { message: `Could not reach backend at ${INTERNAL_API_BASE_URL}: ${reason}` },
+      { status: 502 },
+    );
+  }
 
   if (!res.ok) {
     const detail = await res.json().catch(() => ({ detail: "Login failed" }));
