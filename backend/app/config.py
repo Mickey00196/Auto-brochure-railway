@@ -13,6 +13,15 @@ EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 # templated copy — see app/services/description_generator.py.
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
+# §7 scraping — sites with real bot-detection (Funda's network, notably)
+# block a plain hosted-IP headless browser regardless of fingerprint
+# spoofing. When set, fetch_rendered_html() routes the fetch through
+# ScraperAPI's rendering endpoint (rotating residential IPs, JS rendering,
+# anti-bot bypass handled on their end) instead of driving Chromium
+# directly. Left unset, scraping falls back to a locally-launched headless
+# browser — fine for sites without serious bot protection, not for Funda.
+SCRAPERAPI_KEY = os.environ.get("SCRAPERAPI_KEY")
+
 # soffice binary used to flatten the PPTX (§14 primary target) into a PDF —
 # "PDF as a flattened export of the same slides" rather than a second renderer.
 SOFFICE_BIN = os.environ.get("SOFFICE_BIN", "soffice")

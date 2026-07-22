@@ -1,9 +1,11 @@
 """§7 Scraping Engine — generic implementation.
 
-`fetch_rendered_html` drives the pre-installed Playwright Chromium to render
-a listing page (handles JS-heavy brokerage sites); it requires outbound
-network access to the target site, which this sandbox does not have for
-arbitrary third-party domains, so it's provided but not exercised by tests.
+`fetch_rendered_html` renders a listing page (handles JS-heavy brokerage
+sites) — via ScraperAPI when SCRAPERAPI_KEY is set (needed for sites with
+real bot-detection, like Funda's network), otherwise via a locally-launched
+Playwright Chromium. Requires outbound network access to the target site,
+which this sandbox does not have for arbitrary third-party domains, so it's
+provided but not exercised by tests.
 
 `parse_area_subdivision` and `extract_units_from_text` are pure functions
 with no network dependency — they're the actual fix for §7's core
@@ -101,26 +103,50 @@ def extract_units_from_text(floor_blocks: list[str]) -> list[ScrapedUnit]:
     return units
 
 
+def _fetch_via_scraperapi(url: str, *, timeout_ms: int) -> str:
+    """Route the fetch through ScraperAPI's rendering endpoint instead of a
+    locally-launched browser: rotating residential IPs and anti-bot/JS-
+    challenge handling happen on their end, which a hosting-provider IP
+    (what any PaaS deploys from) can't get past on its own regardless of
+    browser fingerprint. Used whenever SCRAPERAPI_KEY is set — see
+    app/config.py."""
+    import httpx
+
+    from app.config import SCRAPERAPI_KEY
+
+    response = httpx.get(
+        "https://api.scraperapi.com/",
+        params={"api_key": SCRAPERAPI_KEY, "url": url, "render": "true"},
+        timeout=timeout_ms / 1000,
+    )
+    response.raise_for_status()
+    return response.text
+
+
 def fetch_rendered_html(url: str, *, timeout_ms: int = 15_000, settle_ms: int = 3_000) -> str:
-    """Render `url` with the installed headless Chromium (wherever `playwright
-    install` put it — no hardcoded executable_path, since that varies by
-    machine/environment and Playwright already knows where to find its own
-    install). Requires outbound network access to the target domain — not
-    called by the test suite, which exercises the pure-parsing functions
-    above instead.
+    """Render `url` and return its HTML. Requires outbound network access to
+    the target domain — not called by the test suite, which exercises the
+    pure-parsing functions above instead.
 
     Some brokerage sites (Funda's network among them) show an anti-bot
     interstitial ("you're almost on the page you're looking for") to an
     obviously-headless browser instead of the real listing — a real site-side
-    defense, not something this can reliably defeat. A realistic user agent/
-    locale/viewport, patching over the most common headless "tells"
-    (`navigator.webdriver` etc.), and a short settle delay after load is a
-    best effort at passing softer checks; it won't beat a determined
-    bot-detection service that also scores the request's IP address (a
-    hosting-provider IP, which is what any PaaS deploys from, reads as
-    suspicious to those regardless of browser fingerprint) — and there's no
-    local way to verify against the real site (this sandbox has no outbound
-    network access to it)."""
+    defense that a hosting-provider IP can't reliably get past on its own,
+    since these services typically score the request's IP address as well as
+    the browser's fingerprint. When SCRAPERAPI_KEY is configured, the fetch
+    is routed through ScraperAPI instead (see _fetch_via_scraperapi) — that's
+    the actual fix for protected sites like Funda. Without it, this falls
+    back to a locally-launched headless Chromium (wherever `playwright
+    install` put it — no hardcoded executable_path, since that varies by
+    machine/environment) with a realistic user agent/locale/viewport and
+    patches over the most common headless "tells", which is a reasonable
+    best effort against sites with no real bot-detection service, but not
+    against Funda specifically."""
+    from app.config import SCRAPERAPI_KEY
+
+    if SCRAPERAPI_KEY:
+        return _fetch_via_scraperapi(url, timeout_ms=timeout_ms)
+
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:

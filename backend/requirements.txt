@@ -12,10 +12,10 @@ beautifulsoup4==4.15.0
 bcrypt==4.2.1
 PyJWT==2.10.1
 psycopg2-binary==2.9.10  # Postgres driver for DATABASE_URL in production (SQLite is dev-only)
+httpx==0.28.1  # test client dependency, and used at runtime to call ScraperAPI when SCRAPERAPI_KEY is set (§7 scraping)
 
 # test-only
 pytest==9.1.1
-httpx==0.28.1
 
 # §7 scraping — fetch_rendered_html needs a Chromium binary available at
 # runtime (`playwright install chromium`, or point PLAYWRIGHT_BROWSERS_PATH

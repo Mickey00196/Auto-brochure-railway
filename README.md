@@ -163,6 +163,20 @@ Region map pages render a real Google Static Maps image when
 `None` and the generator falls back to a clearly-labeled placeholder — it
 never fails the export.
 
+URL import (Workflow 2, and the "Fetch from URL" box on the manual Add
+Building form) works out of the box against sites with no real bot
+protection, using a locally-launched headless Chromium. Sites with a real
+anti-bot service in front of them (Funda's network, notably) block that
+regardless of how convincing the browser fingerprint looks, because they
+also score the request's *IP address* — a hosting-provider IP reads as
+suspicious no matter what. Set `SCRAPERAPI_KEY` (from
+[scraperapi.com](https://www.scraperapi.com/), which has a free tier) to
+route the fetch through their rendering endpoint instead — rotating
+residential IPs and anti-bot bypass happen on their end. Without it,
+scraping still works for less-protected sites; Funda listings specifically
+will keep showing its "you're almost on the page you're looking for"
+interstitial instead of the real listing until this is set.
+
 Point `DATABASE_URL` at Postgres (Supabase, per the spec's intended stack) in
 production; SQLite is the zero-config default for local dev.
 
