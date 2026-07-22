@@ -19,6 +19,7 @@ export default async function DashboardPage() {
         title="Dashboard"
         description="Imported properties, proposal pipeline, and a live Data Completeness check across every active proposal."
         actions={<SeedDemoButton />}
+        showHomeLink={false}
       />
 
       {error && (

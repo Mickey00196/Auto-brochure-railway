@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
@@ -31,15 +32,37 @@ export function Badge({ children, tone = "default" }: { children: ReactNode; ton
   );
 }
 
-export function PageHeader({ eyebrow, title, description, actions }: { eyebrow?: string; title: string; description?: string; actions?: ReactNode }) {
+export function PageHeader({
+  eyebrow,
+  title,
+  description,
+  actions,
+  showHomeLink = true,
+}: {
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  actions?: ReactNode;
+  /** Every page but the dashboard itself shows this by default — pass
+   * `false` on the dashboard page, since "back to Dashboard" makes no
+   * sense from the Dashboard. */
+  showHomeLink?: boolean;
+}) {
   return (
-    <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-      <div>
-        {eyebrow && <div className="text-xs font-bold uppercase tracking-wide text-accent">{eyebrow}</div>}
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">{title}</h1>
-        {description && <p className="mt-2 max-w-2xl text-muted">{description}</p>}
+    <div className="mb-8">
+      {showHomeLink && (
+        <Link href="/" className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-accent hover:underline">
+          ← Back to Dashboard
+        </Link>
+      )}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          {eyebrow && <div className="text-xs font-bold uppercase tracking-wide text-accent">{eyebrow}</div>}
+          <h1 className="mt-1 text-3xl font-bold tracking-tight">{title}</h1>
+          {description && <p className="mt-2 max-w-2xl text-muted">{description}</p>}
+        </div>
+        {actions && <div className="flex gap-2">{actions}</div>}
       </div>
-      {actions && <div className="flex gap-2">{actions}</div>}
     </div>
   );
 }
