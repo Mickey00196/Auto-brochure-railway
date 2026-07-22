@@ -101,20 +101,38 @@ def extract_units_from_text(floor_blocks: list[str]) -> list[ScrapedUnit]:
     return units
 
 
-def fetch_rendered_html(url: str, *, timeout_ms: int = 15_000) -> str:
+def fetch_rendered_html(url: str, *, timeout_ms: int = 15_000, settle_ms: int = 3_000) -> str:
     """Render `url` with the installed headless Chromium (wherever `playwright
     install` put it — no hardcoded executable_path, since that varies by
     machine/environment and Playwright already knows where to find its own
     install). Requires outbound network access to the target domain — not
     called by the test suite, which exercises the pure-parsing functions
-    above instead."""
+    above instead.
+
+    Some brokerage sites (Funda's network among them) show an anti-bot
+    interstitial ("you're almost on the page you're looking for") to an
+    obviously-headless browser instead of the real listing — a real site-side
+    defense, not something this can reliably defeat. A realistic user agent/
+    locale/viewport plus a short settle delay after load is a best effort at
+    passing softer checks; it won't beat a determined bot-detection service,
+    and there's no local way to verify against the real site (this sandbox
+    has no outbound network access to it)."""
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
         try:
-            page = browser.new_page()
+            context = browser.new_context(
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                ),
+                locale="nl-NL",
+                viewport={"width": 1366, "height": 900},
+            )
+            page = context.new_page()
             page.goto(url, timeout=timeout_ms, wait_until="networkidle")
+            page.wait_for_timeout(settle_ms)  # lets a JS-driven interstitial redirect finish, if any
             return page.content()
         finally:
             browser.close()
