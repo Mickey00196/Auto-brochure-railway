@@ -10,6 +10,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# Pinned explicitly rather than left to Playwright's default (~/.cache/ms-playwright):
+# some PaaS runtimes (seen on Railway) inject their own PLAYWRIGHT_BROWSERS_PATH into
+# the container at runtime without it being set during `docker build`, so the browser
+# installed here ends up at a different path than where the app looks for it at
+# runtime ("Failed to launch chromium because executable doesn't exist at ...").
+# Setting it before `playwright install` makes build time and run time agree
+# regardless of what the platform does or doesn't inject later.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 RUN playwright install --with-deps chromium
