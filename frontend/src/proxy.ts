@@ -19,7 +19,7 @@ function isTokenLikelyValid(token: string | undefined): boolean {
   }
 }
 
-const PUBLIC_PATHS = new Set(["/login", "/api/login"]);
+const PUBLIC_PATHS = new Set(["/login", "/api/login", "/signup", "/api/signup"]);
 
 export function proxy(request: NextRequest) {
   const token = request.cookies.get("session")?.value;

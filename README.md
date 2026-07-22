@@ -202,15 +202,23 @@ schemas.
 
 ## Team accounts (auth)
 
-There is no public signup — accounts are provisioned by whoever's running the
-deployment, then colleagues log in at `/login` with the email/password they
-were given. Every logged-in user sees and can edit every Building, Client, and
-Proposal; there's no per-user data scoping, only a "you must be logged in" gate
-in front of the whole app (this is a small-team internal tool, not a
-multi-tenant product).
+Public signup is **off by default** — accounts are normally provisioned by
+whoever's running the deployment, then colleagues log in at `/login` with the
+email/password they were given. Every logged-in user sees and can edit every
+Building, Client, and Proposal; there's no per-user data scoping, only a
+"you must be logged in" gate in front of the whole app (this is meant as a
+small-team internal tool, not a multi-tenant product) — so think about who
+you're handing access to before turning signup on.
 
-Provision an account with a shell into the backend (Render's "Shell" tab,
-`render ssh`, Railway's Console tab, etc.):
+**To allow signup anyway** (e.g. testing solo, or a team that's fine sharing
+everything): set `ALLOW_SIGNUP=true` on the backend service and redeploy.
+`/signup` on the frontend (linked from the login page) then lets anyone who
+reaches it create their own `broker`-role account — no invite needed. Turn
+`ALLOW_SIGNUP` back off once you don't want new accounts self-created anymore;
+existing accounts keep working either way.
+
+**Without signup enabled**, provision an account with a shell into the
+backend (Render's "Shell" tab, `render ssh`, Railway's Console tab, etc.):
 
 ```bash
 cd backend
