@@ -102,13 +102,16 @@ def extract_units_from_text(floor_blocks: list[str]) -> list[ScrapedUnit]:
 
 
 def fetch_rendered_html(url: str, *, timeout_ms: int = 15_000) -> str:
-    """Render `url` with the pre-installed headless Chromium. Requires
-    outbound network access to the target domain — not called by the test
-    suite, which exercises the pure-parsing functions above instead."""
+    """Render `url` with the installed headless Chromium (wherever `playwright
+    install` put it — no hardcoded executable_path, since that varies by
+    machine/environment and Playwright already knows where to find its own
+    install). Requires outbound network access to the target domain — not
+    called by the test suite, which exercises the pure-parsing functions
+    above instead."""
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(executable_path="/opt/pw-browsers/chromium")
+        browser = p.chromium.launch()
         try:
             page = browser.new_page()
             page.goto(url, timeout=timeout_ms, wait_until="networkidle")
