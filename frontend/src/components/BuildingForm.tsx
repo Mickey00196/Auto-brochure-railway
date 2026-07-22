@@ -9,7 +9,36 @@ import { Button, Card } from "@/components/ui";
 const inputClass = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm";
 const labelClass = "text-sm";
 
-export function BuildingForm({ neighbourhoods }: { neighbourhoods: Neighbourhood[] }) {
+const EMPTY_FORM = {
+  name: "",
+  address: "",
+  postalCode: "",
+  city: "",
+  neighbourhoodId: "",
+  submarket: "",
+  buildingType: "",
+  yearBuilt: "",
+  energyLabel: "",
+  breeamRating: "",
+  totalBuildingAreaM2: "",
+  accessibilityNote: "",
+  airportNote: "",
+  buildingAmenities: "",
+  description: "",
+  photos: "",
+};
+
+/** Subset of form fields the bookmarklet / query-param prefill can seed —
+ * see buildings/new/page.tsx. */
+export type BuildingFormInitial = Partial<typeof EMPTY_FORM>;
+
+export function BuildingForm({
+  neighbourhoods,
+  initial,
+}: {
+  neighbourhoods: Neighbourhood[];
+  initial?: BuildingFormInitial;
+}) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,24 +48,7 @@ export function BuildingForm({ neighbourhoods }: { neighbourhoods: Neighbourhood
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [fetchMessage, setFetchMessage] = useState<string | null>(null);
 
-  const [form, setForm] = useState({
-    name: "",
-    address: "",
-    postalCode: "",
-    city: "",
-    neighbourhoodId: "",
-    submarket: "",
-    buildingType: "",
-    yearBuilt: "",
-    energyLabel: "",
-    breeamRating: "",
-    totalBuildingAreaM2: "",
-    accessibilityNote: "",
-    airportNote: "",
-    buildingAmenities: "",
-    description: "",
-    photos: "",
-  });
+  const [form, setForm] = useState({ ...EMPTY_FORM, ...initial });
 
   function update<K extends keyof typeof form>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));

@@ -177,6 +177,16 @@ scraping still works for less-protected sites; Funda listings specifically
 will keep showing its "you're almost on the page you're looking for"
 interstitial instead of the real listing until this is set.
 
+For protected sites, there's also a no-service, no-circumvention option on
+the `/import` page: a **bookmarklet** you drag to your bookmarks bar once.
+It reads the listing page you're *already viewing in your own browser* (a
+real human session, real residential IP — nothing is fetched server-side and
+no access control is bypassed) and opens the Add Building form pre-filled via
+query params (`/buildings/new?name=…&address=…`). It prefers JSON-LD
+structured data, falls back to OpenGraph/meta tags and a light area
+heuristic, and leaves anything it can't find blank for manual entry. See
+`components/BuildingBookmarklet.tsx`.
+
 Point `DATABASE_URL` at Postgres (Supabase, per the spec's intended stack) in
 production; SQLite is the zero-config default for local dev.
 

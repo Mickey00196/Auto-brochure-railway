@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/ui";
 import { ImportForm } from "@/components/ImportForm";
+import { BuildingBookmarklet } from "@/components/BuildingBookmarklet";
 
 export default function ImportPage() {
   return (
@@ -9,6 +10,7 @@ export default function ImportPage() {
         title="Import from URLs"
         description="Paste one or more listing URLs. Each is scraped, its unit-level area subdivision preserved rather than collapsed (§7), and stored as Building/Unit records available to any future Proposal — no manual re-typing required."
       />
+      <BuildingBookmarklet />
       <ImportForm />
     </div>
   );
