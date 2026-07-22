@@ -33,14 +33,28 @@ export default async function BuildingsPage() {
         {buildings.map((building) => (
           <Card key={building.building_id}>
             <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <Link href={`/buildings/${building.building_id}`} className="text-xl font-semibold hover:text-accent hover:underline">
-                  {building.name}
-                </Link>
-                <p className="text-sm text-muted">
-                  {building.address}, {building.city} · {building.building_type ?? "Office"}
-                  {building.energy_label && ` · Energy label ${building.energy_label}`}
-                </p>
+              <div className="flex items-start gap-4">
+                {building.photos.length > 0 ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- arbitrary scraped/manually-entered URLs, no fixed domain list to allowlist for next/image
+                  <img
+                    src={building.photos[0]}
+                    alt=""
+                    className="h-20 w-20 shrink-0 rounded-lg border border-border object-cover"
+                  />
+                ) : (
+                  <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg border border-dashed border-border text-xs text-muted">
+                    No photo
+                  </div>
+                )}
+                <div>
+                  <Link href={`/buildings/${building.building_id}`} className="text-xl font-semibold hover:text-accent hover:underline">
+                    {building.name}
+                  </Link>
+                  <p className="text-sm text-muted">
+                    {building.address}, {building.city} · {building.building_type ?? "Office"}
+                    {building.energy_label && ` · Energy label ${building.energy_label}`}
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Badge>{building.units.length} unit{building.units.length === 1 ? "" : "s"}</Badge>

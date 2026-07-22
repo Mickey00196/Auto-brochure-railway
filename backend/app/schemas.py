@@ -224,6 +224,26 @@ class SignupRequest(BaseModel):
     password: str
 
 
+class ScrapePreviewRequest(BaseModel):
+    url: str
+
+
+class ScrapePreviewResult(BaseModel):
+    """Building-shaped subset of a ScrapedListing, for autofilling the manual
+    Add Building form — nothing is persisted by this endpoint (contrast with
+    POST /imports/urls, which creates the Building/Unit records directly)."""
+
+    name: str | None = None
+    address: str | None = None
+    city: str | None = None
+    description: str | None = None
+    photos: list[str] = Field(default_factory=list)
+    energy_label: str | None = None
+    year_built: int | None = None
+    building_amenities: list[str] = Field(default_factory=list)
+    source_url: str
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     user_id: str

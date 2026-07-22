@@ -14,6 +14,11 @@ export function BuildingForm({ neighbourhoods }: { neighbourhoods: Neighbourhood
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [fetching, setFetching] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [fetchMessage, setFetchMessage] = useState<string | null>(null);
+
   const [form, setForm] = useState({
     name: "",
     address: "",
@@ -35,6 +40,38 @@ export function BuildingForm({ neighbourhoods }: { neighbourhoods: Neighbourhood
 
   function update<K extends keyof typeof form>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function handleFetchFromUrl() {
+    if (!sourceUrl.trim()) return;
+    setFetching(true);
+    setFetchError(null);
+    setFetchMessage(null);
+    try {
+      const scraped = await api.scrapePreview(sourceUrl.trim());
+      // Only overwrite fields the scrape actually found something for — an
+      // empty page shouldn't blank out whatever the broker already typed.
+      setForm((prev) => ({
+        ...prev,
+        name: scraped.name || prev.name,
+        address: scraped.address || prev.address,
+        city: scraped.city || prev.city,
+        description: scraped.description || prev.description,
+        energyLabel: scraped.energy_label || prev.energyLabel,
+        yearBuilt: scraped.year_built ? String(scraped.year_built) : prev.yearBuilt,
+        buildingAmenities: scraped.building_amenities.length ? scraped.building_amenities.join(", ") : prev.buildingAmenities,
+        photos: scraped.photos.length ? scraped.photos.join(", ") : prev.photos,
+      }));
+      setFetchMessage(
+        scraped.photos.length || scraped.address
+          ? "Filled in what the page had — double-check before saving, and fill in anything left blank."
+          : "Fetched the page, but couldn't find much on it — fill in the rest by hand.",
+      );
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Could not fetch that URL");
+    } finally {
+      setFetching(false);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -80,6 +117,28 @@ export function BuildingForm({ neighbourhoods }: { neighbourhoods: Neighbourhood
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      <Card>
+        <h2 className="mb-4 text-lg font-semibold">Fetch from a listing URL</h2>
+        <p className="mb-3 text-sm text-muted">
+          Paste a link to the listing and pull in what the page has — address, description, energy label,
+          photos, amenities — then fill in whatever it missed by hand.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <input
+            type="url"
+            value={sourceUrl}
+            onChange={(e) => setSourceUrl(e.target.value)}
+            placeholder="https://..."
+            className={`${inputClass} flex-1`}
+          />
+          <Button type="button" disabled={fetching || !sourceUrl.trim()} onClick={handleFetchFromUrl}>
+            {fetching ? "Fetching…" : "Fetch from URL"}
+          </Button>
+        </div>
+        {fetchError && <p className="mt-2 text-xs text-red-500">{fetchError}</p>}
+        {fetchMessage && !fetchError && <p className="mt-2 text-xs text-muted">{fetchMessage}</p>}
+      </Card>
+
       <Card>
         <h2 className="mb-4 text-lg font-semibold">Building</h2>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -149,6 +208,18 @@ export function BuildingForm({ neighbourhoods }: { neighbourhoods: Neighbourhood
           <label className={`${labelClass} sm:col-span-2`}>
             <span className="mb-1 block font-medium">Photo URLs (comma-separated)</span>
             <input value={form.photos} onChange={(e) => update("photos", e.target.value)} className={inputClass} />
+            {form.photos.trim() && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {form.photos
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+                  .map((src) => (
+                    // eslint-disable-next-line @next/next/no-img-element -- arbitrary scraped URLs, no fixed domain list to allowlist for next/image
+                    <img key={src} src={src} alt="" className="h-16 w-16 rounded-md border border-border object-cover" />
+                  ))}
+              </div>
+            )}
           </label>
           <label className={`${labelClass} sm:col-span-2`}>
             <span className="mb-1 block font-medium">Description</span>

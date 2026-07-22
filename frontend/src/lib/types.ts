@@ -170,3 +170,15 @@ export interface ImportResult {
   title: string | null;
   message: string | null;
 }
+
+export interface ScrapePreviewResult {
+  name: string | null;
+  address: string | null;
+  city: string | null;
+  description: string | null;
+  photos: string[];
+  energy_label: string | null;
+  year_built: number | null;
+  building_amenities: string[];
+  source_url: string;
+}

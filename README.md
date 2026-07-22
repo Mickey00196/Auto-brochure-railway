@@ -357,6 +357,18 @@ reverse proxy — the standard most PaaS load balancers already set), and a
    by the automated test suite (`parse_html` and the router's create/error-
    handling logic are — see `tests/test_scraping.py` and
    `tests/test_imports.py`).
+3. **From a URL, into the manual form** — `/buildings/new` also has a
+   "Fetch from URL" box: paste a listing link, and it calls
+   `POST /imports/preview` (same scraper as Workflow 2, but nothing is
+   persisted) to autofill the form's address/city/description/energy
+   label/amenities/photo fields, which you then review and edit before
+   submitting — a middle ground between typing everything by hand and
+   Workflow 2's fully automatic create. Only fields the scrape actually
+   found something for are overwritten, so it won't blank out anything
+   you'd already typed. Building photos (first one scraped, or the first
+   `Photo URLs` entry on a manual building) also now show as a thumbnail
+   on the left of each row in the `/buildings` list, for a quick visual
+   scan instead of reading addresses one by one.
 
 ## What's a real implementation vs. a documented stub
 

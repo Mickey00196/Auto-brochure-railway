@@ -16,13 +16,14 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import AddOn, Building, Unit
 from app.models.enums import RentPriceType, ServiceChargePriceType
+from app.schemas import ScrapePreviewRequest, ScrapePreviewResult
 from app.services.scraping.generic_scraper import scrape
 
 router = APIRouter(prefix="/imports", tags=["imports"])
@@ -62,6 +63,28 @@ def _parse_service_charge(raw: str) -> tuple[ServiceChargePriceType, float | Non
         return ServiceChargePriceType.TBD, None
     value = _parse_amount(raw)
     return (ServiceChargePriceType.FIXED, value) if value is not None else (ServiceChargePriceType.TBD, None)
+
+
+@router.post("/preview", response_model=ScrapePreviewResult)
+def preview_url(payload: ScrapePreviewRequest) -> ScrapePreviewResult:
+    """Scrape a listing URL and return Building-shaped fields for the manual
+    Add Building form to autofill — nothing is written to the database here;
+    the user still submits the (possibly-edited) form via POST /buildings."""
+    try:
+        listing = scrape(payload.url.strip())
+    except Exception as e:  # network failure, timeout, missing Chromium, etc.
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Could not fetch that URL: {e}")
+    return ScrapePreviewResult(
+        name=listing.title or None,
+        address=listing.address,
+        city=listing.city,
+        description=listing.description or None,
+        photos=listing.photos,
+        energy_label=listing.energy_label,
+        year_built=listing.year_built,
+        building_amenities=listing.amenities,
+        source_url=listing.source_url,
+    )
 
 
 @router.post("/urls", response_model=list[ImportResult])
