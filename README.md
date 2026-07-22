@@ -209,13 +209,23 @@ Proposal; there's no per-user data scoping, only a "you must be logged in" gate
 in front of the whole app (this is a small-team internal tool, not a
 multi-tenant product).
 
-Provision an account:
+Provision an account with a shell into the backend (Render's "Shell" tab,
+`render ssh`, Railway's Console tab, etc.):
 
 ```bash
 cd backend
 python -m app.cli create-user --email sam@yourcompany.example --name "Sam de Boer" --password "..." --role broker
 python -m app.cli list-users
 ```
+
+**No shell access available?** (e.g. a PaaS console that fails to route to
+the container) — set `ADMIN_EMAIL` and `ADMIN_PASSWORD` (optionally
+`ADMIN_NAME`) on the backend service and redeploy/restart it. On startup, if
+no user with that email exists yet, it's created as an `admin`. It's a
+no-op on every later restart once that email exists, so it's safe to leave
+the variables set — but treat them as a one-time bootstrap, not an ongoing
+password reset mechanism (changing `ADMIN_PASSWORD` later does nothing for
+an already-created account).
 
 Run this with `DATABASE_URL` pointed at whichever database the deployment
 actually uses — locally that's the SQLite default; in production, set

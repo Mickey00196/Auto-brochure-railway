@@ -11,8 +11,10 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.auth import get_current_user
-from app.database import init_db
+from app.auth import get_current_user, hash_password
+from app.database import SessionLocal, init_db
+from app.models.enums import UserRole
+from app.models.user import User
 from app.routers import all_routers
 from app.routers import auth as auth_router
 
@@ -27,9 +29,39 @@ CORS_ORIGINS = [
 ]
 
 
+def _bootstrap_admin() -> None:
+    # There's no public signup and no SSH/console shell on every PaaS (Railway's
+    # web console can itself fail to route to the container) — so the very
+    # first account has to be creatable without one. Set ADMIN_EMAIL and
+    # ADMIN_PASSWORD once, deploy, log in, then unset them; this only ever
+    # acts when that exact email doesn't already exist, so leaving them set is
+    # inert afterwards rather than resettable-password-forever.
+    email = os.environ.get("ADMIN_EMAIL")
+    password = os.environ.get("ADMIN_PASSWORD")
+    if not email or not password:
+        return
+    email = email.strip().lower()
+    db = SessionLocal()
+    try:
+        if db.query(User).filter(User.email == email).first():
+            return
+        db.add(
+            User(
+                email=email,
+                name=os.environ.get("ADMIN_NAME", "Admin"),
+                hashed_password=hash_password(password),
+                role=UserRole.ADMIN,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    _bootstrap_admin()
     yield
 
 
