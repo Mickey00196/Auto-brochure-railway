@@ -113,10 +113,14 @@ def fetch_rendered_html(url: str, *, timeout_ms: int = 15_000, settle_ms: int = 
     interstitial ("you're almost on the page you're looking for") to an
     obviously-headless browser instead of the real listing — a real site-side
     defense, not something this can reliably defeat. A realistic user agent/
-    locale/viewport plus a short settle delay after load is a best effort at
-    passing softer checks; it won't beat a determined bot-detection service,
-    and there's no local way to verify against the real site (this sandbox
-    has no outbound network access to it)."""
+    locale/viewport, patching over the most common headless "tells"
+    (`navigator.webdriver` etc.), and a short settle delay after load is a
+    best effort at passing softer checks; it won't beat a determined
+    bot-detection service that also scores the request's IP address (a
+    hosting-provider IP, which is what any PaaS deploys from, reads as
+    suspicious to those regardless of browser fingerprint) — and there's no
+    local way to verify against the real site (this sandbox has no outbound
+    network access to it)."""
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
@@ -129,6 +133,18 @@ def fetch_rendered_html(url: str, *, timeout_ms: int = 15_000, settle_ms: int = 
                 ),
                 locale="nl-NL",
                 viewport={"width": 1366, "height": 900},
+            )
+            # Patches the handful of DOM properties bot-detection scripts most
+            # commonly check to tell a stock headless Chromium apart from a
+            # real browser — none of this hides the request's IP address,
+            # which is the harder signal to spoof.
+            context.add_init_script(
+                """
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                Object.defineProperty(navigator, 'languages', { get: () => ['nl-NL', 'nl', 'en-US', 'en'] });
+                Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+                window.chrome = { runtime: {} };
+                """
             )
             page = context.new_page()
             page.goto(url, timeout=timeout_ms, wait_until="networkidle")
