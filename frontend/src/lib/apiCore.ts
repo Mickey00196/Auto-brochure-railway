@@ -5,12 +5,15 @@ import type {
   ComparisonRow,
   DashboardData,
   ImportResult,
+  IngestionJob,
+  IngestionRequest,
   MatchResult,
   Neighbourhood,
   Proposal,
   ProposalWithUnits,
   QAReport,
   ScrapePreviewResult,
+  SourceHealth,
   Unit,
 } from "./types";
 
@@ -78,6 +81,11 @@ export function makeApi(request: DoRequest) {
       request<ImportResult[]>("/imports/urls", { method: "POST", body: JSON.stringify({ urls }) }),
     scrapePreview: (url: string) =>
       request<ScrapePreviewResult>("/imports/preview", { method: "POST", body: JSON.stringify({ url }) }),
+
+    startIngestion: (payload: IngestionRequest) =>
+      request<IngestionJob>("/ingestion/jobs", { method: "POST", body: JSON.stringify(payload) }),
+    ingestionJob: (jobId: string) => request<IngestionJob>(`/ingestion/jobs/${jobId}`),
+    sourceHealth: () => request<SourceHealth[]>("/ingestion/sources"),
 
     me: () => request<{ user_id: string; email: string; name: string; role: string }>("/auth/me"),
   };

@@ -256,3 +256,70 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+# ─────────────────────────────────────── Ingestion (Step 10) ───────────────────────────────────────
+
+
+class IngestionRequest(BaseModel):
+    city: str | None = None
+    property_type: str = "office"
+    min_area_sqm: float | None = None
+    max_area_sqm: float | None = None
+    sources: list[str] | None = None  # None = all searchable sources
+    max_results: int = Field(default=100, ge=1, le=500)
+
+
+class IngestionJobOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    job_id: str
+    status: str
+    params: dict[str, Any] = Field(default_factory=dict)
+    progress_current: int
+    progress_total: int
+    discovered: int
+    processed: int
+    created: int
+    updated: int
+    unchanged: int
+    duplicates: int
+    failed: int
+    logs: list[dict[str, Any]] = Field(default_factory=list)
+    error: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
+class SourceHealthOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    source: str
+    display_name: str | None = None
+    status: str
+    last_successful_run: datetime | None = None
+    last_attempt: datetime | None = None
+    last_error: str | None = None
+    number_of_listings: int
+
+
+class ListingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    listing_id: str
+    source: str
+    source_url: str
+    building_id: str | None = None
+    match_confidence: str | None = None
+    needs_review: bool
+    building_name: str | None = None
+    address: str | None = None
+    city: str | None = None
+    available_area_sqm: float | None = None
+    min_area_sqm: float | None = None
+    max_area_sqm: float | None = None
+    asking_rent: float | None = None
+    asking_rent_unit: str | None = None
+    energy_label: str | None = None
+    image_urls: list[str] = Field(default_factory=list)
+    status: str
+    first_seen_at: datetime
+    last_seen_at: datetime

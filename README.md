@@ -280,6 +280,89 @@ code never has the token to leak in the first place. `src/proxy.ts` is the
 single gate: no valid, unexpired session cookie means no page render,
 redirect to `/login`, checked before anything else runs.
 
+## Market data ingestion (multi-source pipeline)
+
+A source-adapter pipeline that ingests commercial office listings from
+permitted sources into PostgreSQL, tracks how they change over time, and
+deduplicates the same asset across sources. Triggered entirely from the app
+(**Import → Import Market Data**) — no bookmarklet, no manual browser steps.
+
+**Flow:** search criteria → discover listings → source adapter → extract →
+normalize → deduplicate/match building → upsert into Postgres → shown in-app.
+
+**Architecture (`backend/app/services/scraping/`)**
+
+| File | Role |
+|---|---|
+| `adapter.py` | `SourceAdapter` interface every source implements (`discover_listings`, `fetch_listing`, `parse_listing`, `health_check`) |
+| `normalized.py` | `NormalizedListing` (source-agnostic intermediate) + `AccessStatus` |
+| `normalizer.py` | Pure Dutch number/area/price/address parsing (unit-tested) |
+| `deduplicator.py` | Progressive-confidence building matching (exact → postcode+number → name; low-confidence is flagged, never auto-merged) |
+| `sources/funda.py` | `FundaWebAdapter` — Funda in Business over ordinary HTTP |
+| `sources/generic.py` | single-URL adapter for any permitted site |
+| `sources/{cbre,jll,savills,cushman}.py` | placeholders that report `AUTH_REQUIRED` until an authorized route exists |
+| `services/ingestion_service.py` | background job runner: retry/backoff, upsert, change history, source health |
+
+**Buildings vs. listings.** A `Building` is the underlying asset; a `Listing`
+(new `listings` table) is one source's advertisement of a space in it. The
+deduplicator links a listing to an existing building where confidence is high,
+creates a new building only for a genuinely new address, and flags weak matches
+for review (`needs_review`). Every value change is appended to
+`listing_price_history` (rent reductions, area changes, re-listings).
+
+**Access-failure handling.** Each attempt yields an `AccessStatus`
+(`SUCCESS`, `NO_RESULTS`, `NOT_FOUND`, `RATE_LIMITED`, `ACCESS_DENIED`,
+`AUTH_REQUIRED`, `TEMPORARY_ERROR`, `PARSING_ERROR`, `UNKNOWN_ERROR`).
+Transient statuses are retried with exponential backoff; a deliberate refusal
+(`ACCESS_DENIED`/`AUTH_REQUIRED`) is **not** retried — the source is marked
+temporarily unavailable and the job continues with the other sources.
+
+**Compliance.** The pipeline only uses ordinary, honest requests
+(identifiable `INGEST_USER_AGENT`, no stealth). It contains no CAPTCHA
+handling, Cloudflare/bot-detection bypass, fingerprint spoofing, proxy
+rotation, or any mechanism whose purpose is to circumvent a site's access
+controls. Funda runs anti-bot protection, so `FundaWebAdapter` will usually
+report `ACCESS_DENIED` and be marked unavailable — that is the intended,
+correct behaviour, not a bug. Because everything Funda-specific is isolated
+behind the adapter interface, an authorized **`FundaApiAdapter`** can later
+replace `FundaWebAdapter` with no change to the normalizer, deduplicator,
+database, or frontend.
+
+**API**
+
+```
+POST /ingestion/jobs        # {city, property_type, min_area_sqm, max_area_sqm, sources, max_results} → 202 + job
+GET  /ingestion/jobs/{id}   # live status + summary counters + logs (frontend polls this)
+GET  /ingestion/jobs        # recent jobs
+GET  /ingestion/sources     # per-source health for the UI
+GET  /ingestion/listings    # ingested listings (?needs_review=true, ?source=funda)
+```
+
+Example request / response:
+
+```jsonc
+POST /ingestion/jobs
+{ "city": "Amsterdam", "property_type": "office", "min_area_sqm": 500, "max_area_sqm": 5000, "sources": ["funda"], "max_results": 100 }
+
+GET /ingestion/jobs/{id}
+{ "status": "completed", "discovered": 87, "processed": 72, "created": 19, "updated": 43, "unchanged": 10, "failed": 0 }
+```
+
+Jobs run in a background thread (Step 11 — no Redis/Celery; the simplest
+mechanism that fits the single Railway service) with progress persisted to
+`ingestion_jobs`, so the frontend polls `GET /ingestion/jobs/{id}`.
+
+**Scheduling.** Daily/weekly market monitoring is a thin wrapper over
+`POST /ingestion/jobs` — schedule it with Railway's cron or the repo's
+existing Routine tooling calling that endpoint. Kept as a scheduled *caller*
+rather than an in-process loop so it respects each source's permitted access
+cadence and never polls aggressively.
+
+**Migrations / existing data.** All ingestion tables (`listings`,
+`listing_price_history`, `ingestion_jobs`, `source_health`) are **new** and
+created by `create_all` on the next startup. No existing table (`buildings`,
+`units`, …) is altered, so existing building/unit/proposal data is untouched.
+
 ## Deploying it
 
 **Render** (recommended — `render.yaml` in the repo root is a one-click

@@ -1,16 +1,23 @@
 import { PageHeader } from "@/components/ui";
 import { ImportForm } from "@/components/ImportForm";
-import { BuildingBookmarklet } from "@/components/BuildingBookmarklet";
+import { IngestionPanel } from "@/components/IngestionPanel";
 
 export default function ImportPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Workflow 2 (§4 / §7)"
-        title="Import from URLs"
-        description="Paste one or more listing URLs. Each is scraped, its unit-level area subdivision preserved rather than collapsed (§7), and stored as Building/Unit records available to any future Proposal — no manual re-typing required."
+        eyebrow="Market data ingestion"
+        title="Import Market Data"
+        description="Enter search criteria and the backend automatically ingests matching office listings from permitted sources — discover, normalize, deduplicate, and store, with change history over time. Sources that don't permit automated access are skipped and shown as unavailable."
       />
-      <BuildingBookmarklet />
+      <IngestionPanel />
+
+      <PageHeader
+        eyebrow="Manual (single URLs)"
+        title="Import specific URLs"
+        description="Still available for one-off permitted listing URLs: paste them and each is fetched, parsed, and stored as Building/Unit records."
+        showHomeLink={false}
+      />
       <ImportForm />
     </div>
   );

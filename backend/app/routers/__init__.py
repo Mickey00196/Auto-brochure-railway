@@ -7,6 +7,7 @@ from app.routers import (
     dashboard,
     export,
     imports,
+    ingestion,
     match,
     neighbourhoods,
     proposals,
@@ -30,4 +31,5 @@ all_routers = [
     assistant.router,
     seed.router,
     imports.router,
+    ingestion.router,
 ]

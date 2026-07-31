@@ -9,6 +9,8 @@ from app.models.enums import (
     ServiceChargePriceType,
     UserRole,
 )
+from app.models.ingestion import IngestionJob, SourceHealth
+from app.models.listing import Listing, ListingPriceHistory
 from app.models.neighbourhood import Neighbourhood
 from app.models.proposal import Proposal, ProposalUnit
 from app.models.unit import Unit
@@ -24,6 +26,10 @@ __all__ = [
     "RentPriceType",
     "ServiceChargePriceType",
     "UserRole",
+    "IngestionJob",
+    "SourceHealth",
+    "Listing",
+    "ListingPriceHistory",
     "Neighbourhood",
     "Proposal",
     "ProposalUnit",

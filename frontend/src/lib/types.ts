@@ -182,3 +182,48 @@ export interface ScrapePreviewResult {
   building_amenities: string[];
   source_url: string;
 }
+
+export interface IngestionRequest {
+  city?: string | null;
+  property_type?: string;
+  min_area_sqm?: number | null;
+  max_area_sqm?: number | null;
+  sources?: string[] | null;
+  max_results?: number;
+}
+
+export interface IngestionLogEntry {
+  level: string;
+  msg: string;
+  ts: string;
+}
+
+export interface IngestionJob {
+  job_id: string;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  params: Record<string, unknown>;
+  progress_current: number;
+  progress_total: number;
+  discovered: number;
+  processed: number;
+  created: number;
+  updated: number;
+  unchanged: number;
+  duplicates: number;
+  failed: number;
+  logs: IngestionLogEntry[];
+  error: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface SourceHealth {
+  source: string;
+  display_name: string | null;
+  status: "healthy" | "degraded" | "unavailable" | "unknown";
+  last_successful_run: string | null;
+  last_attempt: string | null;
+  last_error: string | null;
+  number_of_listings: number;
+}
