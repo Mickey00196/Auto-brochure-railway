@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        width: 320px;
+        margin: 0;
+        padding: 14px;
+        font: 13px/1.4 system-ui, -apple-system, sans-serif;
+      }
+      h1 { font-size: 14px; margin: 0 0 2px; }
+      p.sub { margin: 0 0 12px; color: #666; font-size: 12px; }
+      label { display: block; font-weight: 600; margin-bottom: 4px; }
+      input {
+        width: 100%; box-sizing: border-box; padding: 7px 8px;
+        border: 1px solid #ccc; border-radius: 8px; font-size: 12px; margin-bottom: 12px;
+      }
+      button {
+        width: 100%; padding: 9px; border: 0; border-radius: 999px;
+        background: #c8102e; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer;
+      }
+      button:disabled { opacity: 0.5; cursor: default; }
+      #status { margin-top: 10px; font-size: 12px; min-height: 16px; }
+      #preview { margin-top: 8px; font-size: 12px; color: #444; }
+      #preview div { padding: 1px 0; }
+      .warn { color: #b45309; }
+      .err { color: #c8102e; }
+      .ok { color: #047857; }
+    </style>
+  </head>
+  <body>
+    <h1>Proposal Engine – Listing Capture</h1>
+    <p class="sub">Open a listing you're viewing, then capture it. Reads the open page only.</p>
+
+    <label for="appUrl">Your Proposal Engine URL</label>
+    <input id="appUrl" type="url" placeholder="https://your-app.up.railway.app" />
+
+    <button id="capture">Capture this listing</button>
+
+    <div id="status"></div>
+    <div id="preview"></div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
