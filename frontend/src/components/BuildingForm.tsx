@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { Neighbourhood } from "@/lib/types";
+import type { Neighbourhood, ScrapePreviewResult } from "@/lib/types";
 import { api } from "@/lib/api";
 import { Button, Card } from "@/components/ui";
 
@@ -47,6 +47,11 @@ export function BuildingForm({
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [fetchMessage, setFetchMessage] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState(false);
+
+  const [pasteContent, setPasteContent] = useState("");
+  const [pasting, setPasting] = useState(false);
+  const [pasteMessage, setPasteMessage] = useState<string | null>(null);
 
   const [form, setForm] = useState({ ...EMPTY_FORM, ...initial });
 
@@ -54,35 +59,69 @@ export function BuildingForm({
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  // Fill the form from a scrape/paste result — only fields it actually found,
+  // so an empty result never blanks out what the broker already typed.
+  function applyScraped(scraped: ScrapePreviewResult): boolean {
+    setForm((prev) => ({
+      ...prev,
+      name: scraped.name || prev.name,
+      address: scraped.address || prev.address,
+      city: scraped.city || prev.city,
+      description: scraped.description || prev.description,
+      energyLabel: scraped.energy_label || prev.energyLabel,
+      yearBuilt: scraped.year_built ? String(scraped.year_built) : prev.yearBuilt,
+      buildingAmenities: scraped.building_amenities.length ? scraped.building_amenities.join(", ") : prev.buildingAmenities,
+      photos: scraped.photos.length ? scraped.photos.join(", ") : prev.photos,
+    }));
+    return Boolean(scraped.address || scraped.photos.length || scraped.energy_label);
+  }
+
   async function handleFetchFromUrl() {
     if (!sourceUrl.trim()) return;
     setFetching(true);
     setFetchError(null);
     setFetchMessage(null);
+    setBlocked(false);
     try {
       const scraped = await api.scrapePreview(sourceUrl.trim());
-      // Only overwrite fields the scrape actually found something for — an
-      // empty page shouldn't blank out whatever the broker already typed.
-      setForm((prev) => ({
-        ...prev,
-        name: scraped.name || prev.name,
-        address: scraped.address || prev.address,
-        city: scraped.city || prev.city,
-        description: scraped.description || prev.description,
-        energyLabel: scraped.energy_label || prev.energyLabel,
-        yearBuilt: scraped.year_built ? String(scraped.year_built) : prev.yearBuilt,
-        buildingAmenities: scraped.building_amenities.length ? scraped.building_amenities.join(", ") : prev.buildingAmenities,
-        photos: scraped.photos.length ? scraped.photos.join(", ") : prev.photos,
-      }));
+      const foundSomething = applyScraped(scraped);
       setFetchMessage(
-        scraped.photos.length || scraped.address
-          ? "Filled in what the page had — double-check before saving, and fill in anything left blank."
-          : "Fetched the page, but couldn't find much on it — fill in the rest by hand.",
+        foundSomething
+          ? "Ingevuld met wat op de pagina stond — controleer het en vul aan waar nodig."
+          : "Pagina opgehaald, maar er stond weinig bruikbaars op — vul de rest handmatig in.",
       );
     } catch (err) {
-      setFetchError(err instanceof Error ? err.message : "Could not fetch that URL");
+      const msg = err instanceof Error ? err.message : "Kon die URL niet ophalen";
+      // Step 4: recognise a block explicitly and point the user at the
+      // compliant manual-paste fallback rather than showing a vague error.
+      const isBlock = /502|blocked|access|denied|interstitial|geblokkeerd/i.test(msg);
+      setBlocked(isBlock);
+      setFetchError(
+        isBlock
+          ? "Deze website blokkeert automatische toegang. Open de listing zelf in je browser, kopieer de tekst van de pagina, en plak die hieronder."
+          : msg,
+      );
     } finally {
       setFetching(false);
+    }
+  }
+
+  async function handleParseText() {
+    if (!pasteContent.trim()) return;
+    setPasting(true);
+    setPasteMessage(null);
+    try {
+      const parsed = await api.parseText(pasteContent);
+      const foundSomething = applyScraped(parsed);
+      setPasteMessage(
+        foundSomething
+          ? "Velden ingevuld uit de geplakte tekst — controleer en vul aan, en sla daarna op."
+          : "Verwerkt, maar weinig herkend — vul de velden handmatig aan.",
+      );
+    } catch (err) {
+      setPasteMessage(err instanceof Error ? err.message : "Kon de geplakte tekst niet verwerken");
+    } finally {
+      setPasting(false);
     }
   }
 
@@ -147,8 +186,31 @@ export function BuildingForm({
             {fetching ? "Fetching…" : "Fetch from URL"}
           </Button>
         </div>
-        {fetchError && <p className="mt-2 text-xs text-red-500">{fetchError}</p>}
+        {fetchError && <p className={`mt-2 text-xs ${blocked ? "text-amber-600" : "text-red-500"}`}>{fetchError}</p>}
         {fetchMessage && !fetchError && <p className="mt-2 text-xs text-muted">{fetchMessage}</p>}
+      </Card>
+
+      <Card className={blocked ? "border-amber-400" : undefined}>
+        <h2 className="mb-1 text-lg font-semibold">Of: plak de listing-tekst handmatig</h2>
+        <p className="mb-3 text-sm text-muted">
+          Blokkeert de website automatische toegang (zoals Funda)? Open de listing zelf in je browser,
+          selecteer en kopieer de tekst van de pagina (of de HTML-broncode), en plak die hier. Dezelfde
+          velden — adres, oppervlakte, huurprijs, energielabel — worden er dan uit gehaald. Er wordt niets
+          automatisch opgehaald, dus een bot-blokkade speelt hier geen rol.
+        </p>
+        <textarea
+          value={pasteContent}
+          onChange={(e) => setPasteContent(e.target.value)}
+          rows={5}
+          placeholder="Plak hier de tekst of HTML van de listing-pagina…"
+          className={inputClass}
+        />
+        <div className="mt-2">
+          <Button type="button" disabled={pasting || !pasteContent.trim()} onClick={handleParseText}>
+            {pasting ? "Verwerken…" : "Velden uit tekst halen"}
+          </Button>
+        </div>
+        {pasteMessage && <p className="mt-2 text-xs text-muted">{pasteMessage}</p>}
       </Card>
 
       <Card>

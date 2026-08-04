@@ -81,6 +81,8 @@ export function makeApi(request: DoRequest) {
       request<ImportResult[]>("/imports/urls", { method: "POST", body: JSON.stringify({ urls }) }),
     scrapePreview: (url: string) =>
       request<ScrapePreviewResult>("/imports/preview", { method: "POST", body: JSON.stringify({ url }) }),
+    parseText: (content: string) =>
+      request<ScrapePreviewResult>("/imports/parse-text", { method: "POST", body: JSON.stringify({ content }) }),
 
     startIngestion: (payload: IngestionRequest) =>
       request<IngestionJob>("/ingestion/jobs", { method: "POST", body: JSON.stringify(payload) }),
