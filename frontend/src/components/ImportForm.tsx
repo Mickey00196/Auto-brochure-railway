@@ -64,10 +64,17 @@ export function ImportForm() {
               <div key={r.url} className="rounded-lg border border-border p-3 text-sm">
                 <div className="flex items-center justify-between gap-3">
                   <span className="truncate font-mono text-xs text-muted">{r.url}</span>
-                  <Badge tone={r.status === "created" ? "success" : "danger"}>{r.status}</Badge>
+                  <Badge tone={r.status === "created" ? "success" : r.status === "blocked" ? "warn" : "danger"}>
+                    {r.status}
+                  </Badge>
                 </div>
-                {r.title && <p className="mt-1 font-medium">{r.title}</p>}
+                {r.status !== "blocked" && r.title && <p className="mt-1 font-medium">{r.title}</p>}
                 {r.message && <p className="mt-1 text-xs text-amber-600">{r.message}</p>}
+                {r.status === "blocked" && (
+                  <Link href="/buildings/new" className="mt-1 inline-block text-xs text-accent hover:underline">
+                    Naar Add Building (plak-optie) →
+                  </Link>
+                )}
                 {r.status === "created" && r.building_id && (
                   <Link href="/buildings" className="mt-1 inline-block text-xs text-accent hover:underline">
                     View in Buildings & Units →

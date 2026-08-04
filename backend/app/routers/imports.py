@@ -30,6 +30,26 @@ router = APIRouter(prefix="/imports", tags=["imports"])
 
 _NUMBER_RE = re.compile(r"[\d.,]+")
 
+# Text that means the source served an anti-bot interstitial instead of the
+# real listing. Detecting it lets us report a block honestly instead of
+# storing the interstitial as a "building".
+_BLOCK_MARKERS = (
+    "je bent bijna op de pagina die je zoekt",
+    "even geduld",
+    "checking your browser",
+    "verify you are human",
+    "captcha",
+)
+_BLOCK_MESSAGE = (
+    "Deze website blokkeert automatische toegang. Open de listing zelf in je browser, "
+    "kopieer de tekst van de pagina, en gebruik 'Add Building' → 'plak de listing-tekst handmatig'."
+)
+
+
+def _looks_blocked(listing) -> bool:
+    haystack = f"{getattr(listing, 'title', '') or ''} {getattr(listing, 'description', '') or ''}".lower()
+    return any(marker in haystack for marker in _BLOCK_MARKERS)
+
 
 class ImportUrlsRequest(BaseModel):
     urls: list[str]
@@ -74,6 +94,8 @@ def preview_url(payload: ScrapePreviewRequest) -> ScrapePreviewResult:
         listing = scrape(payload.url.strip())
     except Exception as e:  # network failure, timeout, missing Chromium, etc.
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Could not fetch that URL: {e}")
+    if _looks_blocked(listing):
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, _BLOCK_MESSAGE)
     return ScrapePreviewResult(
         name=listing.title or None,
         address=listing.address,
@@ -164,6 +186,11 @@ def import_urls(payload: ImportUrlsRequest, db: Session = Depends(get_db)):
             listing = scrape(url)
         except Exception as e:  # network failure, timeout, missing Chromium, etc.
             results.append(ImportResult(url=url, status="error", message=str(e)))
+            continue
+
+        if _looks_blocked(listing):
+            # Do NOT store the interstitial as a building — report the block.
+            results.append(ImportResult(url=url, status="blocked", message=_BLOCK_MESSAGE))
             continue
 
         building = Building(

@@ -165,7 +165,7 @@ export interface MatchResult {
 
 export interface ImportResult {
   url: string;
-  status: "created" | "error";
+  status: "created" | "error" | "blocked";
   building_id: string | null;
   title: string | null;
   message: string | null;
