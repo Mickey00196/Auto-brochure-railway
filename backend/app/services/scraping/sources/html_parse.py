@@ -118,13 +118,33 @@ def parse_listing_html(html: str, url: str, source: str) -> NormalizedListing | 
     listing.parking_available = any(k in lowered for k in ("parking", "parkeren", "parkeerplaats")) or None
 
     # ---- Extra images from <img> ----------------------------------------
+    # Listing pages routinely lazy-load photos, so the real URL lives in
+    # data-src / data-lazy-src / data-original / srcset rather than plain src.
+    # Checking those recovers photos a naive src-only read would miss (helps
+    # the manual paste-HTML flow in particular).
     if len(listing.image_urls) < 4:
         for img in soup.find_all("img"):
-            src = img.get("src") or img.get("data-src")
-            if src and not any(k in src.lower() for k in _SKIP_IMAGE_KEYWORDS):
+            candidates = [
+                img.get("src"),
+                img.get("data-src"),
+                img.get("data-lazy-src"),
+                img.get("data-original"),
+            ]
+            srcset = img.get("srcset") or img.get("data-srcset")
+            if srcset:
+                # "url1 320w, url2 640w" → take the URL part of each entry.
+                candidates.extend(part.strip().split(" ")[0] for part in srcset.split(","))
+
+            for src in candidates:
+                if not src or not src.startswith(("http://", "https://", "/")):
+                    continue
+                if any(k in src.lower() for k in _SKIP_IMAGE_KEYWORDS):
+                    continue
                 full = urljoin(url, src)
                 if full not in listing.image_urls:
                     listing.image_urls.append(full)
+                if len(listing.image_urls) >= 8:
+                    break
             if len(listing.image_urls) >= 8:
                 break
 
