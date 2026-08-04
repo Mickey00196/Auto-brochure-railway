@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/ui";
 import { ImportForm } from "@/components/ImportForm";
 import { IngestionPanel } from "@/components/IngestionPanel";
+import { ListingBookmarklet } from "@/components/ListingBookmarklet";
 
 export default function ImportPage() {
   return (
@@ -11,6 +12,14 @@ export default function ImportPage() {
         description="Enter search criteria and the backend automatically ingests matching office listings from permitted sources — discover, normalize, deduplicate, and store, with change history over time. Sources that don't permit automated access are skipped and shown as unavailable."
       />
       <IngestionPanel />
+
+      <PageHeader
+        eyebrow="One-click capture (no install)"
+        title="Bookmarklet"
+        description="For a listing you're viewing in your own browser — a no-install alternative to the Chrome extension, useful when developer mode is disabled by IT."
+        showHomeLink={false}
+      />
+      <ListingBookmarklet />
 
       <PageHeader
         eyebrow="Manual (single URLs)"
