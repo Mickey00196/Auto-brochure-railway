@@ -7,5 +7,5 @@
     "default_popup": "popup.html",
     "default_title": "Capture this listing"
   },
-  "permissions": ["activeTab", "scripting", "storage"]
+  "permissions": ["activeTab", "scripting"]
 }

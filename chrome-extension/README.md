@@ -24,12 +24,11 @@ extension, and it will say so instead of capturing garbage.
 3. Click **Load unpacked** and select this `chrome-extension/` folder.
 4. Pin the extension (puzzle-piece icon → pin) so its button is visible.
 
-## First-time setup
+## Setup
 
-1. Click the extension button → a small popup opens.
-2. In **Your Proposal Engine URL**, paste your app's address, e.g.
-   `https://proposal-engine-frontend-production.up.railway.app` — it's saved
-   for next time.
+None — the app URL is hardcoded in `popup.js` (the `APP_URL` constant at the
+top). If your Proposal Engine ever moves, change that one line and reload the
+extension.
 
 ## Use
 
@@ -37,8 +36,9 @@ extension, and it will say so instead of capturing garbage.
    verification page) is loaded.
 2. Click the extension button → **Capture this listing**.
 3. A new tab opens with **Add Building** pre-filled (name, address, city, area,
-   energy label, amenities, photos). Review it, fill in anything missing, and
-   click **Create Building**. You must be logged into the app in that browser.
+   energy label, amenities, photos). The popup also shows how many photos were
+   captured. Review it, fill in anything missing, and click **Create Building**.
+   You must be logged into the app in that browser.
 
 ## What it captures
 

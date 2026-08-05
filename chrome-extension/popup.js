@@ -1,5 +1,8 @@
 "use strict";
 
+// Your Proposal Engine app URL. Change this one line if it ever moves.
+const APP_URL = "https://proposal-engine-frontend-production.up.railway.app";
+
 // Runs INSIDE the listing tab (injected via chrome.scripting.executeScript).
 // Must be fully self-contained — no references to popup scope. It only READS
 // the DOM the user's browser already rendered; it never fetches anything.
@@ -47,7 +50,7 @@ function extractListing() {
       }
       const img = o.image;
       if (img && out.photos.length === 0) {
-        out.photos = (Array.isArray(img) ? img : [img]).filter(Boolean).slice(0, 8);
+        out.photos = (Array.isArray(img) ? img : [img]).filter(Boolean);
       }
     }
   }
@@ -127,24 +130,21 @@ function extractListing() {
   out.amenities = AM.filter((a) => low.includes(a)).map((a) => a.replace(/\b\w/g, (c) => c.toUpperCase()));
 
   // --- extra images (incl. lazy-load attrs + srcset) ---
-  if (out.photos.length < 4) {
-    const SKIP = ["logo", "icon", "sprite", "avatar", "pixel", "placeholder"];
-    for (const img of document.querySelectorAll("img")) {
-      const cands = [
-        img.getAttribute("src"), img.getAttribute("data-src"),
-        img.getAttribute("data-lazy-src"), img.getAttribute("data-original"),
-      ];
-      const srcset = img.getAttribute("srcset") || img.getAttribute("data-srcset");
-      if (srcset) srcset.split(",").forEach((p) => cands.push(p.trim().split(" ")[0]));
-      for (let s of cands) {
-        if (!s) continue;
-        if (!/^https?:\/\//.test(s) && !s.startsWith("/")) continue;
-        if (SKIP.some((k) => s.toLowerCase().includes(k))) continue;
-        try { s = new URL(s, location.href).href; } catch (e) { continue; }
-        if (!out.photos.includes(s)) out.photos.push(s);
-        if (out.photos.length >= 8) break;
-      }
-      if (out.photos.length >= 8) break;
+  // No cap: collect every unique, non-skip-listed image URL on the page.
+  const SKIP = ["logo", "icon", "sprite", "avatar", "pixel", "placeholder"];
+  for (const img of document.querySelectorAll("img")) {
+    const cands = [
+      img.getAttribute("src"), img.getAttribute("data-src"),
+      img.getAttribute("data-lazy-src"), img.getAttribute("data-original"),
+    ];
+    const srcset = img.getAttribute("srcset") || img.getAttribute("data-srcset");
+    if (srcset) srcset.split(",").forEach((p) => cands.push(p.trim().split(" ")[0]));
+    for (let s of cands) {
+      if (!s) continue;
+      if (!/^https?:\/\//.test(s) && !s.startsWith("/")) continue;
+      if (SKIP.some((k) => s.toLowerCase().includes(k))) continue;
+      try { s = new URL(s, location.href).href; } catch (e) { continue; }
+      if (!out.photos.includes(s)) out.photos.push(s);
     }
   }
   out.photos = out.photos.map((u) => { try { return new URL(u, location.href).href; } catch (e) { return u; } });
@@ -153,27 +153,12 @@ function extractListing() {
 }
 
 // ---- popup wiring ---------------------------------------------------------
-const appUrlInput = document.getElementById("appUrl");
 const statusEl = document.getElementById("status");
 const previewEl = document.getElementById("preview");
-
-chrome.storage.local.get("appUrl", (d) => {
-  if (d.appUrl) appUrlInput.value = d.appUrl;
-});
-appUrlInput.addEventListener("change", () =>
-  chrome.storage.local.set({ appUrl: appUrlInput.value.trim() }),
-);
 
 document.getElementById("capture").addEventListener("click", async () => {
   statusEl.className = "";
   previewEl.innerHTML = "";
-  const appUrl = appUrlInput.value.trim().replace(/\/+$/, "");
-  if (!appUrl) {
-    statusEl.className = "err";
-    statusEl.textContent = "Set your Proposal Engine URL first.";
-    return;
-  }
-  chrome.storage.local.set({ appUrl });
   statusEl.textContent = "Reading the open page…";
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -212,13 +197,14 @@ document.getElementById("capture").addEventListener("click", async () => {
   set("description", data.description);
   set("photos", (data.photos || []).join(","));
 
-  await chrome.tabs.create({ url: appUrl + "/buildings/new?" + p.toString() });
+  await chrome.tabs.create({ url: APP_URL.replace(/\/+$/, "") + "/buildings/new?" + p.toString() });
 
+  const photoCount = (data.photos || []).length;
   statusEl.className = "ok";
-  statusEl.textContent = "Opened Add Building with the details filled in — review and save.";
+  statusEl.textContent = `Opened Add Building with the details filled in — ${photoCount} photo${photoCount === 1 ? "" : "s"} captured. Review and save.`;
   const fields = [
     ["Name", data.name], ["Address", data.address], ["City", data.city],
-    ["Area m²", data.areaSqm], ["Energy", data.energyLabel], ["Photos", (data.photos || []).length],
+    ["Area m²", data.areaSqm], ["Energy", data.energyLabel], ["Photos found", photoCount],
   ];
   for (const [k, v] of fields) {
     const div = document.createElement("div");
