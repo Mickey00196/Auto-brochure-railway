@@ -197,6 +197,18 @@ function extractListing() {
   }
   out.photos = [...byKey.values()];
 
+  // --- cap to the listing's own photo count ------------------------------
+  // The page states its real photo count ("Foto's 11"). A whole-page scan
+  // also picks up images that live BELOW the gallery — the agent portrait,
+  // the brand logo, and other buildings under "Onderdeel van …". Those come
+  // AFTER the listing's own gallery in source order, so keeping just the
+  // first N (N = the stated count) drops them and leaves the real photos.
+  const fm = bodyText.match(/foto['’’]?s?\s*(\d{1,3})/i);
+  out.photoTarget = fm ? parseInt(fm[1], 10) : 0;
+  if (out.photoTarget > 0 && out.photos.length > out.photoTarget) {
+    out.photos = out.photos.slice(0, out.photoTarget);
+  }
+
   return out;
 }
 
@@ -248,11 +260,13 @@ document.getElementById("capture").addEventListener("click", async () => {
   await chrome.tabs.create({ url: APP_URL.replace(/\/+$/, "") + "/buildings/new?" + p.toString() });
 
   const photoCount = (data.photos || []).length;
+  const target = data.photoTarget || 0;
   statusEl.className = "ok";
   statusEl.textContent = `Opened Add Building with the details filled in — ${photoCount} photo${photoCount === 1 ? "" : "s"} captured. Review and save.`;
+  const photosLabel = target ? `${photoCount} (page says ${target})` : photoCount;
   const fields = [
     ["Name", data.name], ["Address", data.address], ["City", data.city],
-    ["Area m²", data.areaSqm], ["Energy", data.energyLabel], ["Photos found", photoCount],
+    ["Area m²", data.areaSqm], ["Energy", data.energyLabel], ["Photos", photosLabel],
   ];
   for (const [k, v] of fields) {
     const div = document.createElement("div");
