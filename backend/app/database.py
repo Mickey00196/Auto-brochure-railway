@@ -51,3 +51,31 @@ def init_db() -> None:
     from app import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    _add_missing_columns()
+
+
+def _add_missing_columns() -> None:
+    """create_all only creates missing *tables* — a column added to a model
+    after a table already exists in the deployed database is silently absent,
+    and every SELECT against the model then fails. This closes that gap for
+    the simple case we actually have (new nullable columns), without pulling
+    in a full migration tool."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if not inspector.has_table(table.name):
+                continue
+            existing = {col["name"] for col in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in existing:
+                    continue
+                if not column.nullable or column.primary_key:
+                    raise RuntimeError(
+                        f"Column {table.name}.{column.name} is missing from the database "
+                        "and is not a nullable add — write a real migration for it."
+                    )
+                ddl = f"ALTER TABLE {table.name} ADD COLUMN {column.name} {column.type.compile(engine.dialect)}"
+                conn.execute(text(ddl))
+                print(f"init_db: added missing column {table.name}.{column.name}")

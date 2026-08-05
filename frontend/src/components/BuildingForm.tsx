@@ -23,9 +23,19 @@ const EMPTY_FORM = {
   totalBuildingAreaM2: "",
   accessibilityNote: "",
   airportNote: "",
+  publicTransportNote: "",
   buildingAmenities: "",
   description: "",
   photos: "",
+  // Executive summary — lease terms. These live on the building's first
+  // Unit (and a parking AddOn), created together with the Building on
+  // submit so a captured listing lands complete, not as a shell.
+  availableAreaM2: "",
+  parkingRatio: "",
+  rentEurPerM2Year: "",
+  serviceChargeEurPerM2Year: "",
+  parkingPriceEurYear: "",
+  availability: "",
 };
 
 /** Subset of form fields the bookmarklet / query-param prefill can seed —
@@ -148,6 +158,7 @@ export function BuildingForm({
         total_building_area_m2: form.totalBuildingAreaM2 ? Number(form.totalBuildingAreaM2) : null,
         accessibility_note: form.accessibilityNote || null,
         airport_note: form.airportNote || null,
+        public_transport_note: form.publicTransportNote || null,
         building_amenities: form.buildingAmenities
           .split(",")
           .map((s) => s.trim())
@@ -158,6 +169,39 @@ export function BuildingForm({
           .map((s) => s.trim())
           .filter(Boolean),
       });
+
+      // Lease-terms section filled in → create the building's first Unit in
+      // the same submit, so the executive summary is complete immediately.
+      // The available area falls back to the total building area, since
+      // single-tenant listings state one figure for both.
+      const areaForUnit = form.availableAreaM2 || form.totalBuildingAreaM2;
+      const hasLeaseTerms = Boolean(
+        form.rentEurPerM2Year || form.serviceChargeEurPerM2Year || form.parkingRatio || form.availability,
+      );
+      if (areaForUnit && hasLeaseTerms) {
+        const unit = await api.createUnit({
+          building_id: building.building_id,
+          available_area_m2: Number(areaForUnit),
+          rent_price_type: form.rentEurPerM2Year ? "fixed" : "tbd",
+          rent_eur_per_m2_year: form.rentEurPerM2Year ? Number(form.rentEurPerM2Year) : null,
+          service_charge_price_type: form.serviceChargeEurPerM2Year ? "fixed" : "tbd",
+          service_charge_eur_per_m2_year: form.serviceChargeEurPerM2Year
+            ? Number(form.serviceChargeEurPerM2Year)
+            : null,
+          parking_ratio: form.parkingRatio || null,
+          availability: form.availability || null,
+        });
+        if (form.parkingPriceEurYear) {
+          await api.createAddOn({
+            name: "Parking space",
+            price: Number(form.parkingPriceEurYear),
+            price_unit: "EUR / space / year",
+            unit_id: unit.unit_id,
+            building_id: building.building_id,
+          });
+        }
+      }
+
       router.push(`/buildings/${building.building_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create building");
@@ -275,6 +319,10 @@ export function BuildingForm({
             <span className="mb-1 block font-medium">Airport note</span>
             <input value={form.airportNote} onChange={(e) => update("airportNote", e.target.value)} placeholder="Schiphol 15 km" className={inputClass} />
           </label>
+          <label className={labelClass}>
+            <span className="mb-1 block font-medium">Public transport note</span>
+            <input value={form.publicTransportNote} onChange={(e) => update("publicTransportNote", e.target.value)} placeholder="Station Noord 8 min" className={inputClass} />
+          </label>
           <label className={`${labelClass} sm:col-span-2`}>
             <span className="mb-1 block font-medium">Amenities (comma-separated)</span>
             <input value={form.buildingAmenities} onChange={(e) => update("buildingAmenities", e.target.value)} placeholder="Roof terrace, Bicycle storage, 24/7 access" className={inputClass} />
@@ -302,11 +350,46 @@ export function BuildingForm({
         </div>
       </Card>
 
+      <Card>
+        <h2 className="mb-1 text-lg font-semibold">Executive summary — lease terms</h2>
+        <p className="mb-4 text-sm text-muted">
+          Filled in by the extension capture where the listing states them. Saving creates the
+          building&apos;s first unit with these terms (plus a parking add-on if a parking price is set) —
+          leave them empty to add units by hand later instead.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className={labelClass}>
+            <span className="mb-1 block font-medium">Available area approx. (m²)</span>
+            <input type="number" value={form.availableAreaM2} onChange={(e) => update("availableAreaM2", e.target.value)} placeholder="Falls back to total area" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1 block font-medium">Parking ratio</span>
+            <input value={form.parkingRatio} onChange={(e) => update("parkingRatio", e.target.value)} placeholder="1:80" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1 block font-medium">Rental price office (€/m²/year)</span>
+            <input type="number" value={form.rentEurPerM2Year} onChange={(e) => update("rentEurPerM2Year", e.target.value)} placeholder="165" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1 block font-medium">Service charges (€/m²/year)</span>
+            <input type="number" value={form.serviceChargeEurPerM2Year} onChange={(e) => update("serviceChargeEurPerM2Year", e.target.value)} placeholder="45" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1 block font-medium">Rental price parking space (€/space/year)</span>
+            <input type="number" value={form.parkingPriceEurYear} onChange={(e) => update("parkingPriceEurYear", e.target.value)} placeholder="750" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1 block font-medium">Available</span>
+            <input value={form.availability} onChange={(e) => update("availability", e.target.value)} placeholder="Per direct / in overleg" className={inputClass} />
+          </label>
+        </div>
+      </Card>
+
       {error && <p className="text-sm text-red-500">{error}</p>}
       <Button type="submit" disabled={submitting}>
         {submitting ? "Creating…" : "Create Building"}
       </Button>
-      <p className="text-xs text-muted">You&apos;ll be able to add units on the next screen.</p>
+      <p className="text-xs text-muted">You&apos;ll be able to add more units on the next screen.</p>
     </form>
   );
 }

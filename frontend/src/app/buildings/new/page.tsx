@@ -18,6 +18,20 @@ const PREFILL_KEYS: (keyof BuildingFormInitial)[] = [
   "buildingAmenities",
   "description",
   "photos",
+  // Executive-summary fields the extension capture also extracts —
+  // building-level…
+  "submarket",
+  "accessibilityNote",
+  "airportNote",
+  "publicTransportNote",
+  // …and lease-terms fields that become the building's first Unit (plus a
+  // parking AddOn) on submit — see BuildingForm.
+  "availableAreaM2",
+  "parkingRatio",
+  "rentEurPerM2Year",
+  "serviceChargeEurPerM2Year",
+  "parkingPriceEurYear",
+  "availability",
 ];
 
 export default async function NewBuildingPage({

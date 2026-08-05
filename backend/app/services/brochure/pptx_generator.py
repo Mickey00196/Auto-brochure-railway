@@ -254,7 +254,10 @@ def add_unit_card_slide(prs: Presentation, index: int, unit: Unit, row: Comparis
 def _public_transport_summary(unit: Unit) -> str:
     nb = unit.building.neighbourhood
     if not nb or not nb.public_transport:
-        return "n/a"
+        # Building-level captured note ("Station Noord 8 min") when no shared
+        # Neighbourhood data exists — e.g. a building captured via the
+        # extension without a neighbourhood assigned.
+        return unit.building.public_transport_note or "n/a"
     first = nb.public_transport[0]
     return f"{first.get('station', '')} {first.get('walking_time_min', '')} min".strip()
 

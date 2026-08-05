@@ -42,10 +42,29 @@ extension.
 
 ## What it captures
 
-Address / postcode / city, floor area (m²), energy label, year built, a
-description, amenities, and photo URLs — pulled from the page's structured data
-(JSON-LD), OpenGraph/meta tags, and visible text. Whatever it can't find is left
-blank for you to complete. It never invents values.
+The full executive summary of an office listing, pulled from the page's
+structured data (JSON-LD), its characteristics table ("Kenmerken"), OpenGraph/
+meta tags, and visible text:
+
+- Name, address / postcode / city, and **subarea** (from the breadcrumb, e.g.
+  "Buiksloterham-Zuid" → the building's Submarket)
+- **Total surface** and **available surface approx.** (m²)
+- **Parking ratio** (e.g. 1:80)
+- **Rental price office** (€/m²/year — only when the page states a per-m²
+  figure; a lump-sum monthly rent is a different quantity and is left blank)
+- **Rental service charges** (€/m²/year)
+- **Rental price parking space** (€/space/year; per-month figures ×12)
+- **Available** (acceptance, e.g. "Per direct" / "In overleg")
+- **Energy rating** and **year of construction**
+- **Amenities in building**
+- **Distances**: airport, public transport, and highway (e.g. "NS-station
+  800 m", "Afrit snelweg 1,2 km")
+- Description and photo URLs
+
+Saving the pre-filled form creates the Building **and its first Unit** carrying
+the lease terms (plus a parking add-on when a parking price was found), so a
+captured office lands complete. Whatever the page doesn't state is left blank
+for you to complete — it never invents values.
 
 ## Notes
 

@@ -80,6 +80,7 @@ class BuildingBase(BaseModel):
     total_building_area_m2: float | None = None
     accessibility_note: str | None = None
     airport_note: str | None = None
+    public_transport_note: str | None = None
     building_amenities: list[str] = Field(default_factory=list)
     description: str | None = None
     photos: list[str] = Field(default_factory=list)

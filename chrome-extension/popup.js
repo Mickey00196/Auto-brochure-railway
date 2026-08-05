@@ -25,6 +25,11 @@ function extractListing() {
     name: null, address: null, street: null, houseNumber: null,
     postalCode: null, city: null, description: null, energyLabel: null,
     yearBuilt: null, areaSqm: null, amenities: [], photos: [],
+    // Executive summary
+    subarea: null, availableAreaSqm: null, parkingRatio: null,
+    rentEurPerM2Year: null, serviceChargeEurPerM2Year: null,
+    parkingPriceEurYear: null, availability: null,
+    airportNote: null, highwayNote: null, publicTransportNote: null,
   };
   const pick = (sel, attr) => {
     const el = document.querySelector(sel);
@@ -85,26 +90,155 @@ function extractListing() {
     return isNaN(n) ? null : n;
   };
 
-  // --- area (range → max, else single) ---
-  const range = bodyText.match(/([\d.,]+)\s*(?:m2|m²)?\s*(?:tot|to|-|–|—)\s*([\d.,]+)\s*(?:m2|m²)/i);
-  const single = bodyText.match(/([\d.,]+)\s*(?:m2|m²)/i);
-  if (range) out.areaSqm = parseNum(range[2]);
-  else if (single) out.areaSqm = parseNum(single[1]);
+  // --- characteristics tables ("Kenmerken") → label/value pairs -----------
+  // Listing pages state the executive-summary facts in a definition list or
+  // table. Harvest every label/value pair once, then look fields up by their
+  // Dutch/English labels — far more reliable than free-text regexes.
+  const pairs = [];
+  for (const dl of document.querySelectorAll("dl")) {
+    const dts = dl.querySelectorAll("dt");
+    const dds = dl.querySelectorAll("dd");
+    const n = Math.min(dts.length, dds.length);
+    for (let i = 0; i < n; i++) pairs.push([dts[i].innerText.trim(), dds[i].innerText.trim()]);
+  }
+  for (const tr of document.querySelectorAll("tr")) {
+    const cells = tr.querySelectorAll("th, td");
+    if (cells.length >= 2) pairs.push([cells[0].innerText.trim(), cells[1].innerText.trim()]);
+  }
+  // Fallback for pages that render characteristics as plain stacked text:
+  // a line that IS a known label, followed by its value on the next line.
+  const lines = bodyText.split("\n").map((s) => s.trim()).filter(Boolean);
+  const norm = (s) => s.toLowerCase().replace(/[:*]+$/, "").replace(/\s+/g, " ").trim();
+  const findPair = (labels) => {
+    for (const [k, v] of pairs) {
+      const nk = norm(k);
+      if (labels.some((l) => nk === l) && v) return [k.trim(), v.trim()];
+    }
+    for (let i = 0; i < lines.length - 1; i++) {
+      if (labels.some((l) => norm(lines[i]) === l)) return [lines[i], lines[i + 1]];
+    }
+    return null;
+  };
+  const fieldValue = (...labels) => {
+    const hit = findPair(labels);
+    return hit ? hit[1] : null;
+  };
+  // Distances keep their label ("NS-station" + "800 m" → "NS-station 800 m").
+  const fieldNote = (...labels) => {
+    const hit = findPair(labels);
+    if (!hit) return null;
+    return /\d/.test(hit[1]) && hit[1].length < 40 ? `${hit[0].replace(/:$/, "")} ${hit[1]}` : hit[1];
+  };
 
-  // --- energy label (A–G, optional +'s, standalone) ---
-  const en = bodyText.toUpperCase().match(/\b([A-G])(\+*)(?![A-Za-z0-9])/);
-  if (en) out.energyLabel = en[1] + en[2];
+  // --- area (labeled value first; then range → max, else single) ---
+  const totalRaw = fieldValue("oppervlakte", "totale oppervlakte", "total surface", "vloeroppervlakte", "surface");
+  if (totalRaw && /m²|m2/i.test(totalRaw)) out.areaSqm = parseNum(totalRaw);
+  if (out.areaSqm == null) {
+    const range = bodyText.match(/([\d.,]+)\s*(?:m2|m²)?\s*(?:tot|to|-|–|—)\s*([\d.,]+)\s*(?:m2|m²)/i);
+    const single = bodyText.match(/([\d.,]+)\s*(?:m2|m²)/i);
+    if (range) out.areaSqm = parseNum(range[2]);
+    else if (single) out.areaSqm = parseNum(single[1]);
+  }
 
-  // --- year built ---
-  const yr = bodyText.match(/\b(1[89]\d{2}|20\d{2})\b/);
+  // --- available area approx. ("in units vanaf" = min divisible, NOT this) ---
+  const availRaw = fieldValue("beschikbare oppervlakte", "beschikbaar oppervlakte", "available surface", "available approx.", "available area");
+  if (availRaw && /m²|m2/i.test(availRaw)) out.availableAreaSqm = parseNum(availRaw);
+
+  // --- availability / acceptance date ---
+  // "Aanvaarding" is funda's label; a bare "beschikbaar" only counts when the
+  // value is NOT an area (an area means it was the available-surface row).
+  const acceptRaw = fieldValue("aanvaarding", "beschikbaar", "beschikbaar per", "beschikbaar vanaf", "availability", "available", "available from");
+  if (acceptRaw && !/m²|m2/i.test(acceptRaw)) out.availability = acceptRaw;
+
+  // --- parking ratio ("1:80", or prose "1 parkeerplaats per 80 m²") ---
+  const ratioRaw = fieldValue("parkeerratio", "parking ratio", "parkeernorm");
+  if (ratioRaw) {
+    const rm = ratioRaw.match(/1\s*(?:op|:|per)\s*([\d.,]+)/i);
+    out.parkingRatio = rm ? `1:${rm[1].replace(/[.,]$/, "")}` : ratioRaw;
+  } else {
+    const rp = bodyText.match(/1\s*parkeerplaats\s*per\s*([\d.,]+)\s*m/i) || bodyText.match(/parking\s*ratio[^\d]{0,10}1\s*[:op]+\s*(\d+)/i);
+    if (rp) out.parkingRatio = `1:${rp[1]}`;
+  }
+
+  // --- rental price office (only per-m²-per-year figures; a lump-sum
+  // monthly rent is a different quantity and must not land in €/m²/yr) ---
+  const rentRaw = fieldValue("huurprijs", "huurprijs kantoorruimte", "rental price", "rent", "rent price");
+  if (rentRaw && /m²|m2|vierkante meter/i.test(rentRaw)) out.rentEurPerM2Year = parseNum(rentRaw);
+
+  // --- rental service charges (same per-m² rule) ---
+  const scRaw = fieldValue("servicekosten", "service charges", "service costs", "servicekosten kantoorruimte");
+  if (scRaw && /m²|m2|vierkante meter/i.test(scRaw)) out.serviceChargeEurPerM2Year = parseNum(scRaw);
+
+  // --- rental price parking space (per space per year) ---
+  const parkRaw = fieldValue("huurprijs parkeerplaats", "prijs parkeerplaats", "huurprijs per parkeerplaats", "parkeerplaats huurprijs", "rental price parking space", "parking price");
+  if (parkRaw) {
+    let price = parseNum(parkRaw);
+    if (price != null && /maand|month/i.test(parkRaw)) price = Math.round(price * 12);
+    out.parkingPriceEurYear = price;
+  }
+
+  // --- distances: airport / highway / public transport ---
+  out.airportNote = fieldNote("luchthaven", "airport", "schiphol", "afstand tot luchthaven", "distance airport");
+  if (!out.airportNote) {
+    const am = bodyText.match(/schiphol[^\S\n]*(?:op|:)?[^\S\n]*([\d.,]+\s*(?:km|m|min[a-z.]*))/i);
+    if (am) out.airportNote = `Schiphol ${am[1]}`;
+  }
+  out.highwayNote = fieldNote("snelweg", "afrit", "afrit snelweg", "afstand tot snelweg", "highway", "motorway", "distance highway");
+  if (!out.highwayNote) {
+    const hm = bodyText.match(/\b(A\d{1,3})\b[^\S\n]*(?:op|:)?[^\S\n]*([\d.,]+\s*(?:km|m)\b)/i);
+    if (hm) out.highwayNote = `${hm[1].toUpperCase()} ${hm[2]}`;
+  }
+  out.publicTransportNote = fieldNote(
+    "ns station", "ns-station", "treinstation", "station", "metrostation", "metro",
+    "bushalte", "bus", "tramhalte", "tram", "openbaar vervoer", "ov",
+    "public transport", "train station", "distance public transport",
+  );
+
+  // --- energy label (labeled value first, then a keyword-anchored match —
+  // never a bare standalone-letter scan, which grabs random capitals) ---
+  const enRaw = fieldValue("energielabel", "energy label", "energy rating", "energieklasse");
+  if (enRaw) {
+    const em = enRaw.toUpperCase().match(/([A-G])(\+{0,5})/);
+    if (em) out.energyLabel = em[1] + em[2];
+  } else {
+    const em = bodyText.match(/energ(?:ielabel|y\s*(?:label|rating))\s*:?\s*([A-Ga-g])(\+{0,5})/i);
+    if (em) out.energyLabel = em[1].toUpperCase() + em[2];
+  }
+
+  // --- year built (labeled value first, then any plausible year) ---
+  const yrRaw = fieldValue("bouwjaar", "year of construction", "construction year", "year built", "bouwperiode");
+  const yrSrc = yrRaw || bodyText;
+  const yr = String(yrSrc).match(/\b(1[89]\d{2}|20\d{2})\b/);
   if (yr) out.yearBuilt = parseInt(yr[1], 10);
+
+  // --- subarea (breadcrumb: Home > City > Subarea > Listing) ---
+  for (const b of document.querySelectorAll('script[type="application/ld+json"]')) {
+    let data;
+    try { data = JSON.parse(b.textContent); } catch (e) { continue; }
+    const arr = Array.isArray(data) ? data : (data["@graph"] ? data["@graph"] : [data]);
+    for (const o of arr) {
+      if (!o || o["@type"] !== "BreadcrumbList" || !Array.isArray(o.itemListElement)) continue;
+      const names = o.itemListElement
+        .map((it) => (it && (it.name || (it.item && it.item.name))) || null)
+        .filter(Boolean);
+      // Last crumb is the listing itself; the one before it is the subarea.
+      if (names.length >= 2) out.subarea = String(names[names.length - 2]);
+    }
+  }
+  if (!out.subarea) {
+    const crumbs = document.querySelectorAll(
+      'nav[aria-label*="readcrumb"] a, nav[aria-label*="ruimte"] a, ol[class*="breadcrumb"] a, ul[class*="breadcrumb"] a',
+    );
+    if (crumbs.length >= 2) out.subarea = crumbs[crumbs.length - 1].innerText.trim();
+  }
 
   // --- address (from JSON-LD gaps, then title/heading) ---
   if (!out.street || !out.city) {
     const src = out.name || document.title || bodyText.slice(0, 200);
     const pc = src.match(/\b(\d{4})\s?([A-Za-z]{2})\b/);
     if (pc && !out.postalCode) out.postalCode = pc[1] + " " + pc[2].toUpperCase();
-    const sh = src.match(/([A-Za-zÀ-ÿ.\-'\s]+?)\s+(\d+[\s-]?[A-Za-z]?)\b/);
+    // Number part tolerates unit suffixes like "20-H2" / "12 B" / "600a".
+    const sh = src.match(/([A-Za-zÀ-ÿ.\-'\s]+?)\s+(\d+(?:[\s-]?[A-Za-z]\d*)?)\b/);
     if (sh) {
       out.street = out.street || sh[1].trim();
       out.houseNumber = out.houseNumber || sh[2].replace(/\s+/g, "").toUpperCase();
@@ -256,6 +390,17 @@ document.getElementById("capture").addEventListener("click", async () => {
   set("buildingAmenities", (data.amenities || []).join(", "));
   set("description", data.description);
   set("photos", (data.photos || []).join(","));
+  // Executive summary
+  set("submarket", data.subarea);
+  set("availableAreaM2", data.availableAreaSqm);
+  set("parkingRatio", data.parkingRatio);
+  set("rentEurPerM2Year", data.rentEurPerM2Year);
+  set("serviceChargeEurPerM2Year", data.serviceChargeEurPerM2Year);
+  set("parkingPriceEurYear", data.parkingPriceEurYear);
+  set("availability", data.availability);
+  set("airportNote", data.airportNote);
+  set("accessibilityNote", data.highwayNote);
+  set("publicTransportNote", data.publicTransportNote);
 
   await chrome.tabs.create({ url: APP_URL.replace(/\/+$/, "") + "/buildings/new?" + p.toString() });
 
@@ -266,7 +411,15 @@ document.getElementById("capture").addEventListener("click", async () => {
   const photosLabel = target ? `${photoCount} (page says ${target})` : photoCount;
   const fields = [
     ["Name", data.name], ["Address", data.address], ["City", data.city],
-    ["Area m²", data.areaSqm], ["Energy", data.energyLabel], ["Photos", photosLabel],
+    ["Subarea", data.subarea],
+    ["Total m²", data.areaSqm], ["Available m²", data.availableAreaSqm],
+    ["Parking ratio", data.parkingRatio],
+    ["Rent €/m²/yr", data.rentEurPerM2Year], ["Service €/m²/yr", data.serviceChargeEurPerM2Year],
+    ["Parking €/yr", data.parkingPriceEurYear],
+    ["Available", data.availability],
+    ["Energy", data.energyLabel], ["Year built", data.yearBuilt],
+    ["Airport", data.airportNote], ["Highway", data.highwayNote], ["Public transport", data.publicTransportNote],
+    ["Photos", photosLabel],
   ];
   for (const [k, v] of fields) {
     const div = document.createElement("div");

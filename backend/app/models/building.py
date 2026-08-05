@@ -47,6 +47,10 @@ class Building(Base):
     # unlike the shared Neighbourhood.public_transport facts (§5.4).
     accessibility_note: Mapped[str | None] = mapped_column(String, nullable=True)
     airport_note: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Distance/walking time to the nearest station or stop, captured per
+    # building (e.g. "Station Noord 8 min") — the Neighbourhood-level
+    # public_transport list stays the richer, shared source when present.
+    public_transport_note: Mapped[str | None] = mapped_column(String, nullable=True)
 
     building_amenities: Mapped[list] = mapped_column(JSON, default=list)
 
