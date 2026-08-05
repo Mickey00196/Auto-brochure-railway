@@ -168,11 +168,34 @@ function extractListing() {
     }
   }
 
-  // Final normalization/dedupe pass (absolutize; addPhoto already deduped).
-  const uniq = new Set();
-  out.photos = out.photos
-    .map((u) => { try { return new URL(u, location.href).href; } catch (e) { return u; } })
-    .filter((u) => (uniq.has(u) ? false : (uniq.add(u), true)));
+  // --- collapse size/resolution variants + drop non-listing images -------
+  // A single photo is usually served at several sizes (thumbnail + full, or
+  // ?w=320 / ?w=1600), which is why a raw scan over-counts massively. Collapse
+  // by a size-agnostic key so each real photo is kept once, preferring the
+  // largest-looking variant. Also drop obvious non-listing images (agent
+  // portraits, brand logos) by keyword.
+  const EXTRA_SKIP = ["makelaar", "portret", "portrait", "headshot", "medewerker", "employee", "team-", "brand"];
+  const sizeAgnostic = (u) => {
+    let s = u.toLowerCase().split("?")[0].split("#")[0];
+    s = s.replace(/\d{2,4}x\d{2,4}/g, "")
+         .replace(/[-_/](thumbnails|thumbnail|thumbs|thumb|small|medium|large|preview|mini|xs|sm|md|lg|xl)\b/g, "")
+         .replace(/[-_](w|h)\d{2,4}\b/g, "");
+    return s.replace(/[-_/]+$/, "");
+  };
+  const dim = (u) => { const m = u.match(/(\d{2,4})x(\d{2,4})/); return m ? Number(m[1]) * Number(m[2]) : 0; };
+  const thumbish = (u) => (/(thumb|small|preview|mini)/i.test(u) ? 1 : 0);
+  const looksLarger = (a, b) =>
+    thumbish(a) !== thumbish(b) ? thumbish(a) < thumbish(b) : dim(a) >= dim(b);
+
+  const byKey = new Map();
+  for (let u of out.photos) {
+    try { u = new URL(u, location.href).href; } catch (e) { continue; }
+    if (EXTRA_SKIP.some((k) => u.toLowerCase().includes(k))) continue;
+    const key = sizeAgnostic(u);
+    const prev = byKey.get(key);
+    if (!prev || looksLarger(u, prev)) byKey.set(key, u);
+  }
+  out.photos = [...byKey.values()];
 
   return out;
 }
