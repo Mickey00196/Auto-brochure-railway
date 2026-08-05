@@ -129,25 +129,50 @@ function extractListing() {
   const low = bodyText.toLowerCase();
   out.amenities = AM.filter((a) => low.includes(a)).map((a) => a.replace(/\b\w/g, (c) => c.toUpperCase()));
 
-  // --- extra images (incl. lazy-load attrs + srcset) ---
+  // --- images -----------------------------------------------------------
   // No cap: collect every unique, non-skip-listed image URL on the page.
-  const SKIP = ["logo", "icon", "sprite", "avatar", "pixel", "placeholder"];
-  for (const img of document.querySelectorAll("img")) {
-    const cands = [
-      img.getAttribute("src"), img.getAttribute("data-src"),
-      img.getAttribute("data-lazy-src"), img.getAttribute("data-original"),
-    ];
-    const srcset = img.getAttribute("srcset") || img.getAttribute("data-srcset");
-    if (srcset) srcset.split(",").forEach((p) => cands.push(p.trim().split(" ")[0]));
-    for (let s of cands) {
-      if (!s) continue;
-      if (!/^https?:\/\//.test(s) && !s.startsWith("/")) continue;
-      if (SKIP.some((k) => s.toLowerCase().includes(k))) continue;
-      try { s = new URL(s, location.href).href; } catch (e) { continue; }
-      if (!out.photos.includes(s)) out.photos.push(s);
+  const SKIP = ["logo", "icon", "sprite", "avatar", "pixel", "placeholder", "spinner", "loading"];
+  const seen = new Set(out.photos);
+  const addPhoto = (raw) => {
+    if (!raw) return;
+    if (!/^https?:\/\//.test(raw) && !raw.startsWith("/")) return;
+    if (SKIP.some((k) => raw.toLowerCase().includes(k))) return;
+    let u;
+    try { u = new URL(raw, location.href).href; } catch (e) { return; }
+    if (!seen.has(u)) { seen.add(u); out.photos.push(u); }
+  };
+
+  // Pass 1 — regex over the page's own HTML source. Listing pages routinely
+  // embed the full gallery in inline JSON/state (before lazy <img> tags swap
+  // in their real src), so the complete photo list is usually already in the
+  // markup. We unescape JSON "\/" first, then match image URLs on any host.
+  // (If you later want to narrow this to the site's own photo CDN, tighten
+  // the host part of the regex once you've seen a real captured page.)
+  const html = document.documentElement.outerHTML.replace(/\\\//g, "/");
+  const IMG_URL_RE = /https?:\/\/[^"'\s)\\]+\.(?:jpe?g|png|webp)(?:\?[^"'\s)\\]*)?/gi;
+  let m;
+  while ((m = IMG_URL_RE.exec(html)) !== null) addPhoto(m[0]);
+
+  // Pass 2 — <img> scan (incl. lazy-load attrs + srcset), only as a fallback
+  // when the inline-HTML pass found little (some sites render galleries as
+  // background images or plain <img> without embedding the list).
+  if (out.photos.length < 4) {
+    for (const img of document.querySelectorAll("img")) {
+      const cands = [
+        img.getAttribute("src"), img.getAttribute("data-src"),
+        img.getAttribute("data-lazy-src"), img.getAttribute("data-original"),
+      ];
+      const srcset = img.getAttribute("srcset") || img.getAttribute("data-srcset");
+      if (srcset) srcset.split(",").forEach((p) => cands.push(p.trim().split(" ")[0]));
+      cands.forEach(addPhoto);
     }
   }
-  out.photos = out.photos.map((u) => { try { return new URL(u, location.href).href; } catch (e) { return u; } });
+
+  // Final normalization/dedupe pass (absolutize; addPhoto already deduped).
+  const uniq = new Set();
+  out.photos = out.photos
+    .map((u) => { try { return new URL(u, location.href).href; } catch (e) { return u; } })
+    .filter((u) => (uniq.has(u) ? false : (uniq.add(u), true)));
 
   return out;
 }
