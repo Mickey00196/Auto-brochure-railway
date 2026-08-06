@@ -8,6 +8,26 @@ const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // matches the backend'
 // signup request indefinitely instead of surfacing a clear error.
 const BACKEND_TIMEOUT_MS = 10_000;
 
+/** Probe used by the signup page to show "disabled — ask your admin" up
+ * front instead of only erroring after the form is submitted. Fails open
+ * (enabled: true) so a probe hiccup never hides a working signup form —
+ * submit still enforces the real setting. */
+export async function GET() {
+  try {
+    const res = await fetch(`${INTERNAL_API_BASE_URL}/auth/signup-enabled`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
+    });
+    if (res.ok) {
+      const body = (await res.json()) as { enabled?: boolean };
+      return NextResponse.json({ enabled: body.enabled !== false });
+    }
+  } catch {
+    /* backend unreachable or pre-probe version — fall through */
+  }
+  return NextResponse.json({ enabled: true });
+}
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   if (!body?.email || !body?.password) {

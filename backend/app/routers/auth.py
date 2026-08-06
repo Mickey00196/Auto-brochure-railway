@@ -29,6 +29,13 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     return TokenResponse(access_token=token, user=UserOut.model_validate(user))
 
 
+@router.get("/signup-enabled")
+def signup_enabled() -> dict:
+    """Lets the signup page say "disabled — ask your admin" BEFORE the user
+    fills in the whole form, instead of erroring only on submit."""
+    return {"enabled": SIGNUP_ENABLED}
+
+
 @router.post("/signup", response_model=TokenResponse)
 def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> TokenResponse:
     if not SIGNUP_ENABLED:

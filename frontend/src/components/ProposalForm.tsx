@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Building, Client } from "@/lib/types";
@@ -9,6 +10,8 @@ import { formatArea, formatUnitHeadlinePrice } from "@/lib/format";
 
 export function ProposalForm({ clients, buildings }: { clients: Client[]; buildings: Building[] }) {
   const router = useRouter();
+  const hasClients = clients.length > 0;
+  const hasUnits = buildings.some((b) => (b.units?.length ?? 0) > 0);
   const [title, setTitle] = useState("Office Shortlist · Amsterdam 2026");
   const [preparedBy, setPreparedBy] = useState("");
   const [clientId, setClientId] = useState(clients[0]?.client_id ?? "");
@@ -41,6 +44,37 @@ export function ProposalForm({ clients, buildings }: { clients: Client[]; buildi
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // A proposal needs a client and at least one unit — if either is missing,
+  // say so up front with a link to fix it, instead of an empty dropdown and
+  // an error only after submitting.
+  if (!hasClients || !hasUnits) {
+    return (
+      <Card>
+        <h2 className="mb-2 text-lg font-semibold">Before you can build a proposal…</h2>
+        <ul className="list-disc space-y-2 pl-5 text-sm">
+          {!hasClients && (
+            <li>
+              You need a client to prepare it for —{" "}
+              <Link href="/clients/new" className="text-accent hover:underline">
+                add your first client
+              </Link>
+              .
+            </li>
+          )}
+          {!hasUnits && (
+            <li>
+              You need at least one building with a unit —{" "}
+              <Link href="/buildings/new" className="text-accent hover:underline">
+                add a building
+              </Link>{" "}
+              (or capture one with the Chrome extension), then add a unit to it.
+            </li>
+          )}
+        </ul>
+      </Card>
+    );
   }
 
   return (

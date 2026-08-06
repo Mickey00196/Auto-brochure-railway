@@ -33,7 +33,18 @@ export function ExportPanel({ proposalId, proposalTitle, exportReady }: { propos
       }
       if (!res.ok) {
         const body = await res.text();
-        throw new Error(res.status === 409 ? "Blocked by QA — resolve or acknowledge TBD fields first, or check 'force export'." : body);
+        // Backend errors arrive as {"detail": "..."} — show the human message,
+        // not the raw JSON envelope (or a bare "Internal Server Error").
+        let detail = body;
+        try {
+          detail = JSON.parse(body).detail ?? body;
+        } catch {
+          /* not JSON — keep raw text */
+        }
+        if (!detail || /internal server error/i.test(detail)) {
+          detail = `The ${format.toUpperCase()} export failed on the server. Try again; if it keeps failing, use another format and report this.`;
+        }
+        throw new Error(res.status === 409 ? "Blocked by QA — resolve or acknowledge TBD fields first, or check 'force export'." : detail);
       }
       const blob = await res.blob();
       const objectUrl = URL.createObjectURL(blob);

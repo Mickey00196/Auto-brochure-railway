@@ -68,9 +68,24 @@ def export_pdf(proposal_id: str, force: bool = False, db: Session = Depends(get_
         raise HTTPException(409, str(e)) from e
     pptx_path = EXPORT_DIR / f"{_slug(proposal.title)}-{proposal.proposal_id[:8]}.pptx"
     prs.save(pptx_path)
-    pdf_path = pptx_to_pdf(pptx_path, EXPORT_DIR)
+    pdf_path = _pptx_to_pdf_or_502(pptx_path)
     _record_output(db, proposal, "pdf", pdf_path)
     return FileResponse(pdf_path, filename=pdf_path.name)
+
+
+def _pptx_to_pdf_or_502(pptx_path):
+    """PDF is a flattened render of the PPTX via LibreOffice — if that engine
+    is missing/broken on the server, tell the user what happened and that the
+    PPTX export contains the same document, instead of a bare 500."""
+    try:
+        return pptx_to_pdf(pptx_path, EXPORT_DIR)
+    except Exception as e:
+        raise HTTPException(
+            502,
+            "PDF rendering failed on the server (LibreOffice engine). "
+            "The PowerPoint export contains the exact same document — download that instead. "
+            f"Technical detail: {e}",
+        ) from e
 
 
 @router.post("/{proposal_id}/export/one-pager")
@@ -85,7 +100,7 @@ def export_one_pager(proposal_id: str, force: bool = False, as_pdf: bool = True,
     if not as_pdf:
         _record_output(db, proposal, "one_pager_pptx", pptx_path)
         return FileResponse(pptx_path, filename=pptx_path.name)
-    pdf_path = pptx_to_pdf(pptx_path, EXPORT_DIR)
+    pdf_path = _pptx_to_pdf_or_502(pptx_path)
     _record_output(db, proposal, "one_pager", pdf_path)
     return FileResponse(pdf_path, filename=pdf_path.name)
 

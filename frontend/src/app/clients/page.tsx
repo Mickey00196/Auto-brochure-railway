@@ -1,21 +1,30 @@
 import Link from "next/link";
 import { serverApi as api } from "@/lib/serverApi";
-import { Card, PageHeader } from "@/components/ui";
+import { Button, Card, PageHeader } from "@/components/ui";
 
 export default async function ClientsPage() {
   const clients = await api.clients().catch(() => []);
 
   return (
     <div>
-      <PageHeader
-        eyebrow="§5.5 Client"
-        title="Clients"
-        description="Each Proposal is a dated selection of units sent to one named client — the search brief here feeds Property Matching (§12)."
-      />
+      <div className="flex items-start justify-between gap-4">
+        <PageHeader
+          eyebrow="§5.5 Client"
+          title="Clients"
+          description="Each Proposal is a dated selection of units sent to one named client — the search brief here feeds Property Matching (§12)."
+        />
+        <Link href="/clients/new">
+          <Button>+ Add Client</Button>
+        </Link>
+      </div>
 
       {clients.length === 0 && (
         <Card>
-          No clients yet. Load the reference brochure demo data from the{" "}
+          No clients yet.{" "}
+          <Link href="/clients/new" className="text-accent hover:underline">
+            Add your first client
+          </Link>{" "}
+          to prepare a proposal for them, or load the reference brochure demo data from the{" "}
           <Link href="/" className="text-accent hover:underline">
             dashboard
           </Link>

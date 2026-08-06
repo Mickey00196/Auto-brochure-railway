@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button, Card } from "@/components/ui";
 
@@ -12,6 +12,15 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // null = still probing; keep the form visible meanwhile (fail open).
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch("/api/signup")
+      .then((r) => r.json())
+      .then((b: { enabled?: boolean }) => setEnabled(b.enabled !== false))
+      .catch(() => setEnabled(true));
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,6 +54,18 @@ export default function SignupPage() {
           deployment you control.
         </p>
       </div>
+      {enabled === false ? (
+        <Card>
+          <p className="text-sm">
+            Account creation is disabled on this deployment — accounts are provisioned by whoever
+            runs it. Ask your administrator for login details, then{" "}
+            <Link href="/login" className="text-accent hover:underline">
+              sign in
+            </Link>
+            .
+          </p>
+        </Card>
+      ) : (
       <Card>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -84,6 +105,7 @@ export default function SignupPage() {
           </Button>
         </form>
       </Card>
+      )}
       <p className="mt-4 text-center text-sm text-muted">
         Already have an account? <Link href="/login" className="text-accent hover:underline">Sign in</Link>
       </p>
