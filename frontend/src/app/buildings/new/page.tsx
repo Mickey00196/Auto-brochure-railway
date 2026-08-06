@@ -54,7 +54,7 @@ export default async function NewBuildingPage({
       <PageHeader
         eyebrow="Step 1"
         title="Add Building"
-        description="Captured by the Chrome extension, pulled from a link, or typed in by hand — it all lands here and is saved for reuse with any client."
+        description="Captured by the Chrome extension or typed in by hand — either way it's saved to your library and reusable for any client."
       />
       <BuildingForm neighbourhoods={neighbourhoods} initial={initial} />
     </div>

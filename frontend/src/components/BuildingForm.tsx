@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { Neighbourhood, ScrapePreviewResult } from "@/lib/types";
+import type { Neighbourhood } from "@/lib/types";
 import { api } from "@/lib/api";
 import { Button, Card } from "@/components/ui";
 
@@ -60,86 +60,10 @@ export function BuildingForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [sourceUrl, setSourceUrl] = useState("");
-  const [fetching, setFetching] = useState(false);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  const [fetchMessage, setFetchMessage] = useState<string | null>(null);
-  const [blocked, setBlocked] = useState(false);
-
-  const [pasteContent, setPasteContent] = useState("");
-  const [pasting, setPasting] = useState(false);
-  const [pasteMessage, setPasteMessage] = useState<string | null>(null);
-
   const [form, setForm] = useState({ ...EMPTY_FORM, ...initial });
 
   function update<K extends keyof typeof form>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
-  }
-
-  // Fill the form from a scrape/paste result — only fields it actually found,
-  // so an empty result never blanks out what the broker already typed.
-  function applyScraped(scraped: ScrapePreviewResult): boolean {
-    setForm((prev) => ({
-      ...prev,
-      name: scraped.name || prev.name,
-      address: scraped.address || prev.address,
-      city: scraped.city || prev.city,
-      description: scraped.description || prev.description,
-      energyLabel: scraped.energy_label || prev.energyLabel,
-      yearBuilt: scraped.year_built ? String(scraped.year_built) : prev.yearBuilt,
-      buildingAmenities: scraped.building_amenities.length ? scraped.building_amenities.join(", ") : prev.buildingAmenities,
-      photos: scraped.photos.length ? scraped.photos.join(", ") : prev.photos,
-    }));
-    return Boolean(scraped.address || scraped.photos.length || scraped.energy_label);
-  }
-
-  async function handleFetchFromUrl() {
-    if (!sourceUrl.trim()) return;
-    setFetching(true);
-    setFetchError(null);
-    setFetchMessage(null);
-    setBlocked(false);
-    try {
-      const scraped = await api.scrapePreview(sourceUrl.trim());
-      const foundSomething = applyScraped(scraped);
-      setFetchMessage(
-        foundSomething
-          ? "Ingevuld met wat op de pagina stond — controleer het en vul aan waar nodig."
-          : "Pagina opgehaald, maar er stond weinig bruikbaars op — vul de rest handmatig in.",
-      );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Kon die URL niet ophalen";
-      // Step 4: recognise a block explicitly and point the user at the
-      // compliant manual-paste fallback rather than showing a vague error.
-      const isBlock = /502|blocked|access|denied|interstitial|geblokkeerd/i.test(msg);
-      setBlocked(isBlock);
-      setFetchError(
-        isBlock
-          ? "Deze website blokkeert automatische toegang. Open de listing zelf in je browser, kopieer de tekst van de pagina, en plak die hieronder."
-          : msg,
-      );
-    } finally {
-      setFetching(false);
-    }
-  }
-
-  async function handleParseText() {
-    if (!pasteContent.trim()) return;
-    setPasting(true);
-    setPasteMessage(null);
-    try {
-      const parsed = await api.parseText(pasteContent);
-      const foundSomething = applyScraped(parsed);
-      setPasteMessage(
-        foundSomething
-          ? "Velden ingevuld uit de geplakte tekst — controleer en vul aan, en sla daarna op."
-          : "Verwerkt, maar weinig herkend — vul de velden handmatig aan.",
-      );
-    } catch (err) {
-      setPasteMessage(err instanceof Error ? err.message : "Kon de geplakte tekst niet verwerken");
-    } finally {
-      setPasting(false);
-    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -229,52 +153,40 @@ export function BuildingForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {!isEdit && (
-      <>
       <Card>
-        <h2 className="mb-4 text-lg font-semibold">Fetch from a listing URL</h2>
-        <p className="mb-3 text-sm text-muted">
-          Paste a link to the listing and pull in what the page has — address, description, energy label,
-          photos, amenities — then fill in whatever it missed by hand.
+        <h2 className="mb-1 text-lg font-semibold">Executive summary — lease terms</h2>
+        <p className="mb-4 text-sm text-muted">
+          Filled in by the Chrome extension where the listing states them. Saving creates the
+          building&apos;s available space with these terms (plus a parking add-on if a parking price is
+          set) — leave them empty to add spaces by hand later instead.
         </p>
-        <div className="flex flex-wrap gap-2">
-          <input
-            type="url"
-            value={sourceUrl}
-            onChange={(e) => setSourceUrl(e.target.value)}
-            placeholder="https://..."
-            className={`${inputClass} flex-1`}
-          />
-          <Button type="button" disabled={fetching || !sourceUrl.trim()} onClick={handleFetchFromUrl}>
-            {fetching ? "Fetching…" : "Fetch from URL"}
-          </Button>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className={labelClass}>
+            <span className="mb-1 block font-medium">Available area approx. (m²)</span>
+            <input type="number" value={form.availableAreaM2} onChange={(e) => update("availableAreaM2", e.target.value)} placeholder="Falls back to total area" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1 block font-medium">Parking ratio</span>
+            <input value={form.parkingRatio} onChange={(e) => update("parkingRatio", e.target.value)} placeholder="1:80" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1 block font-medium">Rental price office (€/m²/year)</span>
+            <input type="number" value={form.rentEurPerM2Year} onChange={(e) => update("rentEurPerM2Year", e.target.value)} placeholder="165" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1 block font-medium">Service charges (€/m²/year)</span>
+            <input type="number" value={form.serviceChargeEurPerM2Year} onChange={(e) => update("serviceChargeEurPerM2Year", e.target.value)} placeholder="45" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1 block font-medium">Rental price parking space (€/space/year)</span>
+            <input type="number" value={form.parkingPriceEurYear} onChange={(e) => update("parkingPriceEurYear", e.target.value)} placeholder="750" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1 block font-medium">Available</span>
+            <input value={form.availability} onChange={(e) => update("availability", e.target.value)} placeholder="Per direct / in overleg" className={inputClass} />
+          </label>
         </div>
-        {fetchError && <p className={`mt-2 text-xs ${blocked ? "text-amber-600" : "text-red-500"}`}>{fetchError}</p>}
-        {fetchMessage && !fetchError && <p className="mt-2 text-xs text-muted">{fetchMessage}</p>}
       </Card>
-
-      <Card className={blocked ? "border-amber-400" : undefined}>
-        <h2 className="mb-1 text-lg font-semibold">Of: plak de listing-tekst handmatig</h2>
-        <p className="mb-3 text-sm text-muted">
-          Blokkeert de website automatische toegang (zoals Funda)? Open de listing zelf in je browser,
-          selecteer en kopieer de tekst van de pagina (of de HTML-broncode), en plak die hier. Dezelfde
-          velden — adres, oppervlakte, huurprijs, energielabel — worden er dan uit gehaald. Er wordt niets
-          automatisch opgehaald, dus een bot-blokkade speelt hier geen rol.
-        </p>
-        <textarea
-          value={pasteContent}
-          onChange={(e) => setPasteContent(e.target.value)}
-          rows={5}
-          placeholder="Plak hier de tekst of HTML van de listing-pagina…"
-          className={inputClass}
-        />
-        <div className="mt-2">
-          <Button type="button" disabled={pasting || !pasteContent.trim()} onClick={handleParseText}>
-            {pasting ? "Verwerken…" : "Velden uit tekst halen"}
-          </Button>
-        </div>
-        {pasteMessage && <p className="mt-2 text-xs text-muted">{pasteMessage}</p>}
-      </Card>
-      </>
       )}
 
       <Card>
@@ -369,43 +281,6 @@ export function BuildingForm({
           </label>
         </div>
       </Card>
-
-      {!isEdit && (
-      <Card>
-        <h2 className="mb-1 text-lg font-semibold">Executive summary — lease terms</h2>
-        <p className="mb-4 text-sm text-muted">
-          Filled in by the extension capture where the listing states them. Saving creates the
-          building&apos;s first unit with these terms (plus a parking add-on if a parking price is set) —
-          leave them empty to add units by hand later instead.
-        </p>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">Available area approx. (m²)</span>
-            <input type="number" value={form.availableAreaM2} onChange={(e) => update("availableAreaM2", e.target.value)} placeholder="Falls back to total area" className={inputClass} />
-          </label>
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">Parking ratio</span>
-            <input value={form.parkingRatio} onChange={(e) => update("parkingRatio", e.target.value)} placeholder="1:80" className={inputClass} />
-          </label>
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">Rental price office (€/m²/year)</span>
-            <input type="number" value={form.rentEurPerM2Year} onChange={(e) => update("rentEurPerM2Year", e.target.value)} placeholder="165" className={inputClass} />
-          </label>
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">Service charges (€/m²/year)</span>
-            <input type="number" value={form.serviceChargeEurPerM2Year} onChange={(e) => update("serviceChargeEurPerM2Year", e.target.value)} placeholder="45" className={inputClass} />
-          </label>
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">Rental price parking space (€/space/year)</span>
-            <input type="number" value={form.parkingPriceEurYear} onChange={(e) => update("parkingPriceEurYear", e.target.value)} placeholder="750" className={inputClass} />
-          </label>
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">Available</span>
-            <input value={form.availability} onChange={(e) => update("availability", e.target.value)} placeholder="Per direct / in overleg" className={inputClass} />
-          </label>
-        </div>
-      </Card>
-      )}
 
       {error && <p className="text-sm text-red-500">{error}</p>}
       <Button type="submit" disabled={submitting}>
