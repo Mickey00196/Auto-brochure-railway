@@ -45,10 +45,17 @@ export type BuildingFormInitial = Partial<typeof EMPTY_FORM>;
 export function BuildingForm({
   neighbourhoods,
   initial,
+  buildingId,
 }: {
   neighbourhoods: Neighbourhood[];
   initial?: BuildingFormInitial;
+  /** Set when editing a saved building: updates in place instead of adding a
+   * new one, and hides the capture/lease-terms sections (capture belongs to
+   * a new building, and units are managed on the building's own page — an
+   * edit must never silently create a second unit). */
+  buildingId?: string;
 }) {
+  const isEdit = Boolean(buildingId);
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,7 +151,7 @@ export function BuildingForm({
     setSubmitting(true);
     setError(null);
     try {
-      const building = await api.createBuilding({
+      const payload = {
         name: form.name,
         address: form.address,
         postal_code: form.postalCode || null,
@@ -168,7 +175,16 @@ export function BuildingForm({
           .split(",")
           .map((s) => s.trim())
           .filter(Boolean),
-      });
+      };
+
+      if (buildingId) {
+        await api.updateBuilding(buildingId, payload);
+        router.push(`/buildings/${buildingId}`);
+        router.refresh();
+        return;
+      }
+
+      const building = await api.createBuilding(payload);
 
       // Lease-terms section filled in → create the building's first Unit in
       // the same submit, so the executive summary is complete immediately.
@@ -212,6 +228,8 @@ export function BuildingForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {!isEdit && (
+      <>
       <Card>
         <h2 className="mb-4 text-lg font-semibold">Fetch from a listing URL</h2>
         <p className="mb-3 text-sm text-muted">
@@ -256,6 +274,8 @@ export function BuildingForm({
         </div>
         {pasteMessage && <p className="mt-2 text-xs text-muted">{pasteMessage}</p>}
       </Card>
+      </>
+      )}
 
       <Card>
         <h2 className="mb-4 text-lg font-semibold">Building</h2>
@@ -350,6 +370,7 @@ export function BuildingForm({
         </div>
       </Card>
 
+      {!isEdit && (
       <Card>
         <h2 className="mb-1 text-lg font-semibold">Executive summary — lease terms</h2>
         <p className="mb-4 text-sm text-muted">
@@ -384,12 +405,17 @@ export function BuildingForm({
           </label>
         </div>
       </Card>
+      )}
 
       {error && <p className="text-sm text-red-500">{error}</p>}
       <Button type="submit" disabled={submitting}>
-        {submitting ? "Creating…" : "Create Building"}
+        {submitting ? "Saving…" : isEdit ? "Save changes" : "Save to library"}
       </Button>
-      <p className="text-xs text-muted">You&apos;ll be able to add more units on the next screen.</p>
+      <p className="text-xs text-muted">
+        {isEdit
+          ? "Available spaces and add-ons are managed on the building's own page."
+          : "Saved permanently in your library — reusable for any client, and never overwritten by a later capture."}
+      </p>
     </form>
   );
 }

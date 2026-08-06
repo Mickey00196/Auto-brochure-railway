@@ -20,9 +20,14 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
         title={building.name}
         description={`${building.address}, ${building.city} · ${building.building_type ?? "Office"}${building.energy_label ? ` · Energy label ${building.energy_label}` : ""}`}
         actions={
-          <Link href={`/buildings/${id}/units/new`}>
-            <Button>+ Add Unit</Button>
-          </Link>
+          <div className="flex gap-2">
+            <Link href={`/buildings/${id}/edit`}>
+              <Button variant="ghost">Edit details</Button>
+            </Link>
+            <Link href={`/buildings/${id}/units/new`}>
+              <Button>+ Add space</Button>
+            </Link>
+          </div>
         }
       />
 

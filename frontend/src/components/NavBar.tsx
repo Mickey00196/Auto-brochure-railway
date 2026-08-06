@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { LogoutButton } from "@/components/LogoutButton";
 
+/** The whole workflow is two screens: the library you select from, and the
+ * capture screen that fills it. Clients/proposals/other export formats still
+ * exist at their URLs but are deliberately out of the primary flow. */
 const LINKS = [
-  { href: "/", label: "Home" },
-  { href: "/buildings", label: "Buildings" },
-  { href: "/import", label: "Add from link" },
-  { href: "/clients", label: "Clients" },
-  { href: "/proposals", label: "Client PDFs" },
+  { href: "/buildings", label: "Building library" },
+  { href: "/buildings/new", label: "Add building" },
 ];
 
 export function NavBar({ user }: { user?: { name: string; email: string } | null }) {

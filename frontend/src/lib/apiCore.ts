@@ -32,6 +32,8 @@ export function makeApi(request: DoRequest) {
     building: (id: string) => request<Building>(`/buildings/${id}`),
     createBuilding: (payload: Record<string, unknown>) =>
       request<Building>("/buildings", { method: "POST", body: JSON.stringify(payload) }),
+    updateBuilding: (id: string, payload: Record<string, unknown>) =>
+      request<Building>(`/buildings/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
 
     units: (buildingId?: string) =>
       request<Unit[]>(`/units${buildingId ? `?building_id=${buildingId}` : ""}`),

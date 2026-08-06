@@ -51,8 +51,8 @@ export function PageHeader({
   return (
     <div className="mb-8">
       {showHomeLink && (
-        <Link href="/" className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-accent hover:underline">
-          ← Back to Dashboard
+        <Link href="/buildings" className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-accent hover:underline">
+          ← Back to library
         </Link>
       )}
       <div className="flex flex-wrap items-start justify-between gap-4">

@@ -34,6 +34,7 @@ export interface Building {
   total_building_area_m2: number | null;
   accessibility_note: string | null;
   airport_note: string | null;
+  public_transport_note: string | null;
   building_amenities: string[];
   description: string | null;
   photos: string[];

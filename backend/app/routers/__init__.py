@@ -8,6 +8,7 @@ from app.routers import (
     export,
     imports,
     ingestion,
+    library,
     match,
     neighbourhoods,
     proposals,
@@ -18,6 +19,7 @@ from app.routers import (
 
 all_routers = [
     buildings.router,
+    library.router,
     units.router,
     addons.router,
     neighbourhoods.router,
