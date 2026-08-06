@@ -19,9 +19,9 @@ export default async function ProposalsPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="§5.6 Proposal"
-        title="Proposals"
-        description="Every PDF, PowerPoint, comparison table and one-pager is generated from a single Proposal record, so all outputs stay in sync (Workflow 1, §4)."
+        eyebrow="Client PDFs"
+        title="Client PDFs"
+        description="Each one is a saved selection of buildings for a client. Open it any time to download the PDF again or change the selection."
         actions={
           <Link href="/proposals/new">
             <Button>New Proposal</Button>

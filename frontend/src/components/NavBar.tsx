@@ -2,11 +2,11 @@ import Link from "next/link";
 import { LogoutButton } from "@/components/LogoutButton";
 
 const LINKS = [
-  { href: "/", label: "Dashboard" },
-  { href: "/buildings", label: "Buildings & Units" },
-  { href: "/import", label: "Import from URLs" },
+  { href: "/", label: "Home" },
+  { href: "/buildings", label: "Buildings" },
+  { href: "/import", label: "Add from link" },
   { href: "/clients", label: "Clients" },
-  { href: "/proposals", label: "Proposals" },
+  { href: "/proposals", label: "Client PDFs" },
 ];
 
 export function NavBar({ user }: { user?: { name: string; email: string } | null }) {

@@ -5,9 +5,9 @@ export default function NewClientPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="§5.5 Client"
+        eyebrow="Client"
         title="Add Client"
-        description="A client is who a Proposal is prepared for — create one here, then select it when building a proposal."
+        description="Add whoever you're preparing an availability overview for. You'll pick them when you build the PDF."
       />
       <ClientForm />
     </div>

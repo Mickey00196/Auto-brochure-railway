@@ -21,7 +21,7 @@ function annualCostCell(row: ComparisonRow): string {
 export function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
   return (
     <Card>
-      <h2 className="text-lg font-semibold">§16 Comparison</h2>
+      <h2 className="text-lg font-semibold">Side-by-side comparison</h2>
       <p className="mt-1 text-sm text-muted">
         All-in rate / monthly cost are computed, not hand-typed — direct-lease (€/m²/yr) and flex/per-desk
         (€/desk/mo) units are ranked separately, never mixed onto the same scale, with TBD rows last.

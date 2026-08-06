@@ -52,9 +52,9 @@ export default async function NewBuildingPage({
   return (
     <div>
       <PageHeader
-        eyebrow="§5.1 Building"
+        eyebrow="Step 1"
         title="Add Building"
-        description="Writes to the exact same Building record a URL import produces — one schema, populated either by hand or by the scraper."
+        description="Captured by the Chrome extension, pulled from a link, or typed in by hand — it all lands here and is saved for reuse with any client."
       />
       <BuildingForm neighbourhoods={neighbourhoods} initial={initial} />
     </div>

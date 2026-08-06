@@ -1,7 +1,34 @@
 import Link from "next/link";
 import { serverApi as api } from "@/lib/serverApi";
-import { Card, PageHeader, StatTile } from "@/components/ui";
+import { Button, Card, PageHeader, StatTile } from "@/components/ui";
 import { SeedDemoButton } from "@/components/SeedDemoButton";
+
+/** The home screen is the map of the tool: three steps, in order, with the
+ * next useful action on each. Everything else (QA counts, pipeline
+ * breakdowns) lives on the pages where it's actionable. */
+const STEPS = [
+  {
+    n: 1,
+    title: "Capture a building",
+    body: "On a listing page, click the Chrome extension — it reads the page and pre-fills everything it found. No extension to hand? Paste the link instead.",
+    href: "/import",
+    cta: "Add from a link",
+  },
+  {
+    n: 2,
+    title: "Check and save it",
+    body: "Review what was captured, fill in anything the listing didn't state, and save. Buildings stay in your database for every future client.",
+    href: "/buildings",
+    cta: "See saved buildings",
+  },
+  {
+    n: 3,
+    title: "Send a client their PDF",
+    body: "Pick a client, tick the buildings that fit their brief, and download a clean availability overview as a PDF.",
+    href: "/proposals/new",
+    cta: "Build a client PDF",
+  },
+];
 
 export default async function DashboardPage() {
   let dashboard: Awaited<ReturnType<typeof api.dashboard>> | null = null;
@@ -15,78 +42,56 @@ export default async function DashboardPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="§18 Dashboard"
-        title="Dashboard"
-        description="Imported properties, proposal pipeline, and a live Data Completeness check across every active proposal."
+        title="Office availability, client-ready"
+        description="Capture listings from the web, keep them in one place, and turn any selection into a client PDF."
         actions={<SeedDemoButton />}
         showHomeLink={false}
       />
 
       {error && (
         <Card className="mb-8 border-red-300 bg-red-50 text-red-700">
-          Could not reach the API at <code>{process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}</code>.
-          Make sure the backend is running (<code>uvicorn app.main:app --reload</code>). {error}
+          <p className="font-medium">The app can&apos;t reach its database service right now.</p>
+          <p className="mt-1 text-sm">
+            Your saved buildings are safe — this is a connection problem, not data loss. If it doesn&apos;t clear up
+            in a minute, check that the backend service is running. ({error})
+          </p>
         </Card>
       )}
 
       {dashboard && (
-        <>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <StatTile label="Buildings" value={dashboard.imported_properties.buildings} />
-            <StatTile label="Units" value={dashboard.imported_properties.units} />
-            <StatTile label="Generated Documents" value={dashboard.generated_brochures.total} />
-            <StatTile
-              label="TBD Headline Fields"
-              value={dashboard.data_completeness.tbd_field_count}
-              tone={dashboard.data_completeness.tbd_field_count > 0 ? "warn" : "default"}
-            />
-          </div>
+        <div className="mb-8 grid grid-cols-3 gap-4">
+          <StatTile label="Buildings saved" value={dashboard.imported_properties.buildings} />
+          <StatTile label="Available units" value={dashboard.imported_properties.units} />
+          <StatTile label="Documents generated" value={dashboard.generated_brochures.total} />
+        </div>
+      )}
 
-          <div className="mt-6 grid gap-6 lg:grid-cols-2">
-            <Card>
-              <h2 className="text-lg font-semibold">Data Completeness</h2>
-              <p className="mt-1 text-sm text-muted">
-                Live count of TBD/missing critical fields across {dashboard.data_completeness.active_proposals_checked}{" "}
-                active proposal(s) — chase these down before a deck goes out the door (§8, §18, §24).
-              </p>
-              <dl className="mt-4 space-y-2 text-sm">
-                <div className="flex justify-between border-b border-border pb-2">
-                  <dt className="text-muted">TBD rent / service-charge fields</dt>
-                  <dd className="font-semibold">{dashboard.data_completeness.tbd_field_count}</dd>
-                </div>
-                <div className="flex justify-between pb-2">
-                  <dt className="text-muted">Blocking QA issues</dt>
-                  <dd className="font-semibold">{dashboard.data_completeness.blocking_qa_issue_count}</dd>
-                </div>
-              </dl>
-            </Card>
+      <div className="grid gap-4 lg:grid-cols-3">
+        {STEPS.map((step) => (
+          <Card key={step.n} className="flex flex-col">
+            <div className="mb-2 flex h-7 w-7 items-center justify-center rounded-full bg-accent text-sm font-bold text-white">
+              {step.n}
+            </div>
+            <h2 className="text-lg font-semibold">{step.title}</h2>
+            <p className="mt-1 flex-1 text-sm text-muted">{step.body}</p>
+            <Link href={step.href} className="mt-4">
+              <Button variant={step.n === 3 ? "primary" : "ghost"}>{step.cta}</Button>
+            </Link>
+          </Card>
+        ))}
+      </div>
 
-            <Card>
-              <h2 className="text-lg font-semibold">Proposal Pipeline</h2>
-              <p className="mt-1 text-sm text-muted">Proposals by status (§5.6).</p>
-              <dl className="mt-4 space-y-2 text-sm">
-                {Object.entries(dashboard.proposals_by_status).map(([status, count]) => (
-                  <div key={status} className="flex justify-between border-b border-border pb-2 capitalize last:border-none">
-                    <dt className="text-muted">{status.replace("_", " ")}</dt>
-                    <dd className="font-semibold">{count}</dd>
-                  </div>
-                ))}
-              </dl>
-            </Card>
-          </div>
-
-          <div className="mt-8 flex flex-wrap gap-4 text-sm">
-            <Link href="/buildings" className="text-accent hover:underline">
-              Browse buildings & units →
-            </Link>
-            <Link href="/proposals" className="text-accent hover:underline">
-              View proposals →
-            </Link>
-            <Link href="/clients" className="text-accent hover:underline">
-              View clients →
-            </Link>
-          </div>
-        </>
+      {dashboard && dashboard.data_completeness.tbd_field_count > 0 && (
+        <Card className="mt-6">
+          <h2 className="text-base font-semibold">
+            {dashboard.data_completeness.tbd_field_count} price field
+            {dashboard.data_completeness.tbd_field_count === 1 ? "" : "s"} still marked TBD
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            These are figures the source listings didn&apos;t state. They print as &ldquo;TBD&rdquo; on a client PDF,
+            which is honest but worth chasing down before sending. Open any building to fill them in.
+          </p>
+        </Card>
       )}
     </div>
   );

@@ -46,7 +46,7 @@ export function QAPanel({
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">§8 Data QA</h2>
+        <h2 className="text-lg font-semibold">Data check</h2>
         <Badge tone={report.is_export_ready ? "success" : "danger"}>
           {report.is_export_ready ? "Export ready" : "Not export ready"}
         </Badge>
@@ -58,7 +58,7 @@ export function QAPanel({
 
       {tbdUnitIds.length > 0 && (
         <div className="mt-4 rounded-lg bg-background/60 p-3 text-sm">
-          <p className="mb-2 font-medium">Acknowledge TBD units to allow export (explicit sign-off, §24):</p>
+          <p className="mb-2 font-medium">Confirm you're happy to send these with figures still unknown:</p>
           {tbdUnitIds.map((unitId) => (
             <label key={unitId} className="flex items-center gap-2 py-1">
               <input type="checkbox" checked={acknowledged.has(unitId)} onChange={() => toggleAcknowledge(unitId)} />

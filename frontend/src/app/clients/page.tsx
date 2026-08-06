@@ -9,9 +9,9 @@ export default async function ClientsPage() {
     <div>
       <div className="flex items-start justify-between gap-4">
         <PageHeader
-          eyebrow="§5.5 Client"
+          eyebrow="Who you send to"
           title="Clients"
-          description="Each Proposal is a dated selection of units sent to one named client — the search brief here feeds Property Matching (§12)."
+          description="Who you send availability overviews to. Each client PDF is a dated selection of buildings prepared for one of them."
         />
         <Link href="/clients/new">
           <Button>+ Add Client</Button>

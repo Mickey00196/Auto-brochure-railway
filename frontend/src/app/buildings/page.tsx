@@ -9,7 +9,7 @@ export default async function BuildingsPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="§5.1 / §5.2"
+        eyebrow="Your database"
         title="Buildings & Units"
         description="One Building can list several leasable Units — different floors, prices, and delivery conditions — rather than collapsing everything into a single record. Added manually or by pasting a URL, every building lands in this same list."
         actions={

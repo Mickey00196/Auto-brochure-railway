@@ -81,3 +81,26 @@ def test_dashboard_reports_data_completeness(client):
     dashboard = client.get("/dashboard").json()
     assert dashboard["imported_properties"]["units"] == 8
     assert dashboard["data_completeness"]["tbd_field_count"] > 0
+
+
+def test_availability_pdf_exports_without_qa_gate(client):
+    """The product's primary deliverable must not depend on the QA gate or on
+    a LibreOffice binary — seed data has TBD units, and this still returns a
+    real PDF (they render as 'TBD')."""
+    proposal = client.post("/seed/demo").json()
+    r = client.post(f"/proposals/{proposal['proposal_id']}/export/availability-pdf")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert r.content.startswith(b"%PDF-")
+    assert len(r.content) > 2000
+
+
+def test_availability_pdf_rejects_empty_selection(client):
+    client.post("/seed/demo")
+    clients_ = client.get("/clients").json()
+    empty = client.post(
+        "/proposals",
+        json={"client_id": clients_[0]["client_id"], "title": "Empty", "unit_ids": []},
+    ).json()
+    r = client.post(f"/proposals/{empty['proposal_id']}/export/availability-pdf")
+    assert r.status_code == 400

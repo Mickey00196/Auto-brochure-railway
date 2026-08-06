@@ -21,9 +21,9 @@ export function ProposalWorkspace({
     <div className="grid gap-6 lg:grid-cols-2">
       <QAPanel proposalId={proposalId} initialReport={initialQAReport} onReadyChange={setExportReady} />
       <Card>
-        <h2 className="text-lg font-semibold">§13-15 / §20 Export</h2>
+        <h2 className="text-lg font-semibold">Send to client</h2>
         <p className="mt-1 mb-4 text-sm text-muted">
-          PowerPoint is the primary generation target (§14); PDF is a flattened export of the same slides.
+          The client PDF is generated from the buildings selected above.
         </p>
         <ExportPanel proposalId={proposalId} proposalTitle={proposalTitle} exportReady={exportReady} />
       </Card>

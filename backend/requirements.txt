@@ -8,6 +8,7 @@ Jinja2==3.1.6
 python-multipart==0.0.32
 openpyxl==3.1.5
 python-docx==1.2.0
+reportlab==5.0.0  # direct PDF rendering for the availability overview (no LibreOffice needed)
 beautifulsoup4==4.15.0
 bcrypt==4.2.1
 PyJWT==2.10.1

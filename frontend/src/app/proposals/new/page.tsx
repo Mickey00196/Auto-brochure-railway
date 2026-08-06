@@ -11,9 +11,9 @@ export default async function NewProposalPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Workflow 1 (§4)"
-        title="New Proposal"
-        description="Select units — optionally across several buildings — and attach them to a client. PDF, PowerPoint, comparison table and one-pager will all generate from this one record."
+        eyebrow="Step 3"
+        title="New client PDF"
+        description="Pick the client, tick the buildings that suit them, and generate their availability PDF."
       />
 
       {/* ProposalForm renders its own guidance (with links to add a client

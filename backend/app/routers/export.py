@@ -19,6 +19,7 @@ from app.config import EXPORT_DIR
 from app.database import get_db
 from app.models import Proposal
 from app.services import export_formats
+from app.services.brochure.availability_pdf import build_availability_pdf
 from app.services.brochure.one_pager import build_one_pager
 from app.services.brochure.pdf_export import pptx_to_pdf
 from app.services.brochure.pptx_generator import build_pptx
@@ -57,6 +58,20 @@ def export_pptx(proposal_id: str, force: bool = False, db: Session = Depends(get
     prs.save(out_path)
     _record_output(db, proposal, "pptx", out_path)
     return FileResponse(out_path, filename=out_path.name)
+
+
+@router.post("/{proposal_id}/export/availability-pdf")
+def export_availability_pdf(proposal_id: str, db: Session = Depends(get_db)):
+    """The tool's primary output: selected buildings → a client-facing PDF of
+    what's available. Rendered directly (ReportLab), so unlike the PPTX-derived
+    PDF it doesn't depend on a LibreOffice binary being present on the host,
+    and it isn't QA-gated — unknown figures print as TBD."""
+    proposal = _get_proposal(proposal_id, db)
+    pdf_bytes = build_availability_pdf(db, proposal)
+    out_path = EXPORT_DIR / f"{_slug(proposal.title)}-{proposal.proposal_id[:8]}-availability.pdf"
+    out_path.write_bytes(pdf_bytes)
+    _record_output(db, proposal, "availability_pdf", out_path)
+    return FileResponse(out_path, media_type="application/pdf", filename=out_path.name)
 
 
 @router.post("/{proposal_id}/export/pdf")

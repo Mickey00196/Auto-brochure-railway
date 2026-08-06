@@ -29,7 +29,11 @@ export function proxy(request: NextRequest) {
 
   if (!isLoggedIn && !isPublicPath) {
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", pathname);
+    // Keep the query string, not just the path: the Chrome extension opens
+    // /buildings/new?name=…&rent=… with the whole captured listing in the
+    // URL. Dropping the search here silently threw that capture away and
+    // landed the user on an empty form after logging in.
+    loginUrl.searchParams.set("next", pathname + request.nextUrl.search);
     return NextResponse.redirect(loginUrl);
   }
 
