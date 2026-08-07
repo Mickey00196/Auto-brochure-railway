@@ -38,9 +38,8 @@ ever moves, open the popup → **Settings**, paste the new address, and click
    the preview is already filled in and the status line says how long it took.
 3. Click **Capture this listing** — the tab opens immediately, because there
    is no work left to do at that point.
-3. A new tab opens with **Add Building** pre-filled (name, address, city, area,
-   energy label, amenities, photos). The popup also shows how many photos were
-   captured. Review it, fill in anything missing, and click **Create Building**.
+4. The tab shows **Add Building** pre-filled with everything found. Review it,
+   fill in anything the listing didn't state, and click **Save to library**.
    You must be logged into the app in that browser.
 
 ## What it captures
