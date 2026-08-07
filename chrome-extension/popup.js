@@ -8,7 +8,11 @@ const DEFAULT_APP_URL = "https://proposal-engine-frontend-production.up.railway.
 // 414/431 error page instead of the form — and a funda gallery of 15 CDN URLs
 // gets there easily. Photos are dropped from the tail until it fits; the
 // building itself always survives.
-const MAX_HANDOFF_URL_LENGTH = 3500;
+// The app serves a ~13KB URL fine and only 431s past ~17KB (Node's 16KB
+// header ceiling, shared with cookies). 8KB leaves generous headroom for a
+// stricter proxy while fitting a full 37-photo gallery (~3.8KB) with room to
+// spare — the old 3.5KB limit was silently dropping the tail of the gallery.
+const MAX_HANDOFF_URL_LENGTH = 8000;
 
 // storage.local, not .sync: sync storage round-trips through Chrome's sync
 // service and can stall the popup for hundreds of ms on first read. The app
@@ -424,34 +428,57 @@ function extractListing() {
     if (!seen.has(u)) { seen.add(u); out.photos.push(u); }
   };
 
-  // Pass 1 — regex over the page's own HTML source. Listing pages routinely
-  // embed the full gallery in inline JSON/state (before lazy <img> tags swap
-  // in their real src), so the complete photo list is usually already in the
-  // markup. We unescape JSON "\/" first, then match image URLs on any host.
-  // (If you later want to narrow this to the site's own photo CDN, tighten
-  // the host part of the regex once you've seen a real captured page.)
-  const html = document.documentElement.outerHTML.replace(/\\\//g, "/");
-  const IMG_URL_RE = /https?:\/\/[^"'\s)\\]+\.(?:jpe?g|png|webp)(?:\?[^"'\s)\\]*)?/gi;
+  // Pass 1 — regex over the page's own HTML source. Listing pages embed the
+  // gallery in inline JSON/app state (before the lazy <img> tags swap in
+  // their real src), so the full list is usually in the markup already. The
+  // JSON escapes slashes as "\/" AND, in Next.js-style payloads, as
+  // "\u002F"; HTML attributes escape "&" as "&amp;". All three have to be
+  // unescaped or the URLs come out broken (or unmatched entirely).
+  const html = document.documentElement.outerHTML
+    .replace(/\\\//g, "/")
+    .replace(/\\u002[fF]/g, "/")
+    .replace(/&amp;/g, "&");
+  const IMG_URL_RE = /https?:\/\/[^"'\s)\\<>]+\.(?:jpe?g|png|webp|avif)(?:\?[^"'\s)\\<>]*)?/gi;
   let m;
   while ((m = IMG_URL_RE.exec(html)) !== null) {
     addPhoto(m[0]);
     if (out.photos.length >= PHOTO_SCAN_LIMIT) break;
   }
 
-  // Pass 2 — <img> scan (incl. lazy-load attrs + srcset), only as a fallback
-  // when the inline-HTML pass found little (some sites render galleries as
-  // background images or plain <img> without embedding the list).
-  if (out.photos.length < 4) {
-    for (const img of document.querySelectorAll("img")) {
-      const cands = [
-        img.getAttribute("src"), img.getAttribute("data-src"),
-        img.getAttribute("data-lazy-src"), img.getAttribute("data-original"),
-      ];
-      const srcset = img.getAttribute("srcset") || img.getAttribute("data-srcset");
-      if (srcset) srcset.split(",").forEach((p) => cands.push(p.trim().split(" ")[0]));
-      cands.forEach(addPhoto);
+  // Pass 2 — the rendered DOM. Always run it (not just as a fallback): when
+  // the gallery/"Alle media" view is open, the full-size photos exist as real
+  // elements even though they never appeared in the served HTML.
+  const pushSrcset = (value, sink) => {
+    if (!value) return;
+    for (const part of value.split(",")) {
+      const url = part.trim().split(/\s+/)[0];
+      if (url) sink.push(url);
     }
+  };
+  const candidates = [];
+  for (const img of document.querySelectorAll("img")) {
+    candidates.push(img.getAttribute("src"), img.currentSrc || null);
+    for (const attr of img.attributes) {
+      // data-src, data-lazy-src, data-original, data-large, data-zoom-image…
+      if (attr.name.startsWith("data-") && /\.(?:jpe?g|png|webp|avif)/i.test(attr.value)) {
+        candidates.push(attr.value);
+      }
+    }
+    pushSrcset(img.getAttribute("srcset") || img.getAttribute("data-srcset"), candidates);
   }
+  for (const source of document.querySelectorAll("source")) {
+    pushSrcset(source.getAttribute("srcset") || source.getAttribute("data-srcset"), candidates);
+  }
+  for (const anchor of document.querySelectorAll('a[href*=".jpg"], a[href*=".jpeg"], a[href*=".png"], a[href*=".webp"]')) {
+    candidates.push(anchor.getAttribute("href"));
+  }
+  // Galleries built from CSS background images.
+  for (const node of document.querySelectorAll('[style*="background"]')) {
+    const bg = node.getAttribute("style") || "";
+    const bm = bg.match(/url\((['"]?)(.*?)\1\)/i);
+    if (bm && /\.(?:jpe?g|png|webp|avif)/i.test(bm[2])) candidates.push(bm[2]);
+  }
+  for (const c of candidates) addPhoto(c);
 
   // --- collapse size/resolution variants + drop non-listing images -------
   // A single photo is usually served at several sizes (thumbnail + full, or
@@ -621,7 +648,21 @@ async function prepare() {
   const { url, photoCount, dropped } = buildHandoffUrl(appUrl, data);
   readyUrl = url;
   captureBtn.disabled = false;
-  setStatus("ok", `Ready in ${ms} ms — ${photoCount} photo${photoCount === 1 ? "" : "s"}. Click to send it to your library.`);
+
+  // Only what the browser has actually loaded can be read. A listing page
+  // ships a handful of gallery images and fetches the rest when you open
+  // "Alle media", so say plainly when the page is holding fewer than it
+  // advertises rather than quietly capturing five of thirty-seven.
+  const target = data.photoTarget || 0;
+  const short = target && photoCount < target;
+  let note = `Ready in ${ms} ms — ${photoCount} photo${photoCount === 1 ? "" : "s"}`;
+  if (short) {
+    note += ` of ${target} on this page. Open “Alle media” on the listing, then reopen this popup to pick up the rest.`;
+  } else {
+    note += ". Click to send it to your library.";
+  }
+  if (dropped) note += ` (${dropped} left out to keep the link short enough.)`;
+  setStatus(short ? "warn" : "ok", note);
   renderPreview(data, photoCount, dropped);
   return url;
 }

@@ -96,9 +96,13 @@ for you to complete — it never invents values.
   behind a "Lees meer" / "Read more" toggle used to be invisible to the
   capture (the parking ratio, typically). From v2.3 the collapsed text is read
   too, so expanding the description first is no longer necessary.
-- **Fewer photos than the page shows.** The handoff link has a length limit;
-  photos past it are dropped and the popup tells you how many. The building
-  and all its figures always come through.
+- **Fewer photos than the listing advertises.** The extension can only read
+  what your browser has actually loaded. A listing page ships a handful of
+  gallery images and fetches the rest only when you open **Alle media** — so
+  if the popup says "5 of 37 on this page", open Alle media on the listing,
+  then reopen the popup and all of them come through. (The handoff link also
+  has a length limit, but at 8KB it comfortably fits a full 37-photo gallery;
+  anything dropped is still reported.)
 
 ## Notes
 
