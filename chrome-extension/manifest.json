@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Proposal Engine – Listing Capture",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Capture the listing page you are already viewing into your building library — one click, no retyping. Reads the open page only; it does not fetch anything itself.",
   "action": {
     "default_popup": "popup.html",
@@ -10,14 +10,20 @@
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
       "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
+      "128": "icons/icon128.png",
+      "256": "icons/icon256.png"
     }
   },
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
+    "128": "icons/icon128.png",
+    "256": "icons/icon256.png"
   },
-  "permissions": ["activeTab", "scripting", "storage"]
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ]
 }

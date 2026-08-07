@@ -10,8 +10,11 @@ const DEFAULT_APP_URL = "https://proposal-engine-frontend-production.up.railway.
 // building itself always survives.
 const MAX_HANDOFF_URL_LENGTH = 3500;
 
+// storage.local, not .sync: sync storage round-trips through Chrome's sync
+// service and can stall the popup for hundreds of ms on first read. The app
+// address is a per-machine setting, so local is both faster and the right fit.
 async function getAppUrl() {
-  const { appUrl } = await chrome.storage.sync.get({ appUrl: DEFAULT_APP_URL });
+  const { appUrl } = await chrome.storage.local.get({ appUrl: DEFAULT_APP_URL });
   return String(appUrl || DEFAULT_APP_URL).replace(/\/+$/, "");
 }
 
@@ -289,15 +292,27 @@ function extractListing() {
   out.amenities = AM.filter((a) => low.includes(a)).map((a) => a.replace(/\b\w/g, (c) => c.toUpperCase()));
 
   // --- images -----------------------------------------------------------
-  // No cap: collect every unique, non-skip-listed image URL on the page.
+  // The page states its own photo count ("Foto's 15"); read it up front so
+  // the scan below can stop early instead of walking every image reference
+  // in a multi-megabyte page (a real listing embeds thousands).
+  const photoCountMatch = bodyText.match(/foto['\u2019\u02bc]?s?\s*(\d{1,3})/i);
+  out.photoTarget = photoCountMatch ? parseInt(photoCountMatch[1], 10) : 0;
+  const PHOTO_SCAN_LIMIT = Math.max((out.photoTarget || 0) * 4, 60);
+
   const SKIP = ["logo", "icon", "sprite", "avatar", "pixel", "placeholder", "spinner", "loading"];
   const seen = new Set(out.photos);
   const addPhoto = (raw) => {
     if (!raw) return;
-    if (!/^https?:\/\//.test(raw) && !raw.startsWith("/")) return;
-    if (SKIP.some((k) => raw.toLowerCase().includes(k))) return;
-    let u;
-    try { u = new URL(raw, location.href).href; } catch (e) { return; }
+    // Absolute URLs are the overwhelming majority — skip the (costly) URL
+    // constructor for them, and lowercase once rather than per skip-word.
+    const absolute = raw.charCodeAt(0) === 104 /* h */ && /^https?:\/\//.test(raw);
+    if (!absolute && raw.charCodeAt(0) !== 47 /* / */) return;
+    const low = raw.toLowerCase();
+    for (let i = 0; i < SKIP.length; i++) if (low.indexOf(SKIP[i]) !== -1) return;
+    let u = raw;
+    if (!absolute) {
+      try { u = new URL(raw, location.href).href; } catch (e) { return; }
+    }
     if (!seen.has(u)) { seen.add(u); out.photos.push(u); }
   };
 
@@ -310,7 +325,10 @@ function extractListing() {
   const html = document.documentElement.outerHTML.replace(/\\\//g, "/");
   const IMG_URL_RE = /https?:\/\/[^"'\s)\\]+\.(?:jpe?g|png|webp)(?:\?[^"'\s)\\]*)?/gi;
   let m;
-  while ((m = IMG_URL_RE.exec(html)) !== null) addPhoto(m[0]);
+  while ((m = IMG_URL_RE.exec(html)) !== null) {
+    addPhoto(m[0]);
+    if (out.photos.length >= PHOTO_SCAN_LIMIT) break;
+  }
 
   // Pass 2 — <img> scan (incl. lazy-load attrs + srcset), only as a fallback
   // when the inline-HTML pass found little (some sites render galleries as
@@ -348,9 +366,14 @@ function extractListing() {
 
   const byKey = new Map();
   for (let u of out.photos) {
-    try { u = new URL(u, location.href).href; } catch (e) { continue; }
-    if (EXTRA_SKIP.some((k) => u.toLowerCase().includes(k))) continue;
-    const key = sizeAgnostic(u);
+    if (u.charCodeAt(0) !== 104 /* h */) {
+      try { u = new URL(u, location.href).href; } catch (e) { continue; }
+    }
+    const low = u.toLowerCase();
+    let skip = false;
+    for (let i = 0; i < EXTRA_SKIP.length; i++) if (low.indexOf(EXTRA_SKIP[i]) !== -1) { skip = true; break; }
+    if (skip) continue;
+    const key = sizeAgnostic(low);
     const prev = byKey.get(key);
     if (!prev || looksLarger(u, prev)) byKey.set(key, u);
   }
@@ -362,8 +385,6 @@ function extractListing() {
   // the brand logo, and other buildings under "Onderdeel van …". Those come
   // AFTER the listing's own gallery in source order, so keeping just the
   // first N (N = the stated count) drops them and leaves the real photos.
-  const fm = bodyText.match(/foto['’’]?s?\s*(\d{1,3})/i);
-  out.photoTarget = fm ? parseInt(fm[1], 10) : 0;
   if (out.photoTarget > 0 && out.photos.length > out.photoTarget) {
     out.photos = out.photos.slice(0, out.photoTarget);
   }
@@ -380,6 +401,7 @@ document.getElementById("capture").addEventListener("click", async () => {
   previewEl.innerHTML = "";
   statusEl.textContent = "Reading the open page…";
 
+  const startedAt = performance.now();
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   let results;
   try {
@@ -451,7 +473,7 @@ document.getElementById("capture").addEventListener("click", async () => {
   const target = data.photoTarget || 0;
   statusEl.className = "ok";
   statusEl.textContent =
-    `Opened your library's Add Building with the details filled in — ${photoCount} photo${photoCount === 1 ? "" : "s"} captured.` +
+    `Read this page in ${Math.round(performance.now() - startedAt)} ms — ${photoCount} photo${photoCount === 1 ? "" : "s"} captured. Opening your library…` +
     (droppedPhotos ? ` ${droppedPhotos} more were left out to keep the link short enough.` : "") +
     " Review and save.";
   const photosLabel = target ? `${photoCount} (page says ${target})` : photoCount;
@@ -486,6 +508,14 @@ const saveBtn = document.getElementById("save");
 
 getAppUrl().then((url) => {
   appUrlInput.value = url;
+  // Start DNS + TLS to the app now, so the tab we open later doesn't pay for
+  // it. Resource hints need no host permission.
+  for (const rel of ["preconnect", "dns-prefetch"]) {
+    const link = document.createElement("link");
+    link.rel = rel;
+    link.href = url;
+    document.head.appendChild(link);
+  }
 });
 
 saveBtn.addEventListener("click", async () => {
@@ -498,7 +528,7 @@ saveBtn.addEventListener("click", async () => {
     statusEl.textContent = "That isn't a valid address — include https://, e.g. https://your-app.up.railway.app";
     return;
   }
-  await chrome.storage.sync.set({ appUrl: origin });
+  await chrome.storage.local.set({ appUrl: origin });
   appUrlInput.value = origin;
   statusEl.className = "ok";
   statusEl.textContent = "Saved. Captures will open " + origin + ".";

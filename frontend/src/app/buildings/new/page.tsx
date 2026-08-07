@@ -39,7 +39,15 @@ export default async function NewBuildingPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const neighbourhoods = await api.neighbourhoods().catch(() => []);
+  // This is the page the Chrome extension opens, so it must paint fast. The
+  // neighbourhood dropdown is optional metadata, but awaiting it blocked the
+  // whole form behind a backend round-trip — up to the 10s serverApi timeout
+  // when the backend is cold, which reads as "the extension is slow". Cap it:
+  // a slow backend costs an empty dropdown, not a blank tab.
+  const neighbourhoods = await Promise.race([
+    api.neighbourhoods().catch(() => []),
+    new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 1500)),
+  ]);
   const params = await searchParams;
 
   const initial: BuildingFormInitial = {};
