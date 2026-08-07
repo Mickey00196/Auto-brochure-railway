@@ -113,6 +113,8 @@ def _styles() -> dict:
                                fontSize=8.5, textColor=INK, leading=11),
         "cellhead": ParagraphStyle("cellhead", parent=base["Normal"], fontName="Helvetica-Bold",
                                    fontSize=8.5, textColor=colors.white, leading=11),
+        "cellsm": ParagraphStyle("cellsm", parent=base["Normal"], fontName="Helvetica",
+                                 fontSize=7, textColor=INK, leading=9),
     }
 
 
@@ -136,30 +138,44 @@ def _entry_rows(entry: LibraryEntry) -> list:
 
 def _summary_table(entries: list[LibraryEntry], st: dict) -> Table:
     """Page 1: one row per building, in the order the user selected them."""
-    head = ["#", "Address", "Available", "Rent", "Service ch.", "All-in", "Available from"]
+    head = ["#", "Address", "Available", "Rent", "Service ch.", "All-in", "From", "Amenities"]
     data = [[Paragraph(h, st["cellhead"]) for h in head]]
     for i, entry in enumerate(entries, start=1):
         b = entry.building
         rows = _entry_rows(entry)
         area = sum(u.available_area_m2 for u in entry.units) if entry.units else b.total_building_area_m2
         availability = next((u.availability for u in entry.units if u.availability), None)
+        smallest = min(
+            (u.min_divisible_area_m2 for u in entry.units if u.min_divisible_area_m2), default=None
+        )
+        area_cell = _fmt_area(area)
+        if smallest:
+            area_cell += f'<br/><font size="6.5" color="#64748B">from {smallest:,.0f} m²</font>'
         data.append([
             Paragraph(str(i), st["cell"]),
             Paragraph(f"<b>{b.address}</b>", st["cell"]),
-            Paragraph(_fmt_area(area), st["cell"]),
+            Paragraph(area_cell, st["cell"]),
             Paragraph(_fmt_rate_range([r.rent_eur_per_m2_year for r in rows]), st["cell"]),
             Paragraph(_fmt_rate_range([r.service_charge_eur_per_m2_year for r in rows]), st["cell"]),
             Paragraph(_fmt_rate_range([r.all_in_rate_eur_per_m2_year for r in rows]), st["cell"]),
-            Paragraph(availability or "TBD", st["cell"]),
+            Paragraph(availability or "TBD", st["cellsm"]),
+            Paragraph(", ".join(b.building_amenities or []) or "—", st["cellsm"]),
         ])
-    table = Table(data, colWidths=[8 * mm, 50 * mm, 22 * mm, 28 * mm, 28 * mm, 28 * mm, 20 * mm], repeatRows=1)
+    # A4 portrait leaves 174mm between the margins — these must sum to that.
+    table = Table(
+        data,
+        colWidths=[6 * mm, 32 * mm, 21 * mm, 22 * mm, 22 * mm, 22 * mm, 22 * mm, 27 * mm],
+        repeatRows=1,
+    )
     style = [
         ("BACKGROUND", (0, 0), (-1, 0), INK),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ("LEFTPADDING", (0, 0), (-1, -1), 5),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        # Tight side padding: with 8 columns on A4 portrait, 5mm each side ate
+        # nearly half the narrow columns and split words like "beschikbaar".
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
         ("LINEBELOW", (0, 1), (-1, -1), 0.4, RULE),
     ]
     for i in range(1, len(data)):
@@ -250,8 +266,12 @@ def _building_page(entry: LibraryEntry, number: int, addons: list[AddOn], st: di
     ratio = next((u.parking_ratio for u in entry.units if u.parking_ratio), None)
     availability = next((u.availability for u in entry.units if u.availability), None)
 
+    smallest = min((u.min_divisible_area_m2 for u in entry.units if u.min_divisible_area_m2), default=None)
+    available_text = _fmt_area(total_available)
+    if smallest:
+        available_text += f" (from {smallest:,.0f} m²)"
     pairs: list[tuple[str, str]] = [
-        ("Available", _fmt_area(total_available)),
+        ("Available", available_text),
         ("Total building", _fmt_area(b.total_building_area_m2)),
         ("Rental price", _fmt_rate_range([r.rent_eur_per_m2_year for r in rows])),
         ("Service charges", _fmt_rate_range([r.service_charge_eur_per_m2_year for r in rows])),

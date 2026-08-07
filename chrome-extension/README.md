@@ -48,15 +48,25 @@ meta tags, and visible text:
 
 - Name, address / postcode / city, and **subarea** (from the breadcrumb, e.g.
   "Buiksloterham-Zuid" → the building's Submarket)
-- **Total surface** and **available surface approx.** (m²)
-- **Parking ratio** (e.g. 1:80)
+- **Available office space** (m²) and the **smallest lettable unit**
+  ("5.773 m² (in units vanaf 280 m²)" → 5,773 available, from 280). On funda
+  in business the "Oppervlakte" row is the space being *offered*, not the size
+  of the building — the total building area is only filled from a label that
+  genuinely means the whole building, and otherwise stays blank.
+- **Parking ratio**, from the characteristics row or the description prose
+  ("Parking ratio: 1 space per 348 m² LFA" → 1:348 m² LFA). The reference unit
+  is kept, since 1:348 LFA is not the same promise as 1:348 BVO.
 - **Rental price office** (€/m²/year — only when the page states a per-m²
   figure; a lump-sum monthly rent is a different quantity and is left blank)
 - **Rental service charges** (€/m²/year)
 - **Rental price parking space** (€/space/year; per-month figures ×12)
 - **Available** (acceptance, e.g. "Per direct" / "In overleg")
 - **Energy rating** and **year of construction**
-- **Amenities in building**
+- **Amenities in building** — matched against a vocabulary of NL/EN spellings
+  (gym, supermarket, cinema, bars, bicycle parking, underground car park,
+  lifts, EV charging, meeting rooms, showers, sustainability certifications…)
+  and normalised to one tidy label each. They appear as chips in the library
+  and as their own column in the client PDF.
 - **Distances**: airport, public transport, and highway (e.g. "NS-station
   800 m", "Afrit snelweg 1,2 km")
 - Description and photo URLs

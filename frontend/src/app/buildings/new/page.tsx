@@ -27,6 +27,7 @@ const PREFILL_KEYS: (keyof BuildingFormInitial)[] = [
   // …and lease-terms fields that become the building's first Unit (plus a
   // parking AddOn) on submit — see BuildingForm.
   "availableAreaM2",
+  "minDivisibleAreaM2",
   "parkingRatio",
   "rentEurPerM2Year",
   "serviceChargeEurPerM2Year",

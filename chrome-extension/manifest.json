@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Proposal Engine – Listing Capture",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Capture the listing page you are already viewing into your building library — one click, no retyping. Reads the open page only; it does not fetch anything itself.",
   "action": {
     "default_popup": "popup.html",

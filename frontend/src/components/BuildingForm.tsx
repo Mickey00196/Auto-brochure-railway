@@ -31,6 +31,7 @@ const EMPTY_FORM = {
   // Unit (and a parking AddOn), created together with the Building on
   // submit so a captured listing lands complete, not as a shell.
   availableAreaM2: "",
+  minDivisibleAreaM2: "",
   parkingRatio: "",
   rentEurPerM2Year: "",
   serviceChargeEurPerM2Year: "",
@@ -112,8 +113,8 @@ export function BuildingForm({
 
       // Lease-terms section filled in → create the building's first Unit in
       // the same submit, so the executive summary is complete immediately.
-      // The available area falls back to the total building area, since
-      // single-tenant listings state one figure for both.
+      // Total building area is only a fallback for the rare listing that
+      // states nothing else — the offered area is the figure that matters.
       const areaForUnit = form.availableAreaM2 || form.totalBuildingAreaM2;
       const hasLeaseTerms = Boolean(
         form.rentEurPerM2Year || form.serviceChargeEurPerM2Year || form.parkingRatio || form.availability,
@@ -122,6 +123,7 @@ export function BuildingForm({
         const unit = await api.createUnit({
           building_id: building.building_id,
           available_area_m2: Number(areaForUnit),
+          min_divisible_area_m2: form.minDivisibleAreaM2 ? Number(form.minDivisibleAreaM2) : null,
           rent_price_type: form.rentEurPerM2Year ? "fixed" : "tbd",
           rent_eur_per_m2_year: form.rentEurPerM2Year ? Number(form.rentEurPerM2Year) : null,
           service_charge_price_type: form.serviceChargeEurPerM2Year ? "fixed" : "tbd",
@@ -163,7 +165,11 @@ export function BuildingForm({
         <div className="grid gap-4 sm:grid-cols-2">
           <label className={labelClass}>
             <span className="mb-1 block font-medium">Available area approx. (m²)</span>
-            <input type="number" value={form.availableAreaM2} onChange={(e) => update("availableAreaM2", e.target.value)} placeholder="Falls back to total area" className={inputClass} />
+            <input type="number" value={form.availableAreaM2} onChange={(e) => update("availableAreaM2", e.target.value)} placeholder="Office space on offer" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1 block font-medium">Smallest unit (m²)</span>
+            <input type="number" value={form.minDivisibleAreaM2} onChange={(e) => update("minDivisibleAreaM2", e.target.value)} placeholder="e.g. 280 — part-floor leasing" className={inputClass} />
           </label>
           <label className={labelClass}>
             <span className="mb-1 block font-medium">Parking ratio</span>

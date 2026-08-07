@@ -39,7 +39,7 @@ function extractListing() {
   const out = {
     name: null, address: null, street: null, houseNumber: null,
     postalCode: null, city: null, description: null, energyLabel: null,
-    yearBuilt: null, areaSqm: null, amenities: [], photos: [],
+    yearBuilt: null, areaSqm: null, minDivisibleAreaSqm: null, amenities: [], photos: [],
     // Executive summary
     subarea: null, availableAreaSqm: null, parkingRatio: null,
     rentEurPerM2Year: null, serviceChargeEurPerM2Year: null,
@@ -145,19 +145,48 @@ function extractListing() {
     return /\d/.test(hit[1]) && hit[1].length < 40 ? `${hit[0].replace(/:$/, "")} ${hit[1]}` : hit[1];
   };
 
-  // --- area (labeled value first; then range → max, else single) ---
-  const totalRaw = fieldValue("oppervlakte", "totale oppervlakte", "total surface", "vloeroppervlakte", "surface");
+  // --- areas ------------------------------------------------------------
+  // On funda in business the "Oppervlakte" row under Kenmerken is the space
+  // being OFFERED ("5.773 m² (in units vanaf 280 m²)", echoed in the copy as
+  // "Total available: 5,773 m² LFA") — not the size of the building. Treating
+  // it as the total building area overstated every listing, so it feeds the
+  // available figure; the total is only filled from a label that genuinely
+  // means the whole building.
+  const offeredRaw = fieldValue(
+    "oppervlakte", "beschikbare oppervlakte", "beschikbaar oppervlakte", "vloeroppervlakte",
+    "available surface", "available approx.", "available area", "surface", "floor area",
+  );
+  if (offeredRaw && /m²|m2/i.test(offeredRaw)) out.availableAreaSqm = parseNum(offeredRaw);
+
+  const totalRaw = fieldValue(
+    "totale oppervlakte", "totaal oppervlakte", "bruto vloeroppervlakte", "bvo",
+    "total building area", "total surface", "gross floor area",
+  );
   if (totalRaw && /m²|m2/i.test(totalRaw)) out.areaSqm = parseNum(totalRaw);
-  if (out.areaSqm == null) {
+
+  // "Total available: 5,773 m² LFA" / "Totaal beschikbaar: …" in the prose,
+  // when the characteristics table didn't state it.
+  if (out.availableAreaSqm == null) {
+    const tm = bodyText.match(/tot(?:al|aal)\s*(?:available|beschikbaar)\s*:?\s*([\d.,]+)\s*(?:m²|m2)/i);
+    if (tm) out.availableAreaSqm = parseNum(tm[1]);
+  }
+  if (out.availableAreaSqm == null) {
     const range = bodyText.match(/([\d.,]+)\s*(?:m2|m²)?\s*(?:tot|to|-|–|—)\s*([\d.,]+)\s*(?:m2|m²)/i);
     const single = bodyText.match(/([\d.,]+)\s*(?:m2|m²)/i);
-    if (range) out.areaSqm = parseNum(range[2]);
-    else if (single) out.areaSqm = parseNum(single[1]);
+    if (range) out.availableAreaSqm = parseNum(range[2]);
+    else if (single) out.availableAreaSqm = parseNum(single[1]);
   }
 
-  // --- available area approx. ("in units vanaf" = min divisible, NOT this) ---
-  const availRaw = fieldValue("beschikbare oppervlakte", "beschikbaar oppervlakte", "available surface", "available approx.", "available area");
-  if (availRaw && /m²|m2/i.test(availRaw)) out.availableAreaSqm = parseNum(availRaw);
+  // --- smallest lettable unit ("in units vanaf 280 m²", "from 280 m² LFA") ---
+  const divSource = (offeredRaw || "") + " " + bodyText;
+  const divMatch =
+    divSource.match(/(?:in\s*units?\s*vanaf|units?\s*(?:from|vanaf)|deelbaar\s*(?:vanaf|per)|vanaf)\s*([\d.,]+)\s*(?:m²|m2)/i) ||
+    divSource.match(/(?:part[- ]floor|deelverhuur)[^.]{0,40}?(?:from|vanaf)\s*([\d.,]+)\s*(?:m²|m2)/i);
+  if (divMatch) {
+    const d = parseNum(divMatch[1]);
+    // Only meaningful if it's genuinely smaller than what's on offer.
+    if (d != null && (out.availableAreaSqm == null || d < out.availableAreaSqm)) out.minDivisibleAreaSqm = d;
+  }
 
   // --- availability / acceptance date ---
   // "Aanvaarding" is funda's label; a bare "beschikbaar" only counts when the
@@ -165,14 +194,31 @@ function extractListing() {
   const acceptRaw = fieldValue("aanvaarding", "beschikbaar", "beschikbaar per", "beschikbaar vanaf", "availability", "available", "available from");
   if (acceptRaw && !/m²|m2/i.test(acceptRaw)) out.availability = acceptRaw;
 
-  // --- parking ratio ("1:80", or prose "1 parkeerplaats per 80 m²") ---
-  const ratioRaw = fieldValue("parkeerratio", "parking ratio", "parkeernorm");
-  if (ratioRaw) {
-    const rm = ratioRaw.match(/1\s*(?:op|:|per)\s*([\d.,]+)/i);
-    out.parkingRatio = rm ? `1:${rm[1].replace(/[.,]$/, "")}` : ratioRaw;
+  // --- parking ratio -----------------------------------------------------
+  // Stated as a labelled row ("Parkeerratio 1 op 80 m²") or, more often, in
+  // the description ("Parking ratio: 1 space per 348 m² LFA"). The unit that
+  // follows matters to a tenant — 1:348 LFA is not 1:348 BVO — so it's kept.
+  const RATIO_BODY_RE =
+    /(?:parking\s*(?:ratio|norm)|parkeer(?:ratio|norm)|parkeerplaats(?:en)?\s*ratio)\s*[:\-–]?\s*(?:1|one|één|een)\s*(?:parkeer)?(?:plaats|plek|space|spot|spaces)?\s*(?:per|op|:|\/|to)\s*([\d.,]+)\s*(m²|m2|lfa|vvo|bvo|sq\.?\s?m)?[\s]*(lfa|vvo|bvo)?/i;
+  const RATIO_PLAIN_RE =
+    /(?:1|one|één|een)\s*(?:parkeerplaats|parkeerplek|parking\s*space|space)\s*(?:per|op|\/)\s*([\d.,]+)\s*(m²|m2|lfa|vvo|bvo)?[\s]*(lfa|vvo|bvo)?/i;
+
+  const formatRatio = (m) => {
+    const n = String(m[1]).replace(/[.,]$/, "");
+    const unit = [m[2], m[3]].filter(Boolean).join(" ").trim();
+    const pretty = unit ? ` ${unit.replace(/m2/i, "m²").replace(/\b(lfa|vvo|bvo)\b/i, (u) => u.toUpperCase())}` : "";
+    return `1:${n}${pretty}`;
+  };
+
+  const ratioRaw = fieldValue("parkeerratio", "parking ratio", "parkeernorm", "parking norm");
+  let ratioMatch = ratioRaw ? ratioRaw.match(/(?:1|one|één|een)\s*(?:parkeer)?(?:plaats|plek|space|spot)?\s*(?:per|op|:|\/)\s*([\d.,]+)\s*(m²|m2|lfa|vvo|bvo)?[\s]*(lfa|vvo|bvo)?/i) : null;
+  if (ratioMatch) {
+    out.parkingRatio = formatRatio(ratioMatch);
+  } else if (ratioRaw) {
+    out.parkingRatio = ratioRaw;
   } else {
-    const rp = bodyText.match(/1\s*parkeerplaats\s*per\s*([\d.,]+)\s*m/i) || bodyText.match(/parking\s*ratio[^\d]{0,10}1\s*[:op]+\s*(\d+)/i);
-    if (rp) out.parkingRatio = `1:${rp[1]}`;
+    ratioMatch = bodyText.match(RATIO_BODY_RE) || bodyText.match(RATIO_PLAIN_RE);
+    if (ratioMatch) out.parkingRatio = formatRatio(ratioMatch);
   }
 
   // --- rental price office (only per-m²-per-year figures; a lump-sum
@@ -249,7 +295,12 @@ function extractListing() {
 
   // --- address (from JSON-LD gaps, then title/heading) ---
   if (!out.street || !out.city) {
-    const src = out.name || document.title || bodyText.slice(0, 200);
+    // Strip the marketing tail before mining the title, or the city ends up
+    // as "Amsterdam - Kantoor te huur" (the postcode sits before the tail,
+    // so cutting it is safe).
+    const src = (out.name || document.title || bodyText.slice(0, 200))
+      .split(/\s+[|\u2013\u2014\u00b7]\s+|\s+-\s+/)[0]
+      .trim();
     const pc = src.match(/\b(\d{4})\s?([A-Za-z]{2})\b/);
     if (pc && !out.postalCode) out.postalCode = pc[1] + " " + pc[2].toUpperCase();
     // Number part tolerates unit suffixes like "20-H2" / "12 B" / "600a".
@@ -282,14 +333,41 @@ function extractListing() {
     if (n) out.name = n;
   }
 
-  // --- amenities (keyword match, NL + EN) ---
-  const AM = [
-    "roof terrace", "dakterras", "bicycle storage", "fietsenstalling", "24/7 access",
-    "restaurant", "gym", "fitness", "parking", "parkeren", "air conditioning",
-    "airconditioning", "meeting room", "vergaderruimte", "furnished", "gemeubileerd",
+  // --- amenities ---------------------------------------------------------
+  // Canonical label ← any of its NL/EN spellings, so "Bicycle parking for
+  // approx. 800 bicycles" and "fietsenstalling" both land as one tidy
+  // "Bicycle storage" rather than being missed or duplicated.
+  const AMENITIES = [
+    ["Roof terrace", ["roof terrace", "dakterras", "roof garden"]],
+    ["Terrace", ["terrace", "terras"]],
+    ["Bicycle storage", ["bicycle storage", "bicycle parking", "fietsenstalling", "fietsparkeren", "bike storage"]],
+    ["24/7 access", ["24/7 access", "24/7 toegang", "24-hour access"]],
+    ["Restaurant", ["restaurant", "eatery"]],
+    ["Bar", ["bars", " bar ", "café", "cafe"]],
+    ["Coffee bar", ["coffee bar", "koffiebar", "barista"]],
+    ["Gym", ["gym", "fitness", "sportschool"]],
+    ["Supermarket", ["supermarket", "supermarkt"]],
+    ["Cinema", ["cinema", "bioscoop"]],
+    ["Parking", ["parking", "parkeren", "parkeerplaats", "car park", "parkeergarage"]],
+    ["Underground parking", ["underground car park", "underground parking", "parkeerkelder", "ondergrondse parkeer"]],
+    ["EV charging", ["charging point", "charging station", "laadpunt", "laadpalen", "ev charging", "electric vehicle charging"]],
+    ["Air conditioning", ["air conditioning", "airconditioning", "klimaatbeheersing", "koeling"]],
+    ["Meeting rooms", ["meeting room", "vergaderruimte", "vergaderzaal", "conference room"]],
+    ["Auditorium", ["auditorium", "theater", "theatre"]],
+    ["Furnished", ["furnished", "gemeubileerd", "turn-key", "turnkey"]],
+    ["Lifts", ["lift core", "lift cores", "elevator", "passagierslift", "liften"]],
+    ["Showers", ["shower", "douche"]],
+    ["Reception", ["reception", "receptie", "concierge", "host"]],
+    ["Catering", ["catering", "kantine", "bedrijfsrestaurant"]],
+    ["Solar panels", ["solar panel", "zonnepanelen"]],
+    ["Sustainability certified", ["breeam", "well platinum", "well gold", "leed", "paris proof", "net carbon zero"]],
   ];
   const low = bodyText.toLowerCase();
-  out.amenities = AM.filter((a) => low.includes(a)).map((a) => a.replace(/\b\w/g, (c) => c.toUpperCase()));
+  out.amenities = AMENITIES.filter(([, keys]) => keys.some((k) => low.includes(k))).map(([label]) => label);
+  // "Underground parking" already implies parking — don't list both.
+  if (out.amenities.includes("Underground parking")) {
+    out.amenities = out.amenities.filter((a) => a !== "Parking");
+  }
 
   // --- images -----------------------------------------------------------
   // The page states its own photo count ("Foto's 15"); read it up front so
@@ -440,6 +518,7 @@ document.getElementById("capture").addEventListener("click", async () => {
   // Executive summary
   set("submarket", data.subarea);
   set("availableAreaM2", data.availableAreaSqm);
+  set("minDivisibleAreaM2", data.minDivisibleAreaSqm);
   set("parkingRatio", data.parkingRatio);
   set("rentEurPerM2Year", data.rentEurPerM2Year);
   set("serviceChargeEurPerM2Year", data.serviceChargeEurPerM2Year);
@@ -480,7 +559,9 @@ document.getElementById("capture").addEventListener("click", async () => {
   const fields = [
     ["Name", data.name], ["Address", data.address], ["City", data.city],
     ["Subarea", data.subarea],
-    ["Total m²", data.areaSqm], ["Available m²", data.availableAreaSqm],
+    ["Available m²", data.availableAreaSqm], ["Min. unit m²", data.minDivisibleAreaSqm],
+    ["Total building m²", data.areaSqm],
+    ["Amenities", (data.amenities || []).join(", ")],
     ["Parking ratio", data.parkingRatio],
     ["Rent €/m²/yr", data.rentEurPerM2Year], ["Service €/m²/yr", data.serviceChargeEurPerM2Year],
     ["Parking €/yr", data.parkingPriceEurYear],
