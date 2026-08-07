@@ -26,9 +26,9 @@ extension, and it will say so instead of capturing garbage.
 
 ## Setup
 
-None — the app URL is hardcoded in `popup.js` (the `APP_URL` constant at the
-top). If your Proposal Engine ever moves, change that one line and reload the
-extension.
+None normally — captures go to your deployed app out of the box. If the app
+ever moves, open the popup → **Settings**, paste the new address, and click
+**Save address** (no reinstall, no code editing).
 
 ## Use
 
@@ -65,6 +65,24 @@ Saving the pre-filled form creates the Building **and its first Unit** carrying
 the lease terms (plus a parking add-on when a parking price was found), so a
 captured office lands complete. Whatever the page doesn't state is left blank
 for you to complete — it never invents values.
+
+## If it doesn't work
+
+- **No icon in the toolbar.** Click the puzzle-piece icon and pin
+  "Proposal Engine – Listing Capture". From v2.0 it has its own navy building
+  icon, so it's easy to spot.
+- **Popup won't open at all / greyed out.** Chrome runs an unpacked extension
+  from the folder you loaded it from — if that folder was moved or deleted,
+  it breaks. Remove the entry at `chrome://extensions` and **Load unpacked**
+  again from wherever the folder lives now (keep it somewhere permanent, not
+  Downloads).
+- **Capture opens a "site can't be reached" tab.** The saved app address is
+  wrong — fix it under Settings.
+- **The form opens but is empty.** You were logged out; log in and the
+  captured values are carried through the login (fixed in the app, not here).
+- **Fewer photos than the page shows.** The handoff link has a length limit;
+  photos past it are dropped and the popup tells you how many. The building
+  and all its figures always come through.
 
 ## Notes
 

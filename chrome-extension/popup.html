@@ -3,41 +3,99 @@
   <head>
     <meta charset="utf-8" />
     <style>
-      :root { color-scheme: light dark; }
+      :root {
+        --navy: #0f2557;
+        --blue: #1d4ed8;
+        --ink: #0f1e3d;
+        --muted: #64748b;
+        --border: #e2e8f4;
+        --page: #f4f6fb;
+      }
+      * { box-sizing: border-box; }
       body {
-        width: 320px;
+        width: 340px;
         margin: 0;
-        padding: 14px;
-        font: 13px/1.4 system-ui, -apple-system, sans-serif;
+        padding: 0;
+        font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: var(--page);
       }
-      h1 { font-size: 14px; margin: 0 0 2px; }
-      p.sub { margin: 0 0 12px; color: #666; font-size: 12px; }
-      label { display: block; font-weight: 600; margin-bottom: 4px; }
-      input {
-        width: 100%; box-sizing: border-box; padding: 7px 8px;
-        border: 1px solid #ccc; border-radius: 8px; font-size: 12px; margin-bottom: 12px;
+      header {
+        display: flex; align-items: center; gap: 9px;
+        padding: 13px 16px; background: var(--navy); color: #fff;
       }
+      header img { border-radius: 6px; }
+      h1 { font-size: 13.5px; margin: 0; font-weight: 650; letter-spacing: .1px; }
+      main { padding: 14px 16px 16px; }
+      p.sub { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
       button {
-        width: 100%; padding: 9px; border: 0; border-radius: 999px;
-        background: #c8102e; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer;
+        width: 100%; padding: 10px; border: 0; border-radius: 999px;
+        background: var(--navy); color: #fff; font-weight: 650; font-size: 13px;
+        cursor: pointer; transition: opacity .15s;
       }
-      button:disabled { opacity: 0.5; cursor: default; }
-      #status { margin-top: 10px; font-size: 12px; min-height: 16px; }
-      #preview { margin-top: 8px; font-size: 12px; color: #444; }
-      #preview div { padding: 1px 0; }
+      button:hover:not(:disabled) { opacity: .9; }
+      button:disabled { opacity: .5; cursor: default; }
+      button.secondary {
+        background: #fff; color: var(--ink); border: 1px solid var(--border);
+        font-weight: 600; padding: 8px;
+      }
+      #status {
+        margin-top: 11px; font-size: 12px; line-height: 1.45;
+        overflow-wrap: anywhere;
+      }
+      #status:empty { margin-top: 0; }
+      #preview {
+        margin-top: 10px; font-size: 12px; background: #fff;
+        border: 1px solid var(--border); border-radius: 10px; padding: 4px 10px;
+      }
+      #preview:empty { display: none; }
+      #preview div {
+        display: flex; justify-content: space-between; gap: 10px;
+        padding: 4px 0; border-bottom: 1px solid var(--border);
+      }
+      #preview div:last-child { border-bottom: 0; }
+      #preview .k { color: var(--muted); }
+      #preview .v { font-weight: 600; text-align: right; }
+      details { margin-top: 13px; border-top: 1px solid var(--border); padding-top: 11px; }
+      summary { cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 600; }
+      label { display: block; font-weight: 600; margin: 10px 0 4px; font-size: 12px; }
+      input {
+        width: 100%; padding: 8px 9px; border: 1px solid var(--border);
+        border-radius: 9px; font-size: 12px; margin-bottom: 8px; background: #fff;
+        color: var(--ink);
+      }
+      .hint { color: var(--muted); font-size: 11.5px; margin: 8px 0 0; }
       .warn { color: #b45309; }
-      .err { color: #c8102e; }
-      .ok { color: #047857; }
+      .err { color: #b91c1c; }
+      .ok { color: #15803d; }
+      a { color: var(--blue); font-weight: 600; }
     </style>
   </head>
   <body>
-    <h1>Proposal Engine – Listing Capture</h1>
-    <p class="sub">Open a listing you're viewing, then capture it. Reads the open page only.</p>
+    <header>
+      <img src="icons/icon32.png" alt="" width="20" height="20" />
+      <h1>Listing Capture</h1>
+    </header>
 
-    <button id="capture">Capture this listing</button>
+    <main>
+      <p class="sub">Open a listing you're viewing, then capture it. Reads the open page only.</p>
 
-    <div id="status"></div>
-    <div id="preview"></div>
+      <button id="capture">Capture this listing</button>
+
+      <div id="status"></div>
+      <div id="preview"></div>
+
+      <details id="settings">
+        <summary>Settings</summary>
+        <label for="app-url">Your Proposal Engine address</label>
+        <input id="app-url" type="url" spellcheck="false" placeholder="https://your-app.up.railway.app" />
+        <button id="save" class="secondary">Save address</button>
+        <p class="hint">
+          Where the capture is sent. Change this only if your app moved — if captures open a
+          &ldquo;site can&rsquo;t be reached&rdquo; page, this address is wrong.
+        </p>
+      </details>
+    </main>
 
     <script src="popup.js"></script>
   </body>

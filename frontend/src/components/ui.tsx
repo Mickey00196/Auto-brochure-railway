@@ -3,14 +3,14 @@ import Link from "next/link";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`rounded-2xl border border-border bg-surface p-6 ${className}`}>{children}</div>
+    <div className={`rounded-2xl border border-border bg-surface p-6 shadow-sm ${className}`}>{children}</div>
   );
 }
 
 export function StatTile({ label, value, tone = "default" }: { label: string; value: ReactNode; tone?: "default" | "accent" | "warn" }) {
   const valueColor = tone === "accent" ? "text-accent" : tone === "warn" ? "text-amber-500" : "text-foreground";
   return (
-    <div className="rounded-2xl border border-border bg-surface p-6">
+    <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
       <div className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</div>
       <div className={`mt-2 text-3xl font-bold ${valueColor}`}>{value}</div>
     </div>
@@ -73,8 +73,8 @@ export function Button({
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "ghost" }) {
   const variants: Record<string, string> = {
-    primary: "bg-accent text-accent-foreground hover:opacity-90",
-    secondary: "bg-dark text-white hover:opacity-90",
+    primary: "bg-dark text-white hover:opacity-90",
+    secondary: "bg-accent text-accent-foreground hover:opacity-90",
     ghost: "border border-border text-foreground hover:bg-border/40",
   };
   return (

@@ -1,14 +1,16 @@
 @import "tailwindcss";
 
+/* Palette: deep navy for primary actions and headings, a vivid blue for
+   links/highlights, white cards on a soft blue-grey page. */
 :root {
-  --background: #ffffff;
-  --foreground: #17171a;
-  --muted: #6b6b70;
-  --border: #e7e7ea;
-  --surface: #f7f7f8;
-  --accent: #c8102e;
+  --background: #f4f6fb;
+  --foreground: #0f1e3d;
+  --muted: #64748b;
+  --border: #e2e8f4;
+  --surface: #ffffff;
+  --accent: #1d4ed8;
   --accent-foreground: #ffffff;
-  --dark: #0b0b0c;
+  --dark: #0f2557;
 }
 
 @theme inline {
@@ -26,14 +28,14 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0b0b0c;
-    --foreground: #f2f2f3;
-    --muted: #9a9aa0;
-    --border: #232326;
-    --surface: #131315;
-    --accent: #ff4d6a;
-    --accent-foreground: #0b0b0c;
-    --dark: #050506;
+    --background: #0a1428;
+    --foreground: #eef2fa;
+    --muted: #94a3b8;
+    --border: #1e2c4a;
+    --surface: #101f3c;
+    --accent: #60a5fa;
+    --accent-foreground: #0a1428;
+    --dark: #16305e;
   }
 }
 

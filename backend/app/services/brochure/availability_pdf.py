@@ -40,11 +40,13 @@ from sqlalchemy.orm import Session
 from app.models import AddOn, Building, Proposal, Unit
 from app.services.comparison import build_comparison_row
 
-ACCENT = colors.HexColor("#C8102E")
-INK = colors.HexColor("#17171A")
-MUTED = colors.HexColor("#6B6B70")
-RULE = colors.HexColor("#D8D8DC")
-BAND = colors.HexColor("#F4F4F6")
+# Deep navy leads, vivid blue accents — matching the app's palette.
+ACCENT = colors.HexColor("#0F2557")
+HIGHLIGHT = colors.HexColor("#1D4ED8")
+INK = colors.HexColor("#0F1E3D")
+MUTED = colors.HexColor("#64748B")
+RULE = colors.HexColor("#DCE3F0")
+BAND = colors.HexColor("#F4F6FB")
 
 PHOTO_TIMEOUT_SECONDS = 6
 
@@ -98,7 +100,7 @@ def _styles() -> dict:
     base = getSampleStyleSheet()
     return {
         "eyebrow": ParagraphStyle("eyebrow", parent=base["Normal"], fontName="Helvetica-Bold",
-                                  fontSize=8.5, textColor=ACCENT, spaceAfter=2, leading=11),
+                                  fontSize=8.5, textColor=HIGHLIGHT, spaceAfter=2, leading=11),
         "h1": ParagraphStyle("h1", parent=base["Normal"], fontName="Helvetica-Bold",
                              fontSize=26, textColor=INK, leading=30, spaceAfter=4),
         "h2": ParagraphStyle("h2", parent=base["Normal"], fontName="Helvetica-Bold",

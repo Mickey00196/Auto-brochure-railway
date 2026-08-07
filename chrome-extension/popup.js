@@ -1,7 +1,19 @@
 "use strict";
 
-// Your Proposal Engine app URL. Change this one line if it ever moves.
-const APP_URL = "https://proposal-engine-frontend-production.up.railway.app";
+// Where captures are sent. Overridable from the popup's Settings (stored in
+// chrome.storage.sync) so a moved app can be fixed without editing the code.
+const DEFAULT_APP_URL = "https://proposal-engine-frontend-production.up.railway.app";
+
+// A handoff URL that grows past what proxies/servers accept comes back as a
+// 414/431 error page instead of the form — and a funda gallery of 15 CDN URLs
+// gets there easily. Photos are dropped from the tail until it fits; the
+// building itself always survives.
+const MAX_HANDOFF_URL_LENGTH = 3500;
+
+async function getAppUrl() {
+  const { appUrl } = await chrome.storage.sync.get({ appUrl: DEFAULT_APP_URL });
+  return String(appUrl || DEFAULT_APP_URL).replace(/\/+$/, "");
+}
 
 // Runs INSIDE the listing tab (injected via chrome.scripting.executeScript).
 // Must be fully self-contained — no references to popup scope. It only READS
@@ -254,6 +266,19 @@ function extractListing() {
     out.address = [line1, line2].filter((s) => s && s.trim()).join(", ");
   }
 
+  // The page title carries marketing tails ("… - Kantoor te huur", "… | Funda
+  // in Business") and usually repeats the full address. Trim it down to the
+  // building's own name so the library and the client PDF read cleanly — done
+  // AFTER the address block above, which mines the untrimmed title for the
+  // postcode and city.
+  if (out.name) {
+    let n = out.name.split(/\s+[|\u2013\u2014\u00b7]\s+|\s+-\s+/)[0].trim();
+    // "Herengracht 500, 1017 CB Amsterdam" → "Herengracht 500", but a real
+    // building name without a number ("The Edge") is left alone.
+    if (n.includes(",") && /\d/.test(n.split(",")[0])) n = n.split(",")[0].trim();
+    if (n) out.name = n;
+  }
+
   // --- amenities (keyword match, NL + EN) ---
   const AM = [
     "roof terrace", "dakterras", "bicycle storage", "fietsenstalling", "24/7 access",
@@ -402,12 +427,33 @@ document.getElementById("capture").addEventListener("click", async () => {
   set("accessibilityNote", data.highwayNote);
   set("publicTransportNote", data.publicTransportNote);
 
-  await chrome.tabs.create({ url: APP_URL.replace(/\/+$/, "") + "/buildings/new?" + p.toString() });
+  const appUrl = await getAppUrl();
+  const base = appUrl + "/buildings/new?";
+  let photos = (data.photos || []).slice();
+  let droppedPhotos = 0;
+  while (photos.length && (base + p.toString()).length > MAX_HANDOFF_URL_LENGTH) {
+    photos.pop();
+    droppedPhotos += 1;
+    p.set("photos", photos.join(","));
+  }
+  if (!photos.length) p.delete("photos");
 
-  const photoCount = (data.photos || []).length;
+  try {
+    await chrome.tabs.create({ url: base + p.toString() });
+  } catch (e) {
+    statusEl.className = "err";
+    statusEl.textContent =
+      "Could not open " + appUrl + " — check the address under Settings. (" + e.message + ")";
+    return;
+  }
+
+  const photoCount = photos.length;
   const target = data.photoTarget || 0;
   statusEl.className = "ok";
-  statusEl.textContent = `Opened Add Building with the details filled in — ${photoCount} photo${photoCount === 1 ? "" : "s"} captured. Review and save.`;
+  statusEl.textContent =
+    `Opened your library's Add Building with the details filled in — ${photoCount} photo${photoCount === 1 ? "" : "s"} captured.` +
+    (droppedPhotos ? ` ${droppedPhotos} more were left out to keep the link short enough.` : "") +
+    " Review and save.";
   const photosLabel = target ? `${photoCount} (page says ${target})` : photoCount;
   const fields = [
     ["Name", data.name], ["Address", data.address], ["City", data.city],
@@ -423,7 +469,37 @@ document.getElementById("capture").addEventListener("click", async () => {
   ];
   for (const [k, v] of fields) {
     const div = document.createElement("div");
-    div.textContent = k + ": " + (v == null || v === "" ? "—" : v);
+    const key = document.createElement("span");
+    key.className = "k";
+    key.textContent = k;
+    const val = document.createElement("span");
+    val.className = "v";
+    val.textContent = v == null || v === "" ? "—" : String(v);
+    div.append(key, val);
     previewEl.appendChild(div);
   }
+});
+
+// ---- settings ------------------------------------------------------------
+const appUrlInput = document.getElementById("app-url");
+const saveBtn = document.getElementById("save");
+
+getAppUrl().then((url) => {
+  appUrlInput.value = url;
+});
+
+saveBtn.addEventListener("click", async () => {
+  const raw = appUrlInput.value.trim();
+  let origin;
+  try {
+    origin = new URL(raw).origin;
+  } catch {
+    statusEl.className = "err";
+    statusEl.textContent = "That isn't a valid address — include https://, e.g. https://your-app.up.railway.app";
+    return;
+  }
+  await chrome.storage.sync.set({ appUrl: origin });
+  appUrlInput.value = origin;
+  statusEl.className = "ok";
+  statusEl.textContent = "Saved. Captures will open " + origin + ".";
 });
