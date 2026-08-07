@@ -487,12 +487,21 @@ function extractListing() {
   // largest-looking variant. Also drop obvious non-listing images (agent
   // portraits, brand logos) by keyword.
   const EXTRA_SKIP = ["makelaar", "portret", "portrait", "headshot", "medewerker", "employee", "team-", "brand"];
+  // Reduce a URL to an identity for the underlying photo, so the same image
+  // served at another size, in another format, over another scheme or with
+  // different cache params collapses to one entry. Order matters: the
+  // extension comes off first, so that stripping "_1440x960" leaves a
+  // trailing separator at the END of the string where it can be trimmed —
+  // otherwise "123_1440x960.jpg" and "123.jpg" keep different keys.
   const sizeAgnostic = (u) => {
     let s = u.toLowerCase().split("?")[0].split("#")[0];
-    s = s.replace(/\d{2,4}x\d{2,4}/g, "")
-         .replace(/[-_/](thumbnails|thumbnail|thumbs|thumb|small|medium|large|preview|mini|xs|sm|md|lg|xl)\b/g, "")
-         .replace(/[-_](w|h)\d{2,4}\b/g, "");
-    return s.replace(/[-_/]+$/, "");
+    s = s.replace(/^https?:\/\//, "");
+    s = s.replace(/\.(?:jpe?g|png|webp|avif)$/, "");
+    s = s.replace(/\d{2,4}x\d{2,4}/g, "");
+    s = s.replace(/[-_/](?:thumbnails?|thumbs?|small|medium|large|preview|mini|orig(?:inal)?|full|xs|sm|md|lg|xl)\b/g, "");
+    s = s.replace(/[-_](?:w|h)\d{2,4}\b/g, "");
+    s = s.replace(/[-_]{2,}/g, "-");
+    return s.replace(/[-_./]+$/, "");
   };
   const dim = (u) => { const m = u.match(/(\d{2,4})x(\d{2,4})/); return m ? Number(m[1]) * Number(m[2]) : 0; };
   const thumbish = (u) => (/(thumb|small|preview|mini)/i.test(u) ? 1 : 0);

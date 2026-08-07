@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { Neighbourhood } from "@/lib/types";
 import { api } from "@/lib/api";
 import { Button, Card } from "@/components/ui";
+import { PhotoPicker } from "@/components/PhotoPicker";
 
 const inputClass = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm";
 const labelClass = "text-sm";
@@ -265,22 +266,10 @@ export function BuildingForm({
             <span className="mb-1 block font-medium">Amenities (comma-separated)</span>
             <input value={form.buildingAmenities} onChange={(e) => update("buildingAmenities", e.target.value)} placeholder="Roof terrace, Bicycle storage, 24/7 access" className={inputClass} />
           </label>
-          <label className={`${labelClass} sm:col-span-2`}>
-            <span className="mb-1 block font-medium">Photo URLs (comma-separated)</span>
-            <input value={form.photos} onChange={(e) => update("photos", e.target.value)} className={inputClass} />
-            {form.photos.trim() && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {form.photos
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean)
-                  .map((src) => (
-                    // eslint-disable-next-line @next/next/no-img-element -- arbitrary scraped URLs, no fixed domain list to allowlist for next/image
-                    <img key={src} src={src} alt="" className="h-16 w-16 rounded-md border border-border object-cover" />
-                  ))}
-              </div>
-            )}
-          </label>
+          <div className={`${labelClass} sm:col-span-2`}>
+            <span className="mb-1 block font-medium">Photos</span>
+            <PhotoPicker value={form.photos} onChange={(next) => update("photos", next)} />
+          </div>
           <label className={`${labelClass} sm:col-span-2`}>
             <span className="mb-1 block font-medium">Description</span>
             <textarea value={form.description} onChange={(e) => update("description", e.target.value)} rows={3} className={inputClass} />
