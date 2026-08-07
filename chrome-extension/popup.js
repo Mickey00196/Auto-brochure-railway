@@ -36,6 +36,36 @@ function extractListing() {
     return { blocked: true };
   }
 
+  // innerText only returns what is *visible*. Listing descriptions are very
+  // often collapsed behind a "Lees meer" / "Read more" toggle, and details
+  // stated only in that hidden part (the parking ratio, typically) would be
+  // invisible to every prose match below. Walk the text nodes instead —
+  // scripts and styles excluded, so inline JSON can't pollute the matches —
+  // and use that wherever we search prose rather than structure.
+  const collectText = () => {
+    if (!document.body) return "";
+    const SKIP_TAGS = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, TEMPLATE: 1, SVG: 1 };
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const parent = node.parentNode;
+        if (parent && SKIP_TAGS[parent.nodeName]) return NodeFilter.FILTER_REJECT;
+        return node.nodeValue && node.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      },
+    });
+    const parts = [];
+    let length = 0;
+    let node;
+    while ((node = walker.nextNode())) {
+      const text = node.nodeValue.trim();
+      parts.push(text);
+      length += text.length + 1;
+      if (length > 600000) break; // plenty for any listing; keeps huge pages quick
+    }
+    return parts.join("\n");
+  };
+  // Visible text first (keeps line order meaningful), then anything hidden.
+  const fullText = bodyText + "\n" + collectText();
+
   const out = {
     name: null, address: null, street: null, houseNumber: null,
     postalCode: null, city: null, description: null, energyLabel: null,
@@ -167,7 +197,7 @@ function extractListing() {
   // "Total available: 5,773 m² LFA" / "Totaal beschikbaar: …" in the prose,
   // when the characteristics table didn't state it.
   if (out.availableAreaSqm == null) {
-    const tm = bodyText.match(/tot(?:al|aal)\s*(?:available|beschikbaar)\s*:?\s*([\d.,]+)\s*(?:m²|m2)/i);
+    const tm = fullText.match(/tot(?:al|aal)\s*(?:available|beschikbaar)\s*:?\s*([\d.,]+)\s*(?:m²|m2)/i);
     if (tm) out.availableAreaSqm = parseNum(tm[1]);
   }
   if (out.availableAreaSqm == null) {
@@ -178,7 +208,7 @@ function extractListing() {
   }
 
   // --- smallest lettable unit ("in units vanaf 280 m²", "from 280 m² LFA") ---
-  const divSource = (offeredRaw || "") + " " + bodyText;
+  const divSource = (offeredRaw || "") + " " + fullText;
   const divMatch =
     divSource.match(/(?:in\s*units?\s*vanaf|units?\s*(?:from|vanaf)|deelbaar\s*(?:vanaf|per)|vanaf)\s*([\d.,]+)\s*(?:m²|m2)/i) ||
     divSource.match(/(?:part[- ]floor|deelverhuur)[^.]{0,40}?(?:from|vanaf)\s*([\d.,]+)\s*(?:m²|m2)/i);
@@ -217,7 +247,7 @@ function extractListing() {
   } else if (ratioRaw) {
     out.parkingRatio = ratioRaw;
   } else {
-    ratioMatch = bodyText.match(RATIO_BODY_RE) || bodyText.match(RATIO_PLAIN_RE);
+    ratioMatch = fullText.match(RATIO_BODY_RE) || fullText.match(RATIO_PLAIN_RE);
     if (ratioMatch) out.parkingRatio = formatRatio(ratioMatch);
   }
 
@@ -241,12 +271,12 @@ function extractListing() {
   // --- distances: airport / highway / public transport ---
   out.airportNote = fieldNote("luchthaven", "airport", "schiphol", "afstand tot luchthaven", "distance airport");
   if (!out.airportNote) {
-    const am = bodyText.match(/schiphol[^\S\n]*(?:op|:)?[^\S\n]*([\d.,]+\s*(?:km|m|min[a-z.]*))/i);
+    const am = fullText.match(/schiphol[^\S\n]*(?:op|:)?[^\S\n]*([\d.,]+\s*(?:km|m|min[a-z.]*))/i);
     if (am) out.airportNote = `Schiphol ${am[1]}`;
   }
   out.highwayNote = fieldNote("snelweg", "afrit", "afrit snelweg", "afstand tot snelweg", "highway", "motorway", "distance highway");
   if (!out.highwayNote) {
-    const hm = bodyText.match(/\b(A\d{1,3})\b[^\S\n]*(?:op|:)?[^\S\n]*([\d.,]+\s*(?:km|m)\b)/i);
+    const hm = fullText.match(/\b(A\d{1,3})\b[^\S\n]*(?:op|:)?[^\S\n]*([\d.,]+\s*(?:km|m)\b)/i);
     if (hm) out.highwayNote = `${hm[1].toUpperCase()} ${hm[2]}`;
   }
   out.publicTransportNote = fieldNote(
@@ -262,7 +292,7 @@ function extractListing() {
     const em = enRaw.toUpperCase().match(/([A-G])(\+{0,5})/);
     if (em) out.energyLabel = em[1] + em[2];
   } else {
-    const em = bodyText.match(/energ(?:ielabel|y\s*(?:label|rating))\s*:?\s*([A-Ga-g])(\+{0,5})/i);
+    const em = fullText.match(/energ(?:ielabel|y\s*(?:label|rating))\s*:?\s*([A-Ga-g])(\+{0,5})/i);
     if (em) out.energyLabel = em[1].toUpperCase() + em[2];
   }
 
@@ -362,7 +392,7 @@ function extractListing() {
     ["Solar panels", ["solar panel", "zonnepanelen"]],
     ["Sustainability certified", ["breeam", "well platinum", "well gold", "leed", "paris proof", "net carbon zero"]],
   ];
-  const low = bodyText.toLowerCase();
+  const low = fullText.toLowerCase();
   out.amenities = AMENITIES.filter(([, keys]) => keys.some((k) => low.includes(k))).map(([label]) => label);
   // "Underground parking" already implies parking — don't list both.
   if (out.amenities.includes("Underground parking")) {
@@ -471,36 +501,56 @@ function extractListing() {
 }
 
 // ---- popup wiring ---------------------------------------------------------
+// Everything expensive (injecting into the tab, reading the page, building
+// the handoff URL) runs the moment the popup OPENS, not when the button is
+// clicked. Opening the popup is already a deliberate act with a natural pause
+// after it, so that pause absorbs the work — and the click itself then has
+// nothing left to do but open the tab, which is instant.
 const statusEl = document.getElementById("status");
 const previewEl = document.getElementById("preview");
+const captureBtn = document.getElementById("capture");
 
-document.getElementById("capture").addEventListener("click", async () => {
-  statusEl.className = "";
-  previewEl.innerHTML = "";
-  statusEl.textContent = "Reading the open page…";
+let readyUrl = null;      // handoff URL, built as soon as the page is read
+let capturePromise = null; // in flight while the popup is opening
 
-  const startedAt = performance.now();
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  let results;
-  try {
-    results = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: extractListing });
-  } catch (e) {
-    statusEl.className = "err";
-    statusEl.textContent = "Could not read this tab: " + e.message;
-    return;
-  }
-  const data = results && results[0] && results[0].result;
-  if (!data) {
-    statusEl.className = "err";
-    statusEl.textContent = "Nothing captured from this page.";
-    return;
-  }
-  if (data.blocked) {
-    statusEl.className = "warn";
-    statusEl.textContent = "This looks like a verification page — open the real listing first, then capture.";
-    return;
-  }
+function setStatus(kind, text) {
+  statusEl.className = kind;
+  statusEl.textContent = text;
+}
 
+function renderPreview(data, photoCount, droppedPhotos) {
+  const target = data.photoTarget || 0;
+  const photosLabel = target ? `${photoCount} (page says ${target})` : photoCount;
+  const fields = [
+    ["Name", data.name], ["Address", data.address], ["City", data.city],
+    ["Subarea", data.subarea],
+    ["Available m²", data.availableAreaSqm], ["Min. unit m²", data.minDivisibleAreaSqm],
+    ["Total building m²", data.areaSqm],
+    ["Amenities", (data.amenities || []).join(", ")],
+    ["Parking ratio", data.parkingRatio],
+    ["Rent €/m²/yr", data.rentEurPerM2Year], ["Service €/m²/yr", data.serviceChargeEurPerM2Year],
+    ["Parking €/yr", data.parkingPriceEurYear],
+    ["Available", data.availability],
+    ["Energy", data.energyLabel], ["Year built", data.yearBuilt],
+    ["Airport", data.airportNote], ["Highway", data.highwayNote],
+    ["Public transport", data.publicTransportNote],
+    ["Photos", photosLabel + (droppedPhotos ? ` · ${droppedPhotos} dropped (link length)` : "")],
+  ];
+  previewEl.replaceChildren();
+  for (const [k, v] of fields) {
+    const div = document.createElement("div");
+    const key = document.createElement("span");
+    key.className = "k";
+    key.textContent = k;
+    const val = document.createElement("span");
+    val.className = "v";
+    val.textContent = v == null || v === "" ? "—" : String(v);
+    div.append(key, val);
+    previewEl.appendChild(div);
+  }
+}
+
+function buildHandoffUrl(appUrl, data) {
   const p = new URLSearchParams();
   const set = (k, v) => {
     if (v !== null && v !== undefined && String(v).trim() !== "") p.set(k, String(v));
@@ -528,58 +578,69 @@ document.getElementById("capture").addEventListener("click", async () => {
   set("accessibilityNote", data.highwayNote);
   set("publicTransportNote", data.publicTransportNote);
 
-  const appUrl = await getAppUrl();
   const base = appUrl + "/buildings/new?";
   let photos = (data.photos || []).slice();
-  let droppedPhotos = 0;
+  let dropped = 0;
   while (photos.length && (base + p.toString()).length > MAX_HANDOFF_URL_LENGTH) {
     photos.pop();
-    droppedPhotos += 1;
+    dropped += 1;
     p.set("photos", photos.join(","));
   }
   if (!photos.length) p.delete("photos");
+  return { url: base + p.toString(), photoCount: photos.length, dropped };
+}
 
-  try {
-    await chrome.tabs.create({ url: base + p.toString() });
-  } catch (e) {
-    statusEl.className = "err";
-    statusEl.textContent =
-      "Could not open " + appUrl + " — check the address under Settings. (" + e.message + ")";
-    return;
+async function readPage() {
+  const startedAt = performance.now();
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab) throw new Error("No active tab to read.");
+  // tab.url is only present once activeTab is granted; only reject when it is
+  // present AND clearly not a web page.
+  if (tab.url && !/^https?:/i.test(tab.url)) {
+    throw new Error("This isn't a web page — open a listing first.");
+  }
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: extractListing,
+  });
+  const data = results && results[0] && results[0].result;
+  if (!data) throw new Error("Nothing could be read from this page.");
+  return { data, ms: Math.round(performance.now() - startedAt) };
+}
+
+async function prepare() {
+  setStatus("", "Reading this page…");
+  captureBtn.disabled = true;
+  const [{ data, ms }, appUrl] = await Promise.all([readPage(), getAppUrl()]);
+
+  if (data.blocked) {
+    setStatus("warn", "This looks like a verification page — open the real listing, then reopen this popup.");
+    return null;
   }
 
-  const photoCount = photos.length;
-  const target = data.photoTarget || 0;
-  statusEl.className = "ok";
-  statusEl.textContent =
-    `Read this page in ${Math.round(performance.now() - startedAt)} ms — ${photoCount} photo${photoCount === 1 ? "" : "s"} captured. Opening your library…` +
-    (droppedPhotos ? ` ${droppedPhotos} more were left out to keep the link short enough.` : "") +
-    " Review and save.";
-  const photosLabel = target ? `${photoCount} (page says ${target})` : photoCount;
-  const fields = [
-    ["Name", data.name], ["Address", data.address], ["City", data.city],
-    ["Subarea", data.subarea],
-    ["Available m²", data.availableAreaSqm], ["Min. unit m²", data.minDivisibleAreaSqm],
-    ["Total building m²", data.areaSqm],
-    ["Amenities", (data.amenities || []).join(", ")],
-    ["Parking ratio", data.parkingRatio],
-    ["Rent €/m²/yr", data.rentEurPerM2Year], ["Service €/m²/yr", data.serviceChargeEurPerM2Year],
-    ["Parking €/yr", data.parkingPriceEurYear],
-    ["Available", data.availability],
-    ["Energy", data.energyLabel], ["Year built", data.yearBuilt],
-    ["Airport", data.airportNote], ["Highway", data.highwayNote], ["Public transport", data.publicTransportNote],
-    ["Photos", photosLabel],
-  ];
-  for (const [k, v] of fields) {
-    const div = document.createElement("div");
-    const key = document.createElement("span");
-    key.className = "k";
-    key.textContent = k;
-    const val = document.createElement("span");
-    val.className = "v";
-    val.textContent = v == null || v === "" ? "—" : String(v);
-    div.append(key, val);
-    previewEl.appendChild(div);
+  const { url, photoCount, dropped } = buildHandoffUrl(appUrl, data);
+  readyUrl = url;
+  captureBtn.disabled = false;
+  setStatus("ok", `Ready in ${ms} ms — ${photoCount} photo${photoCount === 1 ? "" : "s"}. Click to send it to your library.`);
+  renderPreview(data, photoCount, dropped);
+  return url;
+}
+
+capturePromise = prepare().catch((e) => {
+  setStatus("err", e.message || String(e));
+  captureBtn.disabled = false; // let them retry
+  return null;
+});
+
+captureBtn.addEventListener("click", async () => {
+  // Normally already resolved, so this is a no-op and the tab opens at once.
+  const url = readyUrl || (await capturePromise) || (await prepare().catch(() => null));
+  if (!url) return;
+  try {
+    await chrome.tabs.create({ url });
+    window.close(); // nothing left to look at — get out of the way
+  } catch (e) {
+    setStatus("err", "Could not open the app — check the address under Settings. (" + e.message + ")");
   }
 });
 

@@ -34,7 +34,10 @@ ever moves, open the popup → **Settings**, paste the new address, and click
 
 1. Open a listing page in your browser and make sure the real listing (not a
    verification page) is loaded.
-2. Click the extension button → **Capture this listing**.
+2. Click the extension button. The page is read **while the popup opens**, so
+   the preview is already filled in and the status line says how long it took.
+3. Click **Capture this listing** — the tab opens immediately, because there
+   is no work left to do at that point.
 3. A new tab opens with **Add Building** pre-filled (name, address, city, area,
    energy label, amenities, photos). The popup also shows how many photos were
    captured. Review it, fill in anything missing, and click **Create Building**.
@@ -90,6 +93,10 @@ for you to complete — it never invents values.
   wrong — fix it under Settings.
 - **The form opens but is empty.** You were logged out; log in and the
   captured values are carried through the login (fixed in the app, not here).
+- **A detail is missing that the listing clearly states.** Details hidden
+  behind a "Lees meer" / "Read more" toggle used to be invisible to the
+  capture (the parking ratio, typically). From v2.3 the collapsed text is read
+  too, so expanding the description first is no longer necessary.
 - **Fewer photos than the page shows.** The handoff link has a length limit;
   photos past it are dropped and the popup tells you how many. The building
   and all its figures always come through.
