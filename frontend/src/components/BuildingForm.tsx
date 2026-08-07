@@ -6,6 +6,7 @@ import type { Neighbourhood } from "@/lib/types";
 import { api } from "@/lib/api";
 import { Button, Card } from "@/components/ui";
 import { PhotoPicker } from "@/components/PhotoPicker";
+import { PROXY_BASE_URL } from "@/lib/api";
 
 const inputClass = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm";
 const labelClass = "text-sm";
@@ -63,6 +64,71 @@ export function BuildingForm({
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({ ...EMPTY_FORM, ...initial });
+  const [locating, setLocating] = useState(false);
+  const [locateNote, setLocateNote] = useState<string | null>(null);
+
+  /** Fill the three transport distances from the address. Only ever fills
+   * blanks — a figure the listing itself stated (or one typed by hand) is
+   * more authoritative than a straight line on a map, so it is never
+   * overwritten. */
+  async function lookUpDistances() {
+    if (!form.address.trim() && !form.city.trim()) {
+      setLocateNote("Fill in the address first.");
+      return;
+    }
+    setLocating(true);
+    setLocateNote(null);
+    try {
+      const res = await fetch(`${PROXY_BASE_URL}/geo/distances`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: form.address,
+          city: form.city,
+          postal_code: form.postalCode || null,
+        }),
+      });
+      if (!res.ok) throw new Error(`lookup failed (${res.status})`);
+      const d = (await res.json()) as {
+        found: boolean;
+        public_transport: string | null;
+        highway: string | null;
+        airport: string | null;
+      };
+      if (!d.found) {
+        setLocateNote("Couldn't place that address on the map — fill the distances in by hand.");
+        return;
+      }
+      // Work out the changes from the current state up front. Deciding this
+      // inside the setForm updater looked equivalent but isn't: the updater
+      // runs after this function continues, so the message below was built
+      // from an empty list and always claimed nothing had been filled.
+      const patch: Partial<typeof form> = {};
+      const filled: string[] = [];
+      if (!form.publicTransportNote && d.public_transport) {
+        patch.publicTransportNote = d.public_transport;
+        filled.push("public transport");
+      }
+      if (!form.accessibilityNote && d.highway) {
+        patch.accessibilityNote = d.highway;
+        filled.push("highway");
+      }
+      if (!form.airportNote && d.airport) {
+        patch.airportNote = d.airport;
+        filled.push("airport");
+      }
+      if (filled.length) setForm((prev) => ({ ...prev, ...patch }));
+      setLocateNote(
+        filled.length
+          ? `Filled in ${filled.join(", ")} — straight-line distances, check them over.`
+          : "Those three are already filled in — clear one to look it up again.",
+      );
+    } catch {
+      setLocateNote("Distance lookup is unavailable right now — fill them in by hand.");
+    } finally {
+      setLocating(false);
+    }
+  }
 
   function update<K extends keyof typeof form>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -262,6 +328,12 @@ export function BuildingForm({
             <span className="mb-1 block font-medium">Public transport note</span>
             <input value={form.publicTransportNote} onChange={(e) => update("publicTransportNote", e.target.value)} placeholder="Station Noord 8 min" className={inputClass} />
           </label>
+          <div className="sm:col-span-2 -mt-1 flex flex-wrap items-center gap-3">
+            <Button type="button" variant="ghost" disabled={locating} onClick={lookUpDistances}>
+              {locating ? "Looking up…" : "Look up distances from the address"}
+            </Button>
+            {locateNote && <span className="text-xs text-muted">{locateNote}</span>}
+          </div>
           <label className={`${labelClass} sm:col-span-2`}>
             <span className="mb-1 block font-medium">Amenities (comma-separated)</span>
             <input value={form.buildingAmenities} onChange={(e) => update("buildingAmenities", e.target.value)} placeholder="Roof terrace, Bicycle storage, 24/7 access" className={inputClass} />
