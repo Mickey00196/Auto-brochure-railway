@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { PROXY_BASE_URL } from "@/lib/api";
 
 /** The captured gallery, as a reviewable selection rather than a wall of
  * comma-separated text: hover a photo to drop it, spot a broken one, or paste
@@ -15,6 +16,9 @@ export function PhotoPicker({
 }) {
   const [adding, setAdding] = useState("");
   const [broken, setBroken] = useState<Record<string, boolean>>({});
+  const [checking, setChecking] = useState(false);
+  const [removedDupes, setRemovedDupes] = useState<{ count: number; previous: string } | null>(null);
+  const checkedRef = useRef<string>("");
 
   const photos = value
     .split(",")
@@ -35,6 +39,41 @@ export function PhotoPicker({
   }
 
   const brokenCount = photos.filter((p) => broken[p]).length;
+
+  // A listing can publish the same shot under completely unrelated URLs, so
+  // matching on the address alone can't catch it — the server compares the
+  // decoded images (the browser can't: a cross-origin CDN image taints the
+  // canvas). Duplicates are removed automatically, with an undo, because the
+  // whole point is not having to weed them out by hand.
+  useEffect(() => {
+    const signature = photos.join(",");
+    if (photos.length < 2 || checkedRef.current === signature) return;
+    checkedRef.current = signature;
+    let cancelled = false;
+    setChecking(true);
+    fetch(`${PROXY_BASE_URL}/photos/duplicates`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ urls: photos }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body: { keep: string[]; duplicates: string[] } | null) => {
+        if (cancelled || !body || body.duplicates.length === 0) return;
+        checkedRef.current = body.keep.join(",");
+        setRemovedDupes({ count: body.duplicates.length, previous: signature });
+        commit(body.keep);
+      })
+      .catch(() => {
+        /* detection is a convenience — never block editing on it */
+      })
+      .finally(() => {
+        if (!cancelled) setChecking(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the URL list itself
+  }, [value]);
 
   return (
     <div>
@@ -59,6 +98,23 @@ export function PhotoPicker({
           >
             Remove all
           </button>
+        )}
+        {checking && <span className="text-muted">Checking for duplicates…</span>}
+        {removedDupes && (
+          <span className="text-muted">
+            {`Removed ${removedDupes.count} duplicate${removedDupes.count === 1 ? "" : "s"}`}{" "}
+            <button
+              type="button"
+              onClick={() => {
+                checkedRef.current = removedDupes.previous;
+                onChange(removedDupes.previous);
+                setRemovedDupes(null);
+              }}
+              className="underline hover:text-foreground"
+            >
+              Undo
+            </button>
+          </span>
         )}
       </div>
 

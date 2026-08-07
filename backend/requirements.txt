@@ -4,6 +4,7 @@ SQLAlchemy==2.0.51
 pydantic==2.13.4
 pydantic-settings==2.14.2
 python-pptx==1.0.2
+Pillow==12.3.0  # perceptual hashing for photo de-duplication (also a python-pptx dep)
 Jinja2==3.1.6
 python-multipart==0.0.32
 openpyxl==3.1.5

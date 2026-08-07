@@ -11,6 +11,7 @@ from app.routers import (
     library,
     match,
     neighbourhoods,
+    photos,
     proposals,
     qa,
     seed,
@@ -20,6 +21,7 @@ from app.routers import (
 all_routers = [
     buildings.router,
     library.router,
+    photos.router,
     units.router,
     addons.router,
     neighbourhoods.router,
