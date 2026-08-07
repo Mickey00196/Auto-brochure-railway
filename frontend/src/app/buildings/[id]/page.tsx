@@ -3,31 +3,55 @@ import { notFound } from "next/navigation";
 import { serverApi as api } from "@/lib/serverApi";
 import { Badge, Button, Card, PageHeader } from "@/components/ui";
 import { AddOnForm } from "@/components/AddOnForm";
+import { BuildingForm, type BuildingFormInitial } from "@/components/BuildingForm";
 import { formatArea, formatUnitHeadlinePrice } from "@/lib/format";
 
+/** Clicking a building in the library lands here, and everything about it is
+ * editable on this one page: its details in the form, its available spaces
+ * and its add-ons below. (There used to be a separate /edit route — one hop
+ * too many for "click a building, change something".) */
 export default async function BuildingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [building, addons] = await Promise.all([
+  const [building, addons, neighbourhoods] = await Promise.all([
     api.building(id).catch(() => null),
     api.addons({ buildingId: id }).catch(() => []),
+    Promise.race([
+      api.neighbourhoods().catch(() => []),
+      new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 1500)),
+    ]),
   ]);
   if (!building) notFound();
+
+  const initial: BuildingFormInitial = {
+    name: building.name ?? "",
+    address: building.address ?? "",
+    postalCode: building.postal_code ?? "",
+    city: building.city ?? "",
+    neighbourhoodId: building.neighbourhood_id ?? "",
+    submarket: building.submarket ?? "",
+    buildingType: building.building_type ?? "",
+    yearBuilt: building.year_built ? String(building.year_built) : "",
+    energyLabel: building.energy_label ?? "",
+    breeamRating: building.breeam_rating ?? "",
+    totalBuildingAreaM2: building.total_building_area_m2 ? String(building.total_building_area_m2) : "",
+    accessibilityNote: building.accessibility_note ?? "",
+    airportNote: building.airport_note ?? "",
+    publicTransportNote: building.public_transport_note ?? "",
+    buildingAmenities: (building.building_amenities ?? []).join(", "),
+    description: building.description ?? "",
+    photos: (building.photos ?? []).join(", "),
+  };
 
   return (
     <div>
       <PageHeader
-        eyebrow={building.source_url ? "Imported from URL" : "Manually entered"}
-        title={building.name}
-        description={`${building.address}, ${building.city} · ${building.building_type ?? "Office"}${building.energy_label ? ` · Energy label ${building.energy_label}` : ""}`}
+        eyebrow={building.source_url ? "Captured from a listing" : "Added by hand"}
+        title={building.address}
+        description="Everything here is editable — correct anything the capture got wrong, then save. Your changes stay; nothing re-scrapes over them."
         actions={
-          <div className="flex gap-2">
-            <Link href={`/buildings/${id}/edit`}>
-              <Button variant="ghost">Edit details</Button>
-            </Link>
-            <Link href={`/buildings/${id}/units/new`}>
-              <Button>+ Add space</Button>
-            </Link>
-          </div>
+          <Link href={`/buildings/${id}/units/new`}>
+            <Button>+ Add space</Button>
+          </Link>
         }
       />
 
@@ -39,10 +63,18 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
         </div>
       )}
 
+      <div className="mb-6">
+        <BuildingForm neighbourhoods={neighbourhoods} initial={initial} buildingId={id} />
+      </div>
+
       <Card className="mb-6">
-        <h2 className="mb-3 text-lg font-semibold">Units ({building.units.length})</h2>
+        <h2 className="mb-3 text-lg font-semibold">
+          Available spaces ({building.units.length})
+        </h2>
         {building.units.length === 0 ? (
-          <p className="text-sm text-muted">No units yet — add one to make this building available to a Proposal.</p>
+          <p className="text-sm text-muted">
+            No spaces yet — add one so this building can appear with an area and rent in a client PDF.
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-sm">
@@ -51,8 +83,9 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
                   <th className="pb-2 pr-4">Floor</th>
                   <th className="pb-2 pr-4">Area</th>
                   <th className="pb-2 pr-4">Pricing</th>
-                  <th className="pb-2 pr-4">Contract Term</th>
-                  <th className="pb-2">Delivery</th>
+                  <th className="pb-2 pr-4">Available</th>
+                  <th className="pb-2 pr-4">Contract term</th>
+                  <th className="pb-2"></th>
                 </tr>
               </thead>
               <tbody>
@@ -64,8 +97,16 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
                       {unit.min_divisible_area_m2 && <span className="text-muted"> (from {formatArea(unit.min_divisible_area_m2)})</span>}
                     </td>
                     <td className="py-2 pr-4">{formatUnitHeadlinePrice(unit)}</td>
+                    <td className="py-2 pr-4">{unit.availability ?? "TBD"}</td>
                     <td className="py-2 pr-4">{unit.contract_term ?? "TBD"}</td>
-                    <td className="py-2 capitalize">{unit.delivery_condition.replaceAll("_", " ")}</td>
+                    <td className="py-2 text-right">
+                      <Link
+                        href={`/buildings/${id}/units/${unit.unit_id}/edit`}
+                        className="text-xs font-semibold text-accent hover:underline"
+                      >
+                        Edit →
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -288,7 +288,7 @@ export function BuildingForm({
       </Button>
       <p className="text-xs text-muted">
         {isEdit
-          ? "Available spaces and add-ons are managed on the building's own page."
+          ? "Saves the building's own details. Its available spaces and add-ons are edited separately, below."
           : "Saved permanently in your library — reusable for any client, and never overwritten by a later capture."}
       </p>
     </form>

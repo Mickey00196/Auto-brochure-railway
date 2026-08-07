@@ -117,32 +117,38 @@ export function BuildingLibrary({ buildings }: { buildings: Building[] }) {
               className={`transition ${isSelected ? "border-accent ring-1 ring-accent" : ""}`}
             >
               <div className="flex items-start gap-4">
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={() => toggle(building.building_id)}
+                {/* Selecting and opening are different intents, so they get
+                    different targets: this padded hit area ticks the box,
+                    the row itself opens the building for editing. */}
+                <label
+                  className="-m-2 shrink-0 cursor-pointer p-2"
                   aria-label={`Select ${building.address}`}
-                  className="mt-1 h-5 w-5 shrink-0 cursor-pointer accent-accent"
-                />
-                {building.photos.length > 0 ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- arbitrary captured URLs, no fixed domain to allowlist
-                  <img
-                    src={building.photos[0]}
-                    alt=""
-                    className="h-16 w-16 shrink-0 rounded-lg border border-border object-cover"
-                  />
-                ) : (
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-dashed border-border text-[10px] text-muted">
-                    No photo
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => toggle(building.building_id)}
-                  className="flex-1 cursor-pointer text-left"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <p className="font-semibold">{building.address}</p>
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggle(building.building_id)}
+                    className="mt-1 h-5 w-5 cursor-pointer accent-accent"
+                  />
+                </label>
+                <Link href={`/buildings/${building.building_id}`} className="shrink-0">
+                  {building.photos.length > 0 ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- arbitrary captured URLs, no fixed domain to allowlist
+                    <img
+                      src={building.photos[0]}
+                      alt=""
+                      className="h-16 w-16 rounded-lg border border-border object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-border text-[10px] text-muted">
+                      No photo
+                    </div>
+                  )}
+                </Link>
+
+                <Link href={`/buildings/${building.building_id}`} className="group flex-1">
+                  <p className="font-semibold group-hover:text-accent group-hover:underline">{building.address}</p>
                   <p className="text-sm text-muted">
                     {[building.submarket, building.city].filter(Boolean).join(" · ")}
                   </p>
@@ -153,7 +159,7 @@ export function BuildingLibrary({ buildings }: { buildings: Building[] }) {
                     <span className="text-muted"> · {rentLabel}</span>
                     {building.energy_label && <span className="text-muted"> · Energy {building.energy_label}</span>}
                   </p>
-                </button>
+                </Link>
 
                 <div className="flex shrink-0 flex-col items-end gap-2">
                   <Badge>{building.units.length} space{building.units.length === 1 ? "" : "s"}</Badge>
@@ -161,7 +167,7 @@ export function BuildingLibrary({ buildings }: { buildings: Building[] }) {
                     href={`/buildings/${building.building_id}`}
                     className="text-xs font-semibold text-accent hover:underline"
                   >
-                    Open →
+                    Edit →
                   </Link>
                 </div>
               </div>

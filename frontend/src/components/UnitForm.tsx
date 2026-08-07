@@ -8,32 +8,49 @@ import { Button, Card } from "@/components/ui";
 const inputClass = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm";
 const labelClass = "text-sm";
 
-export function UnitForm({ buildingId }: { buildingId: string }) {
+const EMPTY_UNIT = {
+  floor: "",
+  availableAreaM2: "",
+  minDivisibleAreaM2: "",
+  deliveryCondition: "shell_and_core",
+  rentPriceType: "fixed",
+  rentEurPerM2Year: "",
+  serviceChargePriceType: "fixed",
+  serviceChargeEurPerM2Year: "",
+  deskCount: "",
+  pricePerDeskMonthEur: "",
+  spaceProvider: "",
+  meetingRoomNote: "",
+  parkingRatio: "",
+  contractTerm: "",
+  contractTermYears: "",
+  availability: "",
+  unitAmenities: "",
+  photos: "",
+};
+
+export type UnitFormInitial = Partial<typeof EMPTY_UNIT>;
+
+export function UnitForm({
+  buildingId,
+  unitId,
+  initial,
+  initialPricingModel = "per_sqm_annual",
+}: {
+  buildingId: string;
+  /** Set when correcting a saved space — updates in place instead of adding
+   * a second one to the building. */
+  unitId?: string;
+  initial?: UnitFormInitial;
+  initialPricingModel?: "per_sqm_annual" | "per_desk_monthly";
+}) {
+  const isEdit = Boolean(unitId);
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [pricingModel, setPricingModel] = useState<"per_sqm_annual" | "per_desk_monthly">("per_sqm_annual");
-  const [form, setForm] = useState({
-    floor: "",
-    availableAreaM2: "",
-    minDivisibleAreaM2: "",
-    deliveryCondition: "shell_and_core",
-    rentPriceType: "fixed",
-    rentEurPerM2Year: "",
-    serviceChargePriceType: "fixed",
-    serviceChargeEurPerM2Year: "",
-    deskCount: "",
-    pricePerDeskMonthEur: "",
-    spaceProvider: "",
-    meetingRoomNote: "",
-    parkingRatio: "",
-    contractTerm: "",
-    contractTermYears: "",
-    availability: "",
-    unitAmenities: "",
-    photos: "",
-  });
+  const [pricingModel, setPricingModel] = useState<"per_sqm_annual" | "per_desk_monthly">(initialPricingModel);
+  const [form, setForm] = useState({ ...EMPTY_UNIT, ...initial });
 
   function update<K extends keyof typeof form>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -48,7 +65,7 @@ export function UnitForm({ buildingId }: { buildingId: string }) {
     setSubmitting(true);
     setError(null);
     try {
-      await api.createUnit({
+      const payload = {
         building_id: buildingId,
         floor: form.floor || null,
         available_area_m2: Number(form.availableAreaM2),
@@ -74,10 +91,16 @@ export function UnitForm({ buildingId }: { buildingId: string }) {
         availability: form.availability || null,
         unit_amenities: form.unitAmenities.split(",").map((s) => s.trim()).filter(Boolean),
         photos: form.photos.split(",").map((s) => s.trim()).filter(Boolean),
-      });
+      };
+      if (unitId) {
+        await api.updateUnit(unitId, payload);
+      } else {
+        await api.createUnit(payload);
+      }
       router.push(`/buildings/${buildingId}`);
+      router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create unit");
+      setError(err instanceof Error ? err.message : `Failed to ${unitId ? "update" : "create"} space`);
     } finally {
       setSubmitting(false);
     }
@@ -207,7 +230,7 @@ export function UnitForm({ buildingId }: { buildingId: string }) {
 
       {error && <p className="text-sm text-red-500">{error}</p>}
       <Button type="submit" disabled={submitting}>
-        {submitting ? "Creating…" : "Create Unit"}
+        {submitting ? "Saving…" : isEdit ? "Save changes" : "Add space"}
       </Button>
     </form>
   );

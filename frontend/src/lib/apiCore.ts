@@ -39,6 +39,9 @@ export function makeApi(request: DoRequest) {
       request<Unit[]>(`/units${buildingId ? `?building_id=${buildingId}` : ""}`),
     createUnit: (payload: Record<string, unknown>) =>
       request<Unit>("/units", { method: "POST", body: JSON.stringify(payload) }),
+    updateUnit: (id: string, payload: Record<string, unknown>) =>
+      request<Unit>(`/units/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+    unit: (id: string) => request<Unit>(`/units/${id}`),
 
     addons: (params: { unitId?: string; buildingId?: string } = {}) => {
       const query = new URLSearchParams();
