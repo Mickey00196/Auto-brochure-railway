@@ -20,6 +20,7 @@ class DistanceRequest(BaseModel):
     postal_code: str | None = None
     latitude: float | None = None
     longitude: float | None = None
+    country: str | None = "Netherlands"
 
 
 class DistanceResponse(BaseModel):
@@ -34,7 +35,12 @@ class DistanceResponse(BaseModel):
 @router.post("/distances", response_model=DistanceResponse)
 def distances(payload: DistanceRequest) -> DistanceResponse:
     d = distances_for_address(
-        payload.address, payload.city, payload.postal_code, payload.latitude, payload.longitude
+        payload.address,
+        payload.city,
+        payload.postal_code,
+        payload.latitude,
+        payload.longitude,
+        payload.country,
     )
     return DistanceResponse(
         latitude=d.latitude,

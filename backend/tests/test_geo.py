@@ -7,13 +7,16 @@ failure mode degrades to "no answer" instead of raising.
 from __future__ import annotations
 
 import json
+import urllib.parse
 
 import pytest
 
 from app.services.geo import (
     Distances,
+    _geocode_query_candidates,
     distances_for_address,
     format_distance,
+    geocode,
     haversine_m,
     nearby_distances,
 )
@@ -81,6 +84,47 @@ def test_geocodes_when_the_building_has_no_coordinates():
     )
     assert d.latitude == pytest.approx(LAT)
     assert d.public_transport.startswith("Amsterdam Zuid ")
+
+
+def test_geocode_query_does_not_repeat_a_city_and_postcode_already_in_the_address():
+    """The exact bug reported: a captured building's `address` field already
+    reads "Street 8, 1081 LH Amsterdam" (postcode and city folded in by the
+    capture), and unconditionally appending postal_code/city again produced
+    "...Amsterdam, 1081 LH, Amsterdam" — a malformed, redundant query that
+    Nominatim reasonably refused, surfacing as "couldn't place that address"
+    for almost every captured building."""
+    candidates = _geocode_query_candidates(
+        "Hildegard von Bingenstraat 8, 1081 LH Amsterdam", "Amsterdam", "1081 LH", "Netherlands"
+    )
+    assert candidates[0] == "Hildegard von Bingenstraat 8, 1081 LH Amsterdam, Netherlands"
+    assert candidates[0].lower().count("amsterdam") == 1
+    assert candidates[0].lower().count("1081 lh") == 1
+
+
+def test_geocode_query_still_appends_city_and_postcode_when_address_lacks_them():
+    """A manually typed address with no postcode/city inline must still get
+    them appended — the dedup must not eat legitimate parts."""
+    candidates = _geocode_query_candidates(
+        "Hildegard von Bingenstraat 8", "Amsterdam", "1081 LH", "Netherlands"
+    )
+    assert candidates[0] == "Hildegard von Bingenstraat 8, 1081 LH, Amsterdam, Netherlands"
+
+
+def test_geocode_stops_at_the_first_candidate_that_resolves():
+    calls: list[str] = []
+
+    def fetch(url: str, body: bytes | None) -> str:
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)["q"][0]
+        calls.append(q)
+        if len(calls) == 1:
+            return "[]"  # the most specific candidate finds nothing
+        return json.dumps([{"lat": str(LAT), "lon": str(LON)}])
+
+    point = geocode(
+        "Hildegard von Bingenstraat 8, 1081 LH Amsterdam", "Amsterdam", "1081 LH", "Netherlands", fetch=fetch
+    )
+    assert point == (LAT, LON)
+    assert len(calls) == 2, "must not keep trying once a candidate resolves"
 
 
 def test_existing_coordinates_skip_the_geocoder():

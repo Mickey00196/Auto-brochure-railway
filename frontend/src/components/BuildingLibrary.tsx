@@ -159,6 +159,13 @@ export function BuildingLibrary({ buildings }: { buildings: Building[] }) {
                     <span className="text-muted"> · {rentLabel}</span>
                     {building.energy_label && <span className="text-muted"> · Energy {building.energy_label}</span>}
                   </p>
+                  {(building.public_transport_note || building.accessibility_note || building.airport_note) && (
+                    <p className="mt-1 flex flex-wrap gap-x-3 text-xs text-muted">
+                      {building.public_transport_note && <span>🚉 {building.public_transport_note}</span>}
+                      {building.accessibility_note && <span>🛣️ {building.accessibility_note}</span>}
+                      {building.airport_note && <span>✈️ {building.airport_note}</span>}
+                    </p>
+                  )}
                   {building.building_amenities.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {building.building_amenities.slice(0, 6).map((a) => (

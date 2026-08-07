@@ -70,24 +70,89 @@ def format_distance(metres: float) -> str:
     return f"{km:.1f} km" if km < 10 else f"{km:.0f} km"
 
 
-def geocode(address: str, city: str | None = None, postal_code: str | None = None,
-            *, fetch: Fetcher = _http) -> tuple[float, float] | None:
-    query = ", ".join(p for p in [address, postal_code, city] if p and p.strip())
-    if not query.strip():
-        return None
-    url = f"{NOMINATIM_URL}?" + urllib.parse.urlencode(
-        {"q": query, "format": "json", "limit": 1, "addressdetails": 0}
-    )
-    try:
-        results = json.loads(fetch(url, None))
-    except Exception:
-        return None
-    if not results:
-        return None
-    try:
-        return float(results[0]["lat"]), float(results[0]["lon"])
-    except (KeyError, TypeError, ValueError):
-        return None
+def _geocode_query_candidates(
+    address: str, city: str | None, postal_code: str | None, country: str | None
+) -> list[str]:
+    """Build queries from most to least specific, without repeating a part
+    that's already embedded in another one.
+
+    The address this is usually called with is itself "Street 8, 1081 LH
+    Amsterdam" (city and postcode already folded in, by the capture or by
+    hand) — appending city/postal_code again unconditionally used to produce
+    "Street 8, 1081 LH Amsterdam, 1081 LH, Amsterdam", a malformed, redundant
+    query Nominatim would reject outright. Every part is only added if it
+    isn't already a substring of what's been assembled so far.
+    """
+    def norm(s: str) -> str:
+        return " ".join(s.lower().split())
+
+    parts: list[str] = []
+
+    def add(part: str | None) -> None:
+        if not part or not part.strip():
+            return
+        joined = norm(", ".join(parts))
+        if norm(part) in joined:
+            return
+        parts.append(part.strip())
+
+    add(address)
+    add(postal_code)
+    add(city)
+    full = ", ".join(parts)
+    add(country)
+    with_country = ", ".join(parts)
+
+    candidates = [with_country]
+    if full != with_country:
+        candidates.append(full)
+    # Coarser fallbacks — still enough to place a building on the map (at
+    # postcode/city precision) when the full address doesn't parse, which
+    # matters more than failing outright: the distances are already
+    # approximate straight lines, so a postcode-level start is consistent
+    # with that, not a new kind of wrong.
+    if postal_code and country:
+        candidates.append(f"{postal_code}, {country}")
+    if postal_code:
+        candidates.append(postal_code)
+    if city and country:
+        candidates.append(f"{city}, {country}")
+    if city:
+        candidates.append(city)
+
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for c in candidates:
+        key = norm(c)
+        if key and key not in seen:
+            seen.add(key)
+            ordered.append(c)
+    return ordered
+
+
+def geocode(
+    address: str,
+    city: str | None = None,
+    postal_code: str | None = None,
+    country: str | None = "Netherlands",
+    *,
+    fetch: Fetcher = _http,
+) -> tuple[float, float] | None:
+    for query in _geocode_query_candidates(address, city, postal_code, country):
+        url = f"{NOMINATIM_URL}?" + urllib.parse.urlencode(
+            {"q": query, "format": "json", "limit": 1, "addressdetails": 0}
+        )
+        try:
+            results = json.loads(fetch(url, None))
+        except Exception:
+            continue
+        if not results:
+            continue
+        try:
+            return float(results[0]["lat"]), float(results[0]["lon"])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return None
 
 
 def _overpass_query(lat: float, lon: float) -> str:
@@ -159,13 +224,14 @@ def distances_for_address(
     postal_code: str | None = None,
     latitude: float | None = None,
     longitude: float | None = None,
+    country: str | None = "Netherlands",
     *,
     fetch: Fetcher = _http,
 ) -> Distances:
     """Coordinates first (reuse them if the building already has them), then
     the three nearest points of interest."""
     if latitude is None or longitude is None:
-        point = geocode(address, city, postal_code, fetch=fetch)
+        point = geocode(address, city, postal_code, country, fetch=fetch)
         if not point:
             return Distances()
         latitude, longitude = point
