@@ -211,7 +211,11 @@ export function BuildingForm({
         }
       }
 
-      router.push(`/buildings/${building.building_id}`);
+      // Land back in the library with the new building already ticked,
+      // instead of on its detail page — a fresh capture almost always means
+      // "get this in front of a client," and the library is where that
+      // happens. Editing is still one click away (the row's Edit link).
+      router.push(`/buildings?select=${building.building_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create building");
     } finally {
