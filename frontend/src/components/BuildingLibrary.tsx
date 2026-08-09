@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Building } from "@/lib/types";
 import { api, PROXY_BASE_URL } from "@/lib/api";
 import { Badge, Button, Card } from "@/components/ui";
+import { DeleteBuildingButton } from "@/components/DeleteBuildingButton";
 import { formatArea } from "@/lib/format";
 
 // A ticked selection used to be plain component state, so navigating away
@@ -102,6 +103,12 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
   function clearSelection() {
     setSelected([]);
     setJustAdded(null);
+  }
+
+  function handleBuildingDeleted(buildingId: string) {
+    setSelected((prev) => prev.filter((id) => id !== buildingId));
+    if (justAdded === buildingId) setJustAdded(null);
+    router.refresh();
   }
 
   const visible = buildings.filter((b) => {
@@ -226,10 +233,11 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
           return (
             <Card
               key={building.building_id}
-              className={`transition ${isSelected ? "border-accent ring-1 ring-accent" : ""} ${
+              className={`relative transition ${isSelected ? "border-accent ring-1 ring-accent" : ""} ${
                 building.building_id === justAdded ? "ring-2 ring-accent" : ""
               }`}
             >
+              <DeleteBuildingButton building={building} onDeleted={() => handleBuildingDeleted(building.building_id)} />
               <div className="flex items-start gap-4">
                 {/* Selecting and opening are different intents, so they get
                     different targets: this padded hit area ticks the box,

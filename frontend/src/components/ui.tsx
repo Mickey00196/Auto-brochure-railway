@@ -67,6 +67,59 @@ export function PageHeader({
   );
 }
 
+/** A yes/no confirmation, rendered in place of the browser's own
+ * window.confirm() so it can carry the app's styling and show an inline
+ * error if the confirmed action fails instead of just alerting. */
+export function ConfirmDialog({
+  title,
+  message,
+  confirmLabel = "Yes",
+  cancelLabel = "No",
+  onConfirm,
+  onCancel,
+  busy = false,
+  error,
+}: {
+  title: string;
+  message?: ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  busy?: boolean;
+  error?: string | null;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onCancel}
+      role="presentation"
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-lg"
+      >
+        <h2 id="confirm-dialog-title" className="text-lg font-semibold">
+          {title}
+        </h2>
+        {message && <p className="mt-2 text-sm text-muted">{message}</p>}
+        {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+        <div className="mt-5 flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>
+            {cancelLabel}
+          </Button>
+          <Button type="button" onClick={onConfirm} disabled={busy}>
+            {confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Button({
   children,
   variant = "primary",

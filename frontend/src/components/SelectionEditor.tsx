@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { Building, Selection } from "@/lib/types";
 import { api, PROXY_BASE_URL } from "@/lib/api";
 import { Badge, Button, Card } from "@/components/ui";
+import { DeleteBuildingButton } from "@/components/DeleteBuildingButton";
 import { formatArea } from "@/lib/format";
 
 export function SelectionEditor({ selection, buildings }: { selection: Selection; buildings: Building[] }) {
@@ -30,6 +31,11 @@ export function SelectionEditor({ selection, buildings }: { selection: Selection
 
   function toggle(id: string) {
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function handleBuildingDeleted(buildingId: string) {
+    setSelected((prev) => prev.filter((id) => id !== buildingId));
+    router.refresh();
   }
 
   async function save(): Promise<Selection | null> {
@@ -188,7 +194,8 @@ export function SelectionEditor({ selection, buildings }: { selection: Selection
           const totalAvailable = building.units.reduce((sum, u) => sum + (u.available_area_m2 ?? 0), 0);
 
           return (
-            <Card key={building.building_id} className={`transition ${isSelected ? "border-accent ring-1 ring-accent" : ""}`}>
+            <Card key={building.building_id} className={`relative transition ${isSelected ? "border-accent ring-1 ring-accent" : ""}`}>
+              <DeleteBuildingButton building={building} onDeleted={() => handleBuildingDeleted(building.building_id)} />
               <div className="flex items-start gap-4">
                 <label
                   className="-m-2 shrink-0 cursor-pointer p-2"
