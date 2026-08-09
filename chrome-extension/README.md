@@ -88,6 +88,15 @@ for you to complete — it never invents values.
   it breaks. Remove the entry at `chrome://extensions` and **Load unpacked**
   again from wherever the folder lives now (keep it somewhere permanent, not
   Downloads).
+- **Clicking the icon does nothing, right after starting Chrome (or the
+  computer) — but works fine a bit later.** A Chrome quirk, not something
+  wrong with your capture: extensions only fully wire up their toolbar popup
+  the first time something wakes them, which used to mean the first click —
+  and right after Chrome has just launched (still restoring windows/tabs),
+  that first click can land before it's ready. From v2.6 the extension has a
+  background service worker that wakes itself the moment Chrome starts
+  instead, so it should already be ready by the time you get to it. If you
+  still see this, reload the extension at `chrome://extensions` once.
 - **Capture opens a "site can't be reached" tab.** The saved app address is
   wrong — fix it under Settings.
 - **The form opens but is empty.** You were logged out; log in and the
