@@ -626,19 +626,39 @@ function buildHandoffUrl(appUrl, data) {
   return { url: base + p.toString(), photoCount: photos.length, dropped };
 }
 
+// A page that's still hydrating (or one the extraction walk turns out to be
+// pathologically slow on) must not leave the popup stuck on "Reading this
+// page…" forever with no way out — that reads as "nothing happens" exactly
+// like a real failure would, just slower. Bounding it means every path ends
+// in either a result or a visible error within a few seconds.
+const READ_TIMEOUT_MS = 8000;
+
+function withTimeout(promise, ms, message) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 async function readPage() {
   const startedAt = performance.now();
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await withTimeout(
+    chrome.tabs.query({ active: true, currentWindow: true }),
+    READ_TIMEOUT_MS,
+    "Timed out finding the active tab — try again.",
+  );
   if (!tab) throw new Error("No active tab to read.");
   // tab.url is only present once activeTab is granted; only reject when it is
   // present AND clearly not a web page.
   if (tab.url && !/^https?:/i.test(tab.url)) {
     throw new Error("This isn't a web page — open a listing first.");
   }
-  const results = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: extractListing,
-  });
+  const results = await withTimeout(
+    chrome.scripting.executeScript({ target: { tabId: tab.id }, func: extractListing }),
+    READ_TIMEOUT_MS,
+    "Timed out reading this page — it may still be loading. Try again in a moment.",
+  );
   const data = results && results[0] && results[0].result;
   if (!data) throw new Error("Nothing could be read from this page.");
   return { data, ms: Math.round(performance.now() - startedAt) };
@@ -684,8 +704,27 @@ capturePromise = prepare().catch((e) => {
 
 captureBtn.addEventListener("click", async () => {
   // Normally already resolved, so this is a no-op and the tab opens at once.
-  const url = readyUrl || (await capturePromise) || (await prepare().catch(() => null));
-  if (!url) return;
+  // Every branch below must end in either a url or a visible status — a
+  // click that just does nothing is indistinguishable from the extension
+  // being broken, even when the real cause was already shown and missed.
+  let url = readyUrl;
+  if (!url) {
+    try {
+      url = await capturePromise;
+    } catch (e) {
+      url = null;
+    }
+  }
+  if (!url) {
+    url = await prepare().catch((e) => {
+      setStatus("err", (e && e.message) || "Could not read this page. Try reopening the popup.");
+      return null;
+    });
+  }
+  if (!url) {
+    captureBtn.disabled = false;
+    return;
+  }
   try {
     await chrome.tabs.create({ url });
     window.close(); // nothing left to look at — get out of the way

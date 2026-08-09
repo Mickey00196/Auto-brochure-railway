@@ -97,6 +97,16 @@ for you to complete — it never invents values.
   background service worker that wakes itself the moment Chrome starts
   instead, so it should already be ready by the time you get to it. If you
   still see this, reload the extension at `chrome://extensions` once.
+- **The popup opens but the button click seems to do nothing.** Before v2.7,
+  a couple of failure paths (reading the page timing out, or retrying after
+  an earlier failure) left the popup exactly as it was — no error, nothing —
+  which is indistinguishable from a genuine hang. Every path now ends in
+  either a result or red status text within a few seconds, so if this
+  happens again there'll be a message explaining what failed; that message
+  is what to report, not just "nothing happens."
+- **Chrome shows "Relaunch to update" in the toolbar.** A pending Chrome
+  update can make extension behavior flaky until you actually relaunch —
+  worth doing before troubleshooting further.
 - **Capture opens a "site can't be reached" tab.** The saved app address is
   wrong — fix it under Settings.
 - **The form opens but is empty.** You were logged out; log in and the
