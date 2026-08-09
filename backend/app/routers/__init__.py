@@ -16,12 +16,14 @@ from app.routers import (
     proposals,
     qa,
     seed,
+    selections,
     units,
 )
 
 all_routers = [
     buildings.router,
     library.router,
+    selections.router,
     photos.router,
     geo.router,
     units.router,

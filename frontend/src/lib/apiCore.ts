@@ -13,6 +13,7 @@ import type {
   ProposalWithUnits,
   QAReport,
   ScrapePreviewResult,
+  Selection,
   SourceHealth,
   Unit,
 } from "./types";
@@ -54,6 +55,16 @@ export function makeApi(request: DoRequest) {
       request<AddOn>("/addons", { method: "POST", body: JSON.stringify(payload) }),
 
     neighbourhoods: () => request<Neighbourhood[]>("/neighbourhoods"),
+
+    selections: () => request<Selection[]>("/selections"),
+    selection: (id: string) => request<Selection>(`/selections/${id}`),
+    createSelection: (payload: { client_name: string; prepared_by?: string | null; building_ids: string[] }) =>
+      request<Selection>("/selections", { method: "POST", body: JSON.stringify(payload) }),
+    updateSelection: (
+      id: string,
+      payload: Partial<{ client_name: string; prepared_by: string | null; building_ids: string[] }>,
+    ) => request<Selection>(`/selections/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+    deleteSelection: (id: string) => request<void>(`/selections/${id}`, { method: "DELETE" }),
 
     clients: () => request<Client[]>("/clients"),
     client: (id: string) => request<Client>(`/clients/${id}`),

@@ -13,6 +13,7 @@ from app.models.ingestion import IngestionJob, SourceHealth
 from app.models.listing import Listing, ListingPriceHistory
 from app.models.neighbourhood import Neighbourhood
 from app.models.proposal import Proposal, ProposalUnit
+from app.models.selection import Selection
 from app.models.unit import Unit
 from app.models.user import User
 
@@ -33,6 +34,7 @@ __all__ = [
     "Neighbourhood",
     "Proposal",
     "ProposalUnit",
+    "Selection",
     "Unit",
     "User",
 ]

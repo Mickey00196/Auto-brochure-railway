@@ -165,6 +165,32 @@ class ClientOut(ClientBase):
     updated_at: datetime
 
 
+# ─────────────────────────────────────────── Selection ───────────────────────────────────────────
+
+
+class SelectionBase(BaseModel):
+    client_name: str
+    prepared_by: str | None = None
+    building_ids: list[str] = Field(default_factory=list, description="Order is preserved in the generated PDF")
+
+
+class SelectionCreate(SelectionBase):
+    pass
+
+
+class SelectionUpdate(BaseModel):
+    client_name: str | None = None
+    prepared_by: str | None = None
+    building_ids: list[str] | None = None
+
+
+class SelectionOut(SelectionBase):
+    model_config = ConfigDict(from_attributes=True)
+    selection_id: str
+    created_at: datetime
+    updated_at: datetime
+
+
 # ─────────────────────────────────────────── Proposal ───────────────────────────────────────────
 
 

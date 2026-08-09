@@ -85,6 +85,15 @@ export interface Client {
   search_brief: Record<string, unknown> | null;
 }
 
+export interface Selection {
+  selection_id: string;
+  client_name: string;
+  prepared_by: string | null;
+  building_ids: string[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Proposal {
   proposal_id: string;
   client_id: string;

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Building } from "@/lib/types";
-import { PROXY_BASE_URL } from "@/lib/api";
+import { api, PROXY_BASE_URL } from "@/lib/api";
 import { Badge, Button, Card } from "@/components/ui";
 import { formatArea } from "@/lib/format";
 
@@ -50,6 +50,7 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
   const [hydrated, setHydrated] = useState(false);
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [savingSelection, setSavingSelection] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const clientInputRef = useRef<HTMLInputElement>(null);
@@ -150,6 +151,26 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
       setError(e instanceof Error ? e.message : "Could not generate the PDF");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  // Everything above is an ephemeral, in-progress pick — saving it here is
+  // what turns it into a named record on the /selections page, reopenable
+  // and duplicable later instead of rebuilt from scratch each time.
+  async function saveAsSelection() {
+    if (!clientName.trim() || selected.length === 0) return;
+    setSavingSelection(true);
+    setError(null);
+    try {
+      const created = await api.createSelection({
+        client_name: clientName.trim(),
+        prepared_by: preparedBy.trim() || null,
+        building_ids: selected,
+      });
+      router.push(`/selections/${created.selection_id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save the selection");
+      setSavingSelection(false);
     }
   }
 
@@ -338,6 +359,13 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
             disabled={generating || selected.length === 0 || !clientName.trim()}
           >
             {generating ? "Generating…" : "Generate PDF"}
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={saveAsSelection}
+            disabled={savingSelection || selected.length === 0 || !clientName.trim()}
+          >
+            {savingSelection ? "Saving…" : "Save as selection"}
           </Button>
           {error && <p className="w-full text-xs text-red-500">{error}</p>}
           {!error && selected.length > 0 && !clientName.trim() && (
