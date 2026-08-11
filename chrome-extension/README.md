@@ -1,7 +1,7 @@
-# Proposal Engine – Listing Capture (Chrome extension)
+# Brochure Engine – Listing Capture (Chrome extension)
 
 One-click capture of a listing page **you are already viewing** into the
-Proposal Engine's *Add Building* form. No retyping, no copy-paste.
+Brochure Engine's *Add Building* form. No retyping, no copy-paste.
 
 ## Why this is compliant
 
@@ -81,7 +81,7 @@ for you to complete — it never invents values.
 ## If it doesn't work
 
 - **No icon in the toolbar.** Click the puzzle-piece icon and pin
-  "Proposal Engine – Listing Capture". From v2.0 it has its own navy building
+  "Brochure Engine – Listing Capture". From v2.0 it has its own navy building
   icon, so it's easy to spot.
 - **Popup won't open at all / greyed out.** Chrome runs an unpacked extension
   from the folder you loaded it from — if that folder was moved or deleted,

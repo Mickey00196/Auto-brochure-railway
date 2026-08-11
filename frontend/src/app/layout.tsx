@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Real Estate Proposal Engine",
+  title: "Real Estate Brochure Engine",
   description: "Institutional-grade CRE brochures, generated from a live Building/Unit/Proposal data model.",
 };
 

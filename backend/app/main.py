@@ -1,4 +1,4 @@
-"""Real Estate Proposal Engine — FastAPI entrypoint.
+"""Real Estate Brochure Engine — FastAPI entrypoint.
 
 See spec §2 (overview) and §4 (workflows). Run with:
     uvicorn app.main:app --reload
@@ -66,7 +66,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Real Estate Proposal Engine",
+    title="Real Estate Brochure Engine",
     description="Institutional-grade CRE brochure/PPTX/PDF generation from a live Building/Unit/Proposal data model.",
     version="2.0.0",
     lifespan=lifespan,

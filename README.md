@@ -1,4 +1,4 @@
-# Real Estate Proposal Engine (v2)
+# Real Estate Brochure Engine (v2)
 
 A CRE brochure/PPTX/PDF generation engine, built from the ground up around
 gaps found in two real reference documents:

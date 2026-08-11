@@ -1,4 +1,4 @@
-Real Estate Proposal Engine — frontend (Next.js App Router, TypeScript, Tailwind).
+Real Estate Brochure Engine — frontend (Next.js App Router, TypeScript, Tailwind).
 
 See the top-level [README](../README.md) for the full project, architecture, and setup instructions.
 
