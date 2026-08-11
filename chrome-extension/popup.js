@@ -427,27 +427,6 @@ function extractListing() {
     }
     if (!seen.has(u)) { seen.add(u); out.photos.push(u); }
   };
-
-  // Pass 1 — regex over the page's own HTML source. Listing pages embed the
-  // gallery in inline JSON/app state (before the lazy <img> tags swap in
-  // their real src), so the full list is usually in the markup already. The
-  // JSON escapes slashes as "\/" AND, in Next.js-style payloads, as
-  // "\u002F"; HTML attributes escape "&" as "&amp;". All three have to be
-  // unescaped or the URLs come out broken (or unmatched entirely).
-  const html = document.documentElement.outerHTML
-    .replace(/\\\//g, "/")
-    .replace(/\\u002[fF]/g, "/")
-    .replace(/&amp;/g, "&");
-  const IMG_URL_RE = /https?:\/\/[^"'\s)\\<>]+\.(?:jpe?g|png|webp|avif)(?:\?[^"'\s)\\<>]*)?/gi;
-  let m;
-  while ((m = IMG_URL_RE.exec(html)) !== null) {
-    addPhoto(m[0]);
-    if (out.photos.length >= PHOTO_SCAN_LIMIT) break;
-  }
-
-  // Pass 2 — the rendered DOM. Always run it (not just as a fallback): when
-  // the gallery/"Alle media" view is open, the full-size photos exist as real
-  // elements even though they never appeared in the served HTML.
   const pushSrcset = (value, sink) => {
     if (!value) return;
     for (const part of value.split(",")) {
@@ -455,30 +434,82 @@ function extractListing() {
       if (url) sink.push(url);
     }
   };
-  const candidates = [];
+
+  // Pass 0 — funda's own media CDN, scoped to this listing. Every funda
+  // gallery photo is served from cloud.funda.nl/valentina_media/, and
+  // nothing else on the page is — so on a funda page this is a strictly
+  // more precise source than the broad scans below: an <img> for
+  // "Vergelijkbare panden" (recommended listings) or the broker's portrait
+  // sits inside a link to a DIFFERENT object- id or to /makelaar/, which
+  // this excludes by walking up to the image's closest <a href>. A live DOM
+  // query, so it also picks up the full-size photos that only exist once
+  // "Alle media" is opened. Non-funda sites (or a funda page that's moved
+  // off this CDN) simply match nothing here and fall through to Pass 1/2
+  // below unaffected.
+  const FUNDA_CDN_RE = /^https:\/\/cloud\.funda\.nl\/valentina_media\//;
+  const currentObjectId = (location.pathname.match(/\/object-(\d+)/) || [])[1] || null;
+  const beforeFundaPass = out.photos.length;
   for (const img of document.querySelectorAll("img")) {
-    candidates.push(img.getAttribute("src"), img.currentSrc || null);
-    for (const attr of img.attributes) {
-      // data-src, data-lazy-src, data-original, data-large, data-zoom-image…
-      if (attr.name.startsWith("data-") && /\.(?:jpe?g|png|webp|avif)/i.test(attr.value)) {
-        candidates.push(attr.value);
-      }
+    const parentLink = img.closest("a[href]");
+    if (parentLink) {
+      const href = parentLink.getAttribute("href") || "";
+      const otherObjectId = (href.match(/\/object-(\d+)/) || [])[1] || null;
+      if (href.includes("/makelaar/") || (otherObjectId && otherObjectId !== currentObjectId)) continue;
     }
-    pushSrcset(img.getAttribute("srcset") || img.getAttribute("data-srcset"), candidates);
+    const srcCandidates = [img.currentSrc || null, img.getAttribute("src"), img.getAttribute("data-src")];
+    pushSrcset(img.getAttribute("srcset") || img.getAttribute("data-srcset"), srcCandidates);
+    for (const c of srcCandidates) if (c && FUNDA_CDN_RE.test(c)) addPhoto(c);
   }
-  for (const source of document.querySelectorAll("source")) {
-    pushSrcset(source.getAttribute("srcset") || source.getAttribute("data-srcset"), candidates);
+
+  // Pass 1/2 only run when Pass 0 found nothing of its own — i.e. this isn't
+  // a funda page. On a page where Pass 0 did find photos, running these too
+  // would just reintroduce the noise Pass 0 was built to exclude.
+  if (out.photos.length === beforeFundaPass) {
+    // Pass 1 — regex over the page's own HTML source. Listing pages embed the
+    // gallery in inline JSON/app state (before the lazy <img> tags swap in
+    // their real src), so the full list is usually in the markup already. The
+    // JSON escapes slashes as "\/" AND, in Next.js-style payloads, as
+    // "\u002F"; HTML attributes escape "&" as "&amp;". All three have to be
+    // unescaped or the URLs come out broken (or unmatched entirely).
+    const html = document.documentElement.outerHTML
+      .replace(/\\\//g, "/")
+      .replace(/\\u002[fF]/g, "/")
+      .replace(/&amp;/g, "&");
+    const IMG_URL_RE = /https?:\/\/[^"'\s)\\<>]+\.(?:jpe?g|png|webp|avif)(?:\?[^"'\s)\\<>]*)?/gi;
+    let m;
+    while ((m = IMG_URL_RE.exec(html)) !== null) {
+      addPhoto(m[0]);
+      if (out.photos.length >= PHOTO_SCAN_LIMIT) break;
+    }
+
+    // Pass 2 — the rendered DOM. Always run it (not just as a fallback): when
+    // the gallery/"Alle media" view is open, the full-size photos exist as real
+    // elements even though they never appeared in the served HTML.
+    const candidates = [];
+    for (const img of document.querySelectorAll("img")) {
+      candidates.push(img.getAttribute("src"), img.currentSrc || null);
+      for (const attr of img.attributes) {
+        // data-src, data-lazy-src, data-original, data-large, data-zoom-image…
+        if (attr.name.startsWith("data-") && /\.(?:jpe?g|png|webp|avif)/i.test(attr.value)) {
+          candidates.push(attr.value);
+        }
+      }
+      pushSrcset(img.getAttribute("srcset") || img.getAttribute("data-srcset"), candidates);
+    }
+    for (const source of document.querySelectorAll("source")) {
+      pushSrcset(source.getAttribute("srcset") || source.getAttribute("data-srcset"), candidates);
+    }
+    for (const anchor of document.querySelectorAll('a[href*=".jpg"], a[href*=".jpeg"], a[href*=".png"], a[href*=".webp"]')) {
+      candidates.push(anchor.getAttribute("href"));
+    }
+    // Galleries built from CSS background images.
+    for (const node of document.querySelectorAll('[style*="background"]')) {
+      const bg = node.getAttribute("style") || "";
+      const bm = bg.match(/url\((['"]?)(.*?)\1\)/i);
+      if (bm && /\.(?:jpe?g|png|webp|avif)/i.test(bm[2])) candidates.push(bm[2]);
+    }
+    for (const c of candidates) addPhoto(c);
   }
-  for (const anchor of document.querySelectorAll('a[href*=".jpg"], a[href*=".jpeg"], a[href*=".png"], a[href*=".webp"]')) {
-    candidates.push(anchor.getAttribute("href"));
-  }
-  // Galleries built from CSS background images.
-  for (const node of document.querySelectorAll('[style*="background"]')) {
-    const bg = node.getAttribute("style") || "";
-    const bm = bg.match(/url\((['"]?)(.*?)\1\)/i);
-    if (bm && /\.(?:jpe?g|png|webp|avif)/i.test(bm[2])) candidates.push(bm[2]);
-  }
-  for (const c of candidates) addPhoto(c);
 
   // --- collapse size/resolution variants + drop non-listing images -------
   // A single photo is usually served at several sizes (thumbnail + full, or
