@@ -303,7 +303,7 @@ export function PhotoPicker({
           // same height the hero photo does, flush at top and bottom. A wider
           // ratio than a plain photo (16:10) keeps the card from reading as a
           // tall, stretched block.
-          <div className="group/gallery relative mb-3.5 grid grid-cols-[1.7fr_1fr] gap-2 [aspect-ratio:2.4/1]">
+          <div className="mb-3.5 grid grid-cols-[1.7fr_1fr] gap-2 [aspect-ratio:2.4/1]">
             <div className="group relative h-full overflow-hidden rounded-xl border border-border bg-input-bg">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -373,36 +373,22 @@ export function PhotoPicker({
                 <div key={`empty-${i}`} className="h-full w-full rounded-xl border border-dashed border-border" />
               ))}
             </div>
-            {photos.length > 1 && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => stepHero(-1)}
-                  aria-label="Show previous photo as the hero"
-                  className={`absolute left-2 top-1/2 z-10 -translate-y-1/2 ${navCircleClass}`}
-                >
-                  ‹
-                </button>
-                <button
-                  type="button"
-                  onClick={() => stepHero(1)}
-                  aria-label="Show next photo as the hero"
-                  className={`absolute right-2 top-1/2 z-10 -translate-y-1/2 ${navCircleClass}`}
-                >
-                  ›
-                </button>
-              </>
-            )}
           </div>
         ) : (
           <div className="mb-3.5 flex [aspect-ratio:2.4/1] items-center justify-center rounded-xl border border-dashed border-border bg-input-bg text-sm text-muted">
             No photos yet
           </div>
         )}
-        <p className="mt-2 text-xs text-muted">
-          Click a photo to view it full-size, hover and click × to drop it, or Reorder to drag photos into
-          order — they appear in the client PDF in this order.
-        </p>
+        {main && photos.length > 1 && (
+          <div className="flex items-center justify-center gap-3">
+            <button type="button" onClick={() => stepHero(-1)} aria-label="Show previous photo as the hero" className={navCircleClass}>
+              ‹
+            </button>
+            <button type="button" onClick={() => stepHero(1)} aria-label="Show next photo as the hero" className={navCircleClass}>
+              ›
+            </button>
+          </div>
+        )}
       </div>
     );
   }
