@@ -435,25 +435,63 @@ function extractListing() {
     }
   };
 
-  // Pass 0 — funda's own media CDN, scoped to this listing. Every funda
-  // gallery photo is served from cloud.funda.nl/valentina_media/, and
-  // nothing else on the page is — so on a funda page this is a strictly
-  // more precise source than the broad scans below: an <img> for
-  // "Vergelijkbare panden" (recommended listings) or the broker's portrait
-  // sits inside a link to a DIFFERENT object- id or to /makelaar/, which
-  // this excludes by walking up to the image's closest <a href>. A live DOM
-  // query, so it also picks up the full-size photos that only exist once
-  // "Alle media" is opened. Non-funda sites (or a funda page that's moved
-  // off this CDN) simply match nothing here and fall through to Pass 1/2
-  // below unaffected.
+  // Pass 0 — funda's own media CDN, scoped to the hero photo block. Every
+  // funda gallery photo is served from cloud.funda.nl/valentina_media/, and
+  // nothing else on the page is, but the CDN check alone isn't enough:
+  // "Vergelijkbaar in de buurt" (similar nearby listings) further down the
+  // page is served from the same CDN, and its cards aren't reliably wrapped
+  // in a real <a href> (often a JS-driven carousel instead), so link-based
+  // exclusion alone lets them through. #overzicht (the "Alle media"
+  // lightbox) would scope this perfectly, but it doesn't exist in the DOM
+  // until that view is actually opened — most captures happen straight from
+  // the listing page, so it can't be the primary mechanism.
+  //
+  // Instead: find the "Foto's N" caption that sits directly under the hero
+  // grid (present on the plain listing page) and walk up from it until we
+  // reach an ancestor that also contains that grid's own <img> elements —
+  // that ancestor is the whole hero block. Everything below it in the page
+  // (description, footer, similar-listings) is a SIBLING of that block, not
+  // a descendant, so scoping the scan to it excludes them structurally,
+  // regardless of whether they're link-wrapped. The CDN check and the
+  // link-based exclusion below both still run inside it, as a second layer
+  // — cheap, and it's what still filters out an agent photo or a stray icon
+  // that happens to sit inside the block itself.
   const FUNDA_CDN_RE = /^https:\/\/cloud\.funda\.nl\/valentina_media\//;
   const currentObjectId = (location.pathname.match(/\/object-(\d+)/) || [])[1] || null;
+
+  const findHeroBlock = () => {
+    const countRe = /^foto['’ʼ]?s?\s*\d{1,3}$/i;
+    let countEl = null;
+    for (const el of document.querySelectorAll("button, a, span, div, p")) {
+      const text = (el.textContent || "").trim();
+      if (text && text.length < 30 && countRe.test(text)) { countEl = el; break; }
+    }
+    if (!countEl) return null;
+    let node = countEl;
+    for (let i = 0; i < 6 && node; i++) {
+      if (node.querySelectorAll("img").length >= 2) return node;
+      node = node.parentElement;
+    }
+    return null;
+  };
+  // Gated behind a cheap hostname check: the walk inside findHeroBlock()
+  // reads .textContent on every button/a/span/div/p on the page, which
+  // would otherwise run in full on every popup open, on any site — the same
+  // kind of unconditional expensive-scan mistake fixed above for the
+  // closest("a[href]") walk. On a non-funda page it's simply skipped.
+  const isFunda = /(^|\.)funda\.nl$/i.test(location.hostname);
+  // Falls back to the whole document when the hero block can't be found
+  // (funda changed its markup, or this isn't a funda page at all) — the CDN
+  // + link-exclusion checks below still apply, same as before this block
+  // existed, so this degrades to the old behaviour rather than capturing
+  // nothing.
+  const scanRoot = (isFunda && findHeroBlock()) || document;
+
   const beforeFundaPass = out.photos.length;
-  for (const img of document.querySelectorAll("img")) {
+  for (const img of scanRoot.querySelectorAll("img")) {
     // Cheap string tests first — closest("a[href]") walks the ancestor
     // chain, so it must only run for images that already look like a funda
-    // gallery photo, not for every <img> on the page (most pages have many
-    // that never match; walking up from each one is real, avoidable cost).
+    // gallery photo, not for every <img> in scanRoot.
     const srcCandidates = [img.currentSrc || null, img.getAttribute("src"), img.getAttribute("data-src")];
     pushSrcset(img.getAttribute("srcset") || img.getAttribute("data-srcset"), srcCandidates);
     const matches = srcCandidates.filter((c) => c && FUNDA_CDN_RE.test(c));
