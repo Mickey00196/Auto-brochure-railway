@@ -173,10 +173,15 @@ function extractListing() {
     return hit ? hit[1] : null;
   };
   // Distances keep their label ("NS-station" + "800 m" → "NS-station 800 m").
+  // A note field exists to carry a distance — a matched value with no digit
+  // in it at all (e.g. "In de omgeving" rendering "Bushalte" as a bare tag,
+  // not a labeled "Bushalte 200 m" row) isn't a distance and must not be
+  // returned as one; better an honest blank than a category word standing
+  // in for a figure it never carried (§24).
   const fieldNote = (...labels) => {
     const hit = findPair(labels);
-    if (!hit) return null;
-    return /\d/.test(hit[1]) && hit[1].length < 40 ? `${hit[0].replace(/:$/, "")} ${hit[1]}` : hit[1];
+    if (!hit || !/\d/.test(hit[1])) return null;
+    return hit[1].length < 40 ? `${hit[0].replace(/:$/, "")} ${hit[1]}` : hit[1];
   };
 
   // --- areas ------------------------------------------------------------
