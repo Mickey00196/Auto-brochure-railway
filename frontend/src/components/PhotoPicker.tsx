@@ -7,10 +7,89 @@ import { fieldInputClass } from "@/components/ui";
 const pillDarkClass =
   "rounded-full bg-[rgba(30,58,138,0.72)] px-2.5 py-1 text-[11px] font-semibold text-white";
 
+/** Just looking through the captured photos, full-size, one at a time —
+ * completely separate from reordering. Opened by clicking any photo (not the
+ * × or the Reorder pill); ‹ › and arrow keys move through them, nothing here
+ * changes the saved order. */
+function PhotoViewer({
+  photos,
+  startIndex,
+  onClose,
+}: {
+  photos: string[];
+  startIndex: number;
+  onClose: () => void;
+}) {
+  const [index, setIndex] = useState(startIndex);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft") setIndex((i) => (i - 1 + photos.length) % photos.length);
+      else if (e.key === "ArrowRight") setIndex((i) => (i + 1) % photos.length);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose, photos.length]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      onClick={onClose}
+      role="presentation"
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-lg text-white hover:bg-white/20"
+      >
+        ×
+      </button>
+      <span className="absolute left-4 top-4 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white">
+        {index + 1} / {photos.length}
+      </span>
+
+      {photos.length > 1 && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIndex((i) => (i - 1 + photos.length) % photos.length);
+          }}
+          aria-label="Previous photo"
+          className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-2xl text-white hover:bg-white/20 sm:left-6"
+        >
+          ‹
+        </button>
+      )}
+      {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary captured URLs, no fixed domain to allowlist */}
+      <img
+        src={photos[index]}
+        alt=""
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[85vh] max-w-[90vw] rounded-lg object-contain"
+      />
+      {photos.length > 1 && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIndex((i) => (i + 1) % photos.length);
+          }}
+          aria-label="Next photo"
+          className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-2xl text-white hover:bg-white/20 sm:right-6"
+        >
+          ›
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** Drag-and-drop reorder, all photos at once — opened from the "Reorder"
- * pill or by clicking the "+N" overflow thumbnail. Plain HTML5 DnD (no
- * library): drag over a tile live-swaps it into that slot, drop just ends
- * the gesture. */
+ * pill. Plain HTML5 DnD (no library): drag over a tile live-swaps it into
+ * that slot, drop just ends the gesture. */
 function ReorderModal({
   photos,
   broken,
@@ -129,6 +208,7 @@ export function PhotoPicker({
   const [checking, setChecking] = useState(false);
   const [removedDupes, setRemovedDupes] = useState<{ count: number; previous: string } | null>(null);
   const [reorderOpen, setReorderOpen] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const checkedRef = useRef<string>("");
 
   const photos = value
@@ -252,6 +332,9 @@ export function PhotoPicker({
     return (
       <div>
         {statusRow}
+        {viewerIndex !== null && (
+          <PhotoViewer photos={photos} startIndex={viewerIndex} onClose={() => setViewerIndex(null)} />
+        )}
         {reorderOpen && (
           <ReorderModal
             photos={photos}
@@ -262,16 +345,22 @@ export function PhotoPicker({
           />
         )}
         {main ? (
-          <div className="mb-3.5 grid grid-cols-[1.7fr_1fr] gap-2">
-            <div className="relative aspect-[16/10] overflow-hidden rounded-xl border border-border bg-input-bg">
+          // Fixed aspect ratio on the row itself, with both columns stretched
+          // to h-full: the thumbnail 2x2 grid used to size itself off its own
+          // (narrower) column width via aspect-square, so its total height
+          // rarely matched the hero photo's — now it always fills exactly the
+          // same height the hero photo does, flush at top and bottom.
+          <div className="mb-3.5 grid grid-cols-[1.7fr_1fr] gap-2 [aspect-ratio:16/10]">
+            <div className="group relative h-full overflow-hidden rounded-xl border border-border bg-input-bg">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={main}
                 alt=""
                 onError={() => setBroken((b) => ({ ...b, [main]: true }))}
-                className="h-full w-full object-cover"
+                onClick={() => setViewerIndex(0)}
+                className="h-full w-full cursor-pointer object-cover"
               />
-              <div className={`absolute bottom-2.5 left-2.5 ${pillDarkClass}`}>
+              <div className={`pointer-events-none absolute bottom-2.5 left-2.5 ${pillDarkClass}`}>
                 {photos.length} photo{photos.length === 1 ? "" : "s"}
               </div>
               <div className="absolute right-2.5 top-2.5 flex gap-1.5">
@@ -283,13 +372,14 @@ export function PhotoPicker({
                 </button>
               </div>
             </div>
-            <div className="grid grid-cols-2 grid-rows-2 gap-2">
+            <div className="grid h-full grid-cols-2 grid-rows-2 gap-2">
               {thumbs.map((src, i) => {
                 const isOverflowTile = i === thumbs.length - 1 && overflow > 0;
+                const photoIndex = i + 1; // offset past the hero photo (index 0)
                 return (
                   <div
                     key={src}
-                    className={`group relative aspect-square overflow-hidden rounded-[10px] border ${
+                    className={`group relative h-full w-full overflow-hidden rounded-[10px] border ${
                       broken[src] ? "border-amber-400 bg-amber-50" : "border-border bg-input-bg"
                     }`}
                   >
@@ -299,34 +389,34 @@ export function PhotoPicker({
                       alt=""
                       loading="lazy"
                       onError={() => setBroken((b) => ({ ...b, [src]: true }))}
-                      className="h-full w-full object-cover"
+                      onClick={() => setViewerIndex(photoIndex)}
+                      className="h-full w-full cursor-pointer object-cover"
                     />
-                    {isOverflowTile ? (
-                      <button
-                        type="button"
-                        onClick={() => setReorderOpen(true)}
-                        aria-label={`Show and reorder all ${photos.length} photos`}
-                        className="absolute inset-0 flex items-center justify-center bg-[rgba(30,58,138,0.6)] text-sm font-bold text-white hover:bg-[rgba(30,58,138,0.75)]"
-                      >
+                    {isOverflowTile && (
+                      // pointer-events-none: clicks pass through to the <img> behind it,
+                      // which already opens the viewer at this same photo.
+                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[rgba(30,58,138,0.6)] text-sm font-bold text-white">
                         +{overflow}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => remove(src)}
-                        aria-label="Remove this photo"
-                        title="Remove this photo"
-                        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-sm font-bold leading-none text-white opacity-0 transition group-hover:opacity-100 focus:opacity-100"
-                      >
-                        ×
-                      </button>
+                      </div>
                     )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        remove(src);
+                      }}
+                      aria-label="Remove this photo"
+                      title="Remove this photo"
+                      className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-sm font-bold leading-none text-white opacity-0 transition group-hover:opacity-100 focus:opacity-100"
+                    >
+                      ×
+                    </button>
                   </div>
                 );
               })}
               {/* pad empty thumbnail slots so the 2x2 grid stays intact with < 4 extra photos */}
               {Array.from({ length: Math.max(0, 4 - thumbs.length) }).map((_, i) => (
-                <div key={`empty-${i}`} className="aspect-square rounded-[10px] border border-dashed border-border" />
+                <div key={`empty-${i}`} className="h-full w-full rounded-[10px] border border-dashed border-border" />
               ))}
             </div>
           </div>
@@ -337,8 +427,8 @@ export function PhotoPicker({
         )}
         {urlRow}
         <p className="mt-2 text-xs text-muted">
-          Hover a thumbnail and click × to drop it, or Reorder to drag photos into order — they appear in the
-          client PDF in this order.
+          Click a photo to view it full-size, hover and click × to drop it, or Reorder to drag photos into
+          order — they appear in the client PDF in this order.
         </p>
       </div>
     );
