@@ -305,8 +305,15 @@ export function PhotoPicker({
           // ratio, so the gallery's height visibly changed photo to photo.
           // 440px matches what the 2.4:1 ratio worked out to at this card's
           // typical width, but as a plain fixed height it can't drift.
-          <div className="mb-3.5 grid h-[440px] grid-cols-[1.7fr_1fr] gap-2">
-            <div className="group relative h-full overflow-hidden rounded-xl border border-border bg-input-bg">
+          //
+          // min-h-0 on the container AND both grid items, plus overflow-hidden
+          // here: grid items default to min-height:auto, which refuses to
+          // shrink below the content's natural size — a tall/portrait photo
+          // could still blow this row out past 440px (and, since nothing
+          // clipped it, spill visibly over whatever came next on the page)
+          // even with an explicit height set. min-h-0 overrides that default.
+          <div className="mb-3.5 grid h-[440px] min-h-0 grid-cols-[1.7fr_1fr] gap-2 overflow-hidden">
+            <div className="group relative h-full min-h-0 overflow-hidden rounded-xl border border-border bg-input-bg">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={main}
@@ -329,13 +336,13 @@ export function PhotoPicker({
                 </button>
               </div>
             </div>
-            <div className="grid h-full grid-cols-2 grid-rows-2 gap-2">
+            <div className="grid h-full min-h-0 grid-cols-2 grid-rows-2 gap-2">
               {thumbs.map(({ src, i: photoIndex }, i) => {
                 const isOverflowTile = i === thumbs.length - 1 && overflow > 0;
                 return (
                   <div
                     key={src}
-                    className={`group relative h-full w-full overflow-hidden rounded-xl border ${
+                    className={`group relative h-full w-full min-h-0 overflow-hidden rounded-xl border ${
                       broken[src] ? "border-amber-400 bg-amber-50" : "border-border bg-input-bg"
                     }`}
                   >
