@@ -339,6 +339,67 @@ export function BuildingForm({
         <PhotoPicker value={form.photos} onChange={(next) => update("photos", next)} variant="gallery" />
       </Card>
 
+      {!isEdit && (
+      <Card>
+        {hasIdentity ? (
+          <>
+            <h2 className="mb-0.5 text-[22px] font-bold tracking-tight">{form.name || form.address}</h2>
+            {form.address && form.name && form.address !== form.name && (
+              <p className="mb-4 text-sm text-muted">{form.address}</p>
+            )}
+          </>
+        ) : (
+          <h2 className="mb-1 text-lg font-semibold">Executive summary — lease terms</h2>
+        )}
+        <p className="mb-4 text-sm text-muted">
+          Filled in by the Chrome extension where the listing states them. Saving creates the
+          building&apos;s available space with these terms — leave empty to add spaces by hand later
+          instead.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className={labelClass}>
+            <span className="mb-1.5 block">Available area approx. (m²)</span>
+            <input type="number" value={form.availableAreaM2} onChange={(e) => update("availableAreaM2", e.target.value)} placeholder="Office space on offer" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1.5 block">Smallest unit (m²)</span>
+            <input type="number" value={form.minDivisibleAreaM2} onChange={(e) => update("minDivisibleAreaM2", e.target.value)} placeholder="e.g. 280 — part-floor leasing" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1.5 block">Parking ratio</span>
+            <input value={form.parkingRatio} onChange={(e) => update("parkingRatio", e.target.value)} placeholder="1:80" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1.5 block">Rental price office (€/m²/year)</span>
+            <input type="number" value={form.rentEurPerM2Year} onChange={(e) => update("rentEurPerM2Year", e.target.value)} placeholder="165" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1.5 block">Service charges (€/m²/year)</span>
+            <input type="number" value={form.serviceChargeEurPerM2Year} onChange={(e) => update("serviceChargeEurPerM2Year", e.target.value)} placeholder="45" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1.5 block">Rental price parking space (€/space/year)</span>
+            <input type="number" value={form.parkingPriceEurYear} onChange={(e) => update("parkingPriceEurYear", e.target.value)} placeholder="750" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1.5 block">Available</span>
+            <input value={form.availability} onChange={(e) => update("availability", e.target.value)} placeholder="Per direct / in overleg" className={inputClass} />
+          </label>
+        </div>
+
+        <div className="mt-6 border-t border-border pt-5">
+          <div className="mb-3.5 flex items-baseline justify-between gap-4">
+            <span className="text-xs font-bold uppercase tracking-wide text-muted">Amenities</span>
+            <span className="text-xs text-muted">Shown on the client brochure as tagged</span>
+          </div>
+          <AmenityMultiSelect
+            value={form.buildingAmenities}
+            onChange={(next) => update("buildingAmenities", next)}
+          />
+        </div>
+      </Card>
+      )}
+
       <Card>
         <h2 className="mb-4 text-lg font-semibold">Building</h2>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -401,67 +462,6 @@ export function BuildingForm({
           </label>
         </div>
       </Card>
-
-      {!isEdit && (
-      <Card>
-        {hasIdentity ? (
-          <>
-            <h2 className="mb-0.5 text-[22px] font-bold tracking-tight">{form.name || form.address}</h2>
-            {form.address && form.name && form.address !== form.name && (
-              <p className="mb-4 text-sm text-muted">{form.address}</p>
-            )}
-          </>
-        ) : (
-          <h2 className="mb-1 text-lg font-semibold">Executive summary — lease terms</h2>
-        )}
-        <p className="mb-4 text-sm text-muted">
-          Filled in by the Chrome extension where the listing states them. Saving creates the
-          building&apos;s available space with these terms — leave empty to add spaces by hand later
-          instead.
-        </p>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className={labelClass}>
-            <span className="mb-1.5 block">Available area approx. (m²)</span>
-            <input type="number" value={form.availableAreaM2} onChange={(e) => update("availableAreaM2", e.target.value)} placeholder="Office space on offer" className={inputClass} />
-          </label>
-          <label className={labelClass}>
-            <span className="mb-1.5 block">Smallest unit (m²)</span>
-            <input type="number" value={form.minDivisibleAreaM2} onChange={(e) => update("minDivisibleAreaM2", e.target.value)} placeholder="e.g. 280 — part-floor leasing" className={inputClass} />
-          </label>
-          <label className={labelClass}>
-            <span className="mb-1.5 block">Parking ratio</span>
-            <input value={form.parkingRatio} onChange={(e) => update("parkingRatio", e.target.value)} placeholder="1:80" className={inputClass} />
-          </label>
-          <label className={labelClass}>
-            <span className="mb-1.5 block">Rental price office (€/m²/year)</span>
-            <input type="number" value={form.rentEurPerM2Year} onChange={(e) => update("rentEurPerM2Year", e.target.value)} placeholder="165" className={inputClass} />
-          </label>
-          <label className={labelClass}>
-            <span className="mb-1.5 block">Service charges (€/m²/year)</span>
-            <input type="number" value={form.serviceChargeEurPerM2Year} onChange={(e) => update("serviceChargeEurPerM2Year", e.target.value)} placeholder="45" className={inputClass} />
-          </label>
-          <label className={labelClass}>
-            <span className="mb-1.5 block">Rental price parking space (€/space/year)</span>
-            <input type="number" value={form.parkingPriceEurYear} onChange={(e) => update("parkingPriceEurYear", e.target.value)} placeholder="750" className={inputClass} />
-          </label>
-          <label className={labelClass}>
-            <span className="mb-1.5 block">Available</span>
-            <input value={form.availability} onChange={(e) => update("availability", e.target.value)} placeholder="Per direct / in overleg" className={inputClass} />
-          </label>
-        </div>
-
-        <div className="mt-6 border-t border-border pt-5">
-          <div className="mb-3.5 flex items-baseline justify-between gap-4">
-            <span className="text-xs font-bold uppercase tracking-wide text-muted">Amenities</span>
-            <span className="text-xs text-muted">Shown on the client brochure as tagged</span>
-          </div>
-          <AmenityMultiSelect
-            value={form.buildingAmenities}
-            onChange={(next) => update("buildingAmenities", next)}
-          />
-        </div>
-      </Card>
-      )}
 
       <Card>
         <h2 className="mb-1 text-lg font-semibold">Accessibility</h2>
