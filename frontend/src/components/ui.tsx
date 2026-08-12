@@ -6,7 +6,7 @@ import Link from "next/link";
 // one, so it stays in one place instead of drifting per-form.
 export const fieldInputClass =
   "w-full rounded-[10px] border border-transparent bg-input-bg px-3.5 py-2.5 text-sm text-foreground placeholder:text-placeholder transition focus:border-accent focus:bg-surface focus:outline-none";
-export const fieldLabelClass = "text-sm font-semibold";
+export const fieldLabelClass = "text-sm font-medium";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
