@@ -485,12 +485,19 @@ function extractListing() {
   // kind of unconditional expensive-scan mistake fixed above for the
   // closest("a[href]") walk. On a non-funda page it's simply skipped.
   const isFunda = /(^|\.)funda\.nl$/i.test(location.hostname);
-  // Falls back to the whole document when the hero block can't be found
-  // (funda changed its markup, or this isn't a funda page at all) — the CDN
-  // + link-exclusion checks below still apply, same as before this block
-  // existed, so this degrades to the old behaviour rather than capturing
-  // nothing.
-  const scanRoot = (isFunda && findHeroBlock()) || document;
+  // Preferred: funda's own slide container for the photo viewer — a direct
+  // class name, so this is both cheaper and more reliable than walking up
+  // from the "Foto's N" caption. Only the BEM class itself, not the
+  // "absolute inset-0" utility classes alongside it, since those are layout
+  // helpers likely reused all over the page and carry no identity of their
+  // own. Falls back to the caption-walk, then to the whole document, if
+  // funda ever renames or restructures this (the CDN + link-exclusion
+  // checks below still apply either way, so this degrades to the old
+  // behaviour rather than capturing nothing).
+  const scanRoot =
+    (isFunda && document.querySelector(".media-viewer-fotos__slides")) ||
+    (isFunda && findHeroBlock()) ||
+    document;
 
   const beforeFundaPass = out.photos.length;
   for (const img of scanRoot.querySelectorAll("img")) {
