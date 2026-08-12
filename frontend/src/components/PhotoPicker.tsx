@@ -1,11 +1,112 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PROXY_BASE_URL } from "@/lib/api";
 import { fieldInputClass } from "@/components/ui";
 
 const pillDarkClass =
   "rounded-full bg-[rgba(30,58,138,0.72)] px-2.5 py-1 text-[11px] font-semibold text-white";
+
+/** Drag-and-drop reorder, all photos at once — opened from the "Reorder"
+ * pill or by clicking the "+N" overflow thumbnail. Plain HTML5 DnD (no
+ * library): drag over a tile live-swaps it into that slot, drop just ends
+ * the gesture. */
+function ReorderModal({
+  photos,
+  broken,
+  onReorder,
+  onRemove,
+  onClose,
+}: {
+  photos: string[];
+  broken: Record<string, boolean>;
+  onReorder: (next: string[]) => void;
+  onRemove: (url: string) => void;
+  onClose: () => void;
+}) {
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Reorder photos"
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-surface p-6 shadow-lg"
+      >
+        <div className="mb-1 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">Reorder photos</h2>
+            <p className="mt-1 text-sm text-muted">
+              Drag a photo to move it. This is the order they&apos;ll appear in the client PDF.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-border px-3 py-1.5 text-sm font-semibold hover:bg-input-bg"
+          >
+            Done
+          </button>
+        </div>
+
+        <div className="mt-5 grid grid-cols-3 gap-3 sm:grid-cols-4">
+          {photos.map((src, i) => (
+            <div
+              key={src}
+              draggable
+              onDragStart={(e) => {
+                setDragIndex(i);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (dragIndex === null || dragIndex === i) return;
+                const next = [...photos];
+                const [moved] = next.splice(dragIndex, 1);
+                next.splice(i, 0, moved);
+                setDragIndex(i);
+                onReorder(next);
+              }}
+              onDragEnd={() => setDragIndex(null)}
+              className={`group relative aspect-square cursor-grab overflow-hidden rounded-[10px] border active:cursor-grabbing ${
+                broken[src] ? "border-amber-400 bg-amber-50" : "border-border bg-input-bg"
+              } ${dragIndex === i ? "opacity-50" : ""}`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary captured URLs, no fixed domain to allowlist */}
+              <img src={src} alt="" draggable={false} className="h-full w-full object-cover" />
+              <span className="absolute left-1 top-1 rounded bg-black/55 px-1.5 text-[10px] font-semibold text-white">
+                {i + 1}
+              </span>
+              <button
+                type="button"
+                onClick={() => onRemove(src)}
+                aria-label="Remove this photo"
+                title="Remove this photo"
+                className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-sm font-bold leading-none text-white opacity-0 transition group-hover:opacity-100 focus:opacity-100"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /** The captured gallery, as a reviewable selection rather than a wall of
  * comma-separated text: hover a photo to drop it, spot a broken one, or paste
@@ -27,7 +128,7 @@ export function PhotoPicker({
   const [broken, setBroken] = useState<Record<string, boolean>>({});
   const [checking, setChecking] = useState(false);
   const [removedDupes, setRemovedDupes] = useState<{ count: number; previous: string } | null>(null);
-  const [reordering, setReordering] = useState(false);
+  const [reorderOpen, setReorderOpen] = useState(false);
   const checkedRef = useRef<string>("");
 
   const photos = value
@@ -39,14 +140,6 @@ export function PhotoPicker({
 
   function remove(url: string) {
     commit(photos.filter((p) => p !== url));
-  }
-
-  function move(index: number, delta: number) {
-    const target = index + delta;
-    if (target < 0 || target >= photos.length) return;
-    const next = [...photos];
-    [next[index], next[target]] = [next[target], next[index]];
-    commit(next);
   }
 
   function add() {
@@ -156,59 +249,18 @@ export function PhotoPicker({
     const thumbs = rest.slice(0, 4);
     const overflow = rest.length - thumbs.length;
 
-    function Thumb({ src, index, extra }: { src: string; index: number; extra?: ReactNode }) {
-      return (
-        <div
-          className={`group relative aspect-square overflow-hidden rounded-[10px] border ${
-            broken[src] ? "border-amber-400 bg-amber-50" : "border-border bg-input-bg"
-          }`}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary captured URLs, no fixed domain to allowlist */}
-          <img
-            src={src}
-            alt=""
-            loading="lazy"
-            onError={() => setBroken((b) => ({ ...b, [src]: true }))}
-            className="h-full w-full object-cover"
-          />
-          {extra}
-          {reordering ? (
-            <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1 bg-black/55 py-1">
-              <button
-                type="button"
-                onClick={() => move(index, -1)}
-                aria-label="Move earlier"
-                className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-xs text-white hover:bg-white/35"
-              >
-                ‹
-              </button>
-              <button
-                type="button"
-                onClick={() => move(index, 1)}
-                aria-label="Move later"
-                className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-xs text-white hover:bg-white/35"
-              >
-                ›
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => remove(src)}
-              aria-label="Remove this photo"
-              title="Remove this photo"
-              className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-sm font-bold leading-none text-white opacity-0 transition group-hover:opacity-100 focus:opacity-100"
-            >
-              ×
-            </button>
-          )}
-        </div>
-      );
-    }
-
     return (
       <div>
         {statusRow}
+        {reorderOpen && (
+          <ReorderModal
+            photos={photos}
+            broken={broken}
+            onReorder={commit}
+            onRemove={remove}
+            onClose={() => setReorderOpen(false)}
+          />
+        )}
         {main ? (
           <div className="mb-3.5 grid grid-cols-[1.7fr_1fr] gap-2">
             <div className="relative aspect-[16/10] overflow-hidden rounded-xl border border-border bg-input-bg">
@@ -223,39 +275,55 @@ export function PhotoPicker({
                 {photos.length} photo{photos.length === 1 ? "" : "s"}
               </div>
               <div className="absolute right-2.5 top-2.5 flex gap-1.5">
-                <button type="button" onClick={() => setReordering((r) => !r)} className={pillDarkClass}>
-                  {reordering ? "Done" : "Reorder"}
+                <button type="button" onClick={() => setReorderOpen(true)} className={pillDarkClass}>
+                  Reorder
                 </button>
                 <button type="button" onClick={() => commit([])} className={pillDarkClass}>
                   Remove all
                 </button>
               </div>
-              {reordering && rest.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => move(0, 1)}
-                  aria-label="Move this photo later"
-                  className={`absolute bottom-2.5 right-2.5 ${pillDarkClass}`}
-                >
-                  Move later ›
-                </button>
-              )}
             </div>
             <div className="grid grid-cols-2 grid-rows-2 gap-2">
-              {thumbs.map((src, i) => (
-                <Thumb
-                  key={src}
-                  src={src}
-                  index={i + 1}
-                  extra={
-                    i === thumbs.length - 1 && overflow > 0 ? (
-                      <div className="absolute inset-0 flex items-center justify-center bg-[rgba(30,58,138,0.6)] text-sm font-bold text-white">
+              {thumbs.map((src, i) => {
+                const isOverflowTile = i === thumbs.length - 1 && overflow > 0;
+                return (
+                  <div
+                    key={src}
+                    className={`group relative aspect-square overflow-hidden rounded-[10px] border ${
+                      broken[src] ? "border-amber-400 bg-amber-50" : "border-border bg-input-bg"
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary captured URLs, no fixed domain to allowlist */}
+                    <img
+                      src={src}
+                      alt=""
+                      loading="lazy"
+                      onError={() => setBroken((b) => ({ ...b, [src]: true }))}
+                      className="h-full w-full object-cover"
+                    />
+                    {isOverflowTile ? (
+                      <button
+                        type="button"
+                        onClick={() => setReorderOpen(true)}
+                        aria-label={`Show and reorder all ${photos.length} photos`}
+                        className="absolute inset-0 flex items-center justify-center bg-[rgba(30,58,138,0.6)] text-sm font-bold text-white hover:bg-[rgba(30,58,138,0.75)]"
+                      >
                         +{overflow}
-                      </div>
-                    ) : undefined
-                  }
-                />
-              ))}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => remove(src)}
+                        aria-label="Remove this photo"
+                        title="Remove this photo"
+                        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-sm font-bold leading-none text-white opacity-0 transition group-hover:opacity-100 focus:opacity-100"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
               {/* pad empty thumbnail slots so the 2x2 grid stays intact with < 4 extra photos */}
               {Array.from({ length: Math.max(0, 4 - thumbs.length) }).map((_, i) => (
                 <div key={`empty-${i}`} className="aspect-square rounded-[10px] border border-dashed border-border" />
@@ -269,8 +337,8 @@ export function PhotoPicker({
         )}
         {urlRow}
         <p className="mt-2 text-xs text-muted">
-          Hover a thumbnail and click × to drop it, or Reorder to move photos — they appear in the client PDF in
-          this order.
+          Hover a thumbnail and click × to drop it, or Reorder to drag photos into order — they appear in the
+          client PDF in this order.
         </p>
       </div>
     );
