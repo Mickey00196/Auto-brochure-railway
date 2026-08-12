@@ -3,89 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { PROXY_BASE_URL } from "@/lib/api";
 import { fieldInputClass } from "@/components/ui";
+import { PhotoLightbox } from "@/components/PhotoLightbox";
 
 const pillDarkClass =
   "rounded-full bg-[rgba(30,58,138,0.72)] px-2.5 py-1 text-[11px] font-semibold text-white";
-
-/** Just looking through the captured photos, full-size, one at a time —
- * completely separate from reordering. Opened by clicking any photo (not the
- * × or the Reorder pill); ‹ › and arrow keys move through them, nothing here
- * changes the saved order. */
-function PhotoViewer({
-  photos,
-  startIndex,
-  onClose,
-}: {
-  photos: string[];
-  startIndex: number;
-  onClose: () => void;
-}) {
-  const [index, setIndex] = useState(startIndex);
-
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-      else if (e.key === "ArrowLeft") setIndex((i) => (i - 1 + photos.length) % photos.length);
-      else if (e.key === "ArrowRight") setIndex((i) => (i + 1) % photos.length);
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose, photos.length]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-      onClick={onClose}
-      role="presentation"
-    >
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close"
-        className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-lg text-white hover:bg-white/20"
-      >
-        ×
-      </button>
-      <span className="absolute left-4 top-4 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white">
-        {index + 1} / {photos.length}
-      </span>
-
-      {photos.length > 1 && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setIndex((i) => (i - 1 + photos.length) % photos.length);
-          }}
-          aria-label="Previous photo"
-          className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-2xl text-white hover:bg-white/20 sm:left-6"
-        >
-          ‹
-        </button>
-      )}
-      {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary captured URLs, no fixed domain to allowlist */}
-      <img
-        src={photos[index]}
-        alt=""
-        onClick={(e) => e.stopPropagation()}
-        className="max-h-[85vh] max-w-[90vw] rounded-lg object-contain"
-      />
-      {photos.length > 1 && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setIndex((i) => (i + 1) % photos.length);
-          }}
-          aria-label="Next photo"
-          className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-2xl text-white hover:bg-white/20 sm:right-6"
-        >
-          ›
-        </button>
-      )}
-    </div>
-  );
-}
+const scrimTopClass =
+  "pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/40 to-transparent";
+const scrimBottomClass =
+  "pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-black/40 to-transparent";
+const hoverImgClass = "transition duration-150 group-hover:brightness-105 group-hover:scale-[1.02]";
 
 /** Drag-and-drop reorder, all photos at once — opened from the "Reorder"
  * pill. Plain HTML5 DnD (no library): drag over a tile live-swaps it into
@@ -161,7 +87,7 @@ function ReorderModal({
                 onReorder(next);
               }}
               onDragEnd={() => setDragIndex(null)}
-              className={`group relative aspect-square cursor-grab overflow-hidden rounded-[10px] border active:cursor-grabbing ${
+              className={`group relative aspect-square cursor-grab overflow-hidden rounded-xl border active:cursor-grabbing ${
                 broken[src] ? "border-amber-400 bg-amber-50" : "border-border bg-input-bg"
               } ${dragIndex === i ? "opacity-50" : ""}`}
             >
@@ -266,6 +192,25 @@ export function PhotoPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the URL list itself
   }, [value]);
 
+  const dedupeToast = removedDupes && (
+    <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-success-bg px-3 py-1.5 text-xs font-medium text-success-foreground">
+      <span>
+        {`Removed ${removedDupes.count} duplicate${removedDupes.count === 1 ? "" : "s"} automatically`}
+      </span>
+      <button
+        type="button"
+        onClick={() => {
+          checkedRef.current = removedDupes.previous;
+          onChange(removedDupes.previous);
+          setRemovedDupes(null);
+        }}
+        className="font-semibold underline decoration-success-foreground/40 underline-offset-2 hover:decoration-success-foreground"
+      >
+        Undo
+      </button>
+    </div>
+  );
+
   const statusRow = (
     <div className="mb-2 flex flex-wrap items-center gap-3 text-xs">
       {brokenCount > 0 && (
@@ -278,22 +223,6 @@ export function PhotoPicker({
         </button>
       )}
       {checking && <span className="text-muted">Checking for duplicates…</span>}
-      {removedDupes && (
-        <span className="text-muted">
-          {`Removed ${removedDupes.count} duplicate${removedDupes.count === 1 ? "" : "s"}`}{" "}
-          <button
-            type="button"
-            onClick={() => {
-              checkedRef.current = removedDupes.previous;
-              onChange(removedDupes.previous);
-              setRemovedDupes(null);
-            }}
-            className="underline hover:text-foreground"
-          >
-            Undo
-          </button>
-        </span>
-      )}
     </div>
   );
 
@@ -332,9 +261,13 @@ export function PhotoPicker({
     return (
       <div>
         {statusRow}
-        {viewerIndex !== null && (
-          <PhotoViewer photos={photos} startIndex={viewerIndex} onClose={() => setViewerIndex(null)} />
-        )}
+        {dedupeToast}
+        <PhotoLightbox
+          photos={photos.map((url) => ({ url }))}
+          initialIndex={viewerIndex ?? 0}
+          open={viewerIndex !== null}
+          onClose={() => setViewerIndex(null)}
+        />
         {reorderOpen && (
           <ReorderModal
             photos={photos}
@@ -358,8 +291,10 @@ export function PhotoPicker({
                 alt=""
                 onError={() => setBroken((b) => ({ ...b, [main]: true }))}
                 onClick={() => setViewerIndex(0)}
-                className="h-full w-full cursor-pointer object-cover"
+                className={`h-full w-full cursor-pointer object-cover ${hoverImgClass}`}
               />
+              <div className={scrimTopClass} />
+              <div className={scrimBottomClass} />
               <div className={`pointer-events-none absolute bottom-2.5 left-2.5 ${pillDarkClass}`}>
                 {photos.length} photo{photos.length === 1 ? "" : "s"}
               </div>
@@ -379,7 +314,7 @@ export function PhotoPicker({
                 return (
                   <div
                     key={src}
-                    className={`group relative h-full w-full overflow-hidden rounded-[10px] border ${
+                    className={`group relative h-full w-full overflow-hidden rounded-xl border ${
                       broken[src] ? "border-amber-400 bg-amber-50" : "border-border bg-input-bg"
                     }`}
                   >
@@ -390,11 +325,11 @@ export function PhotoPicker({
                       loading="lazy"
                       onError={() => setBroken((b) => ({ ...b, [src]: true }))}
                       onClick={() => setViewerIndex(photoIndex)}
-                      className="h-full w-full cursor-pointer object-cover"
+                      className={`h-full w-full cursor-pointer object-cover ${hoverImgClass}`}
                     />
                     {isOverflowTile && (
                       // pointer-events-none: clicks pass through to the <img> behind it,
-                      // which already opens the viewer at this same photo.
+                      // which already opens the lightbox at this same photo.
                       <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[rgba(30,58,138,0.6)] text-sm font-bold text-white">
                         +{overflow}
                       </div>
@@ -416,7 +351,7 @@ export function PhotoPicker({
               })}
               {/* pad empty thumbnail slots so the 2x2 grid stays intact with < 4 extra photos */}
               {Array.from({ length: Math.max(0, 4 - thumbs.length) }).map((_, i) => (
-                <div key={`empty-${i}`} className="h-full w-full rounded-[10px] border border-dashed border-border" />
+                <div key={`empty-${i}`} className="h-full w-full rounded-xl border border-dashed border-border" />
               ))}
             </div>
           </div>
@@ -459,23 +394,8 @@ export function PhotoPicker({
           </button>
         )}
         {checking && <span className="text-muted">Checking for duplicates…</span>}
-        {removedDupes && (
-          <span className="text-muted">
-            {`Removed ${removedDupes.count} duplicate${removedDupes.count === 1 ? "" : "s"}`}{" "}
-            <button
-              type="button"
-              onClick={() => {
-                checkedRef.current = removedDupes.previous;
-                onChange(removedDupes.previous);
-                setRemovedDupes(null);
-              }}
-              className="underline hover:text-foreground"
-            >
-              Undo
-            </button>
-          </span>
-        )}
       </div>
+      {dedupeToast}
 
       {photos.length > 0 && (
         <div className="mb-3 grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-2">

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Neighbourhood } from "@/lib/types";
 import { api } from "@/lib/api";
-import { Button, Card, fieldInputClass, fieldLabelClass } from "@/components/ui";
+import { Badge, Button, Card, fieldInputClass, fieldLabelClass } from "@/components/ui";
 import { PhotoPicker } from "@/components/PhotoPicker";
 import { AmenityMultiSelect } from "@/components/AmenityMultiSelect";
 import { PROXY_BASE_URL } from "@/lib/api";
@@ -326,15 +326,18 @@ export function BuildingForm({
   // being edited) — a generic "Executive summary" label only where neither
   // is known yet (a hand-typed new building, nothing filled in below yet).
   const hasIdentity = Boolean(form.name.trim() || form.address.trim());
+  const photoCount = form.photos.split(",").map((s) => s.trim()).filter(Boolean).length;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <Card>
-        <h2 className="mb-1 text-lg font-semibold">Photos</h2>
+        <div className="mb-1 flex items-center gap-2">
+          <h2 className="text-lg font-semibold">Photos</h2>
+          {photoCount > 0 && <Badge tone="accent">{photoCount}</Badge>}
+        </div>
         <p className="mb-4 text-sm text-muted">
-          {form.photos.split(",").map((s) => s.trim()).filter(Boolean).length} photo
-          {form.photos.split(",").map((s) => s.trim()).filter(Boolean).length === 1 ? "" : "s"} captured —
-          duplicates from lazy-loading removed automatically.
+          {photoCount} photo{photoCount === 1 ? "" : "s"} captured — duplicates from lazy-loading removed
+          automatically.
         </p>
         <PhotoPicker value={form.photos} onChange={(next) => update("photos", next)} variant="gallery" />
       </Card>
