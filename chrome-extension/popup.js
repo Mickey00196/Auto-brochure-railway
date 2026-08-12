@@ -450,15 +450,22 @@ function extractListing() {
   const currentObjectId = (location.pathname.match(/\/object-(\d+)/) || [])[1] || null;
   const beforeFundaPass = out.photos.length;
   for (const img of document.querySelectorAll("img")) {
+    // Cheap string tests first — closest("a[href]") walks the ancestor
+    // chain, so it must only run for images that already look like a funda
+    // gallery photo, not for every <img> on the page (most pages have many
+    // that never match; walking up from each one is real, avoidable cost).
+    const srcCandidates = [img.currentSrc || null, img.getAttribute("src"), img.getAttribute("data-src")];
+    pushSrcset(img.getAttribute("srcset") || img.getAttribute("data-srcset"), srcCandidates);
+    const matches = srcCandidates.filter((c) => c && FUNDA_CDN_RE.test(c));
+    if (matches.length === 0) continue;
+
     const parentLink = img.closest("a[href]");
     if (parentLink) {
       const href = parentLink.getAttribute("href") || "";
       const otherObjectId = (href.match(/\/object-(\d+)/) || [])[1] || null;
       if (href.includes("/makelaar/") || (otherObjectId && otherObjectId !== currentObjectId)) continue;
     }
-    const srcCandidates = [img.currentSrc || null, img.getAttribute("src"), img.getAttribute("data-src")];
-    pushSrcset(img.getAttribute("srcset") || img.getAttribute("data-srcset"), srcCandidates);
-    for (const c of srcCandidates) if (c && FUNDA_CDN_RE.test(c)) addPhoto(c);
+    for (const c of matches) addPhoto(c);
   }
 
   // Pass 1/2 only run when Pass 0 found nothing of its own — i.e. this isn't
