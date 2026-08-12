@@ -8,6 +8,8 @@
   --muted: #64748b;
   --border: #e2e8f4;
   --surface: #ffffff;
+  --input-bg: #eef2fa;
+  --placeholder: #94a3b8;
   --accent: #1d4ed8;
   --accent-foreground: #ffffff;
   --dark: #0f2557;
@@ -19,6 +21,8 @@
   --color-muted: var(--muted);
   --color-border: var(--border);
   --color-surface: var(--surface);
+  --color-input-bg: var(--input-bg);
+  --color-placeholder: var(--placeholder);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-dark: var(--dark);
@@ -33,6 +37,8 @@
     --muted: #94a3b8;
     --border: #1e2c4a;
     --surface: #101f3c;
+    --input-bg: #16305e;
+    --placeholder: #64748b;
     --accent: #60a5fa;
     --accent-foreground: #0a1428;
     --dark: #16305e;

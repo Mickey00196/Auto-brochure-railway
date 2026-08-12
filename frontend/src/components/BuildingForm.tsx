@@ -11,6 +11,12 @@ import { PROXY_BASE_URL } from "@/lib/api";
 const inputClass = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm";
 const labelClass = "text-sm";
 
+// Matches the "Building" card in the office_shortlist_redesign_v14 mock:
+// tinted input fill instead of a bordered field, and a bolder label.
+const buildingInputClass =
+  "w-full rounded-[10px] border border-transparent bg-input-bg px-3.5 py-2.5 text-sm text-foreground placeholder:text-placeholder transition focus:border-accent focus:bg-surface focus:outline-none";
+const buildingLabelClass = "text-sm font-semibold";
+
 type TransportMode = "nearest_any" | "train" | "subway" | "tram" | "bus";
 const TRANSPORT_MODE_LABELS: Record<TransportMode, string> = {
   nearest_any: "Nearest (any)",
@@ -365,29 +371,35 @@ export function BuildingForm({
       <Card>
         <h2 className="mb-4 text-lg font-semibold">Building</h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">Name *</span>
-            <input value={form.name} onChange={(e) => update("name", e.target.value)} className={inputClass} required />
+          <label className={buildingLabelClass}>
+            <span className="mb-1.5 block">
+              Name <span className="text-accent">*</span>
+            </span>
+            <input value={form.name} onChange={(e) => update("name", e.target.value)} className={buildingInputClass} required />
           </label>
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">Building type</span>
-            <input value={form.buildingType} onChange={(e) => update("buildingType", e.target.value)} placeholder="Turn-key Office" className={inputClass} />
+          <label className={buildingLabelClass}>
+            <span className="mb-1.5 block">Building type</span>
+            <input value={form.buildingType} onChange={(e) => update("buildingType", e.target.value)} placeholder="Turn-key Office" className={buildingInputClass} />
           </label>
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">Address *</span>
-            <input value={form.address} onChange={(e) => update("address", e.target.value)} className={inputClass} required />
+          <label className={buildingLabelClass}>
+            <span className="mb-1.5 block">
+              Address <span className="text-accent">*</span>
+            </span>
+            <input value={form.address} onChange={(e) => update("address", e.target.value)} className={buildingInputClass} required />
           </label>
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">Postal code</span>
-            <input value={form.postalCode} onChange={(e) => update("postalCode", e.target.value)} className={inputClass} />
+          <label className={buildingLabelClass}>
+            <span className="mb-1.5 block">Postal code</span>
+            <input value={form.postalCode} onChange={(e) => update("postalCode", e.target.value)} className={buildingInputClass} />
           </label>
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">City *</span>
-            <input value={form.city} onChange={(e) => update("city", e.target.value)} className={inputClass} required />
+          <label className={buildingLabelClass}>
+            <span className="mb-1.5 block">
+              City <span className="text-accent">*</span>
+            </span>
+            <input value={form.city} onChange={(e) => update("city", e.target.value)} className={buildingInputClass} required />
           </label>
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">Neighbourhood</span>
-            <select value={form.neighbourhoodId} onChange={(e) => update("neighbourhoodId", e.target.value)} className={inputClass}>
+          <label className={buildingLabelClass}>
+            <span className="mb-1.5 block">Neighbourhood</span>
+            <select value={form.neighbourhoodId} onChange={(e) => update("neighbourhoodId", e.target.value)} className={buildingInputClass}>
               <option value="">None</option>
               {neighbourhoods.map((n) => (
                 <option key={n.neighbourhood_id} value={n.neighbourhood_id}>
@@ -396,26 +408,32 @@ export function BuildingForm({
               ))}
             </select>
           </label>
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">Submarket</span>
-            <input value={form.submarket} onChange={(e) => update("submarket", e.target.value)} placeholder="Used to group regions in exports" className={inputClass} />
+          <label className={buildingLabelClass}>
+            <span className="mb-1.5 block">Submarket</span>
+            <input value={form.submarket} onChange={(e) => update("submarket", e.target.value)} placeholder="Used to group regions in exports" className={buildingInputClass} />
           </label>
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">Year built</span>
-            <input type="number" value={form.yearBuilt} onChange={(e) => update("yearBuilt", e.target.value)} className={inputClass} />
+          <label className={buildingLabelClass}>
+            <span className="mb-1.5 block">Year built</span>
+            <input type="number" value={form.yearBuilt} onChange={(e) => update("yearBuilt", e.target.value)} className={buildingInputClass} />
           </label>
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">Energy label</span>
-            <input value={form.energyLabel} onChange={(e) => update("energyLabel", e.target.value)} placeholder="A" className={inputClass} />
+          <label className={buildingLabelClass}>
+            <span className="mb-1.5 block">Energy label</span>
+            <input value={form.energyLabel} onChange={(e) => update("energyLabel", e.target.value)} placeholder="A" className={buildingInputClass} />
           </label>
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">BREEAM rating</span>
-            <input value={form.breeamRating} onChange={(e) => update("breeamRating", e.target.value)} placeholder="Excellent" className={inputClass} />
+          <label className={buildingLabelClass}>
+            <span className="mb-1.5 block">BREEAM rating</span>
+            <input value={form.breeamRating} onChange={(e) => update("breeamRating", e.target.value)} placeholder="Excellent" className={buildingInputClass} />
           </label>
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">Total building area (m²)</span>
-            <input type="number" value={form.totalBuildingAreaM2} onChange={(e) => update("totalBuildingAreaM2", e.target.value)} className={inputClass} />
+          <label className={buildingLabelClass}>
+            <span className="mb-1.5 block">Total building area (m²)</span>
+            <input type="number" value={form.totalBuildingAreaM2} onChange={(e) => update("totalBuildingAreaM2", e.target.value)} className={buildingInputClass} />
           </label>
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="mb-4 text-lg font-semibold">Accessibility &amp; extras</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
           <label className={labelClass}>
             <span className="mb-1 block font-medium">Accessibility note</span>
             <input value={form.accessibilityNote} onChange={(e) => update("accessibilityNote", e.target.value)} placeholder="A10 3 km" className={inputClass} />
