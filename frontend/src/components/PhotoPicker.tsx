@@ -297,14 +297,15 @@ export function PhotoPicker({
         )}
         {main ? (
           // A fixed pixel height (not an aspect-ratio) on the row itself,
-          // with both columns stretched to h-full: aspect-ratio derives the
-          // height from the container's *width*, which isn't perfectly
-          // stable (a status/toast line above reflowing the page, a
-          // scrollbar appearing, a narrower viewport) — that visibly
-          // changed the gallery's height depending on what was on screen.
-          // h-72 is simply always 18rem regardless of any of that, and
-          // still gives thumbnails a height to match via h-full.
-          <div className="mb-3.5 grid h-72 grid-cols-[1.7fr_1fr] gap-2">
+          // with both columns stretched to h-full. aspect-ratio derives the
+          // height from the container's *width*, and — combined with the
+          // thumbnails resolving their own height as a percentage (h-full)
+          // of that — some browsers fell back to sizing the row off the
+          // hero photo's own intrinsic dimensions instead of holding the
+          // ratio, so the gallery's height visibly changed photo to photo.
+          // 440px matches what the 2.4:1 ratio worked out to at this card's
+          // typical width, but as a plain fixed height it can't drift.
+          <div className="mb-3.5 grid h-[440px] grid-cols-[1.7fr_1fr] gap-2">
             <div className="group relative h-full overflow-hidden rounded-xl border border-border bg-input-bg">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -376,7 +377,7 @@ export function PhotoPicker({
             </div>
           </div>
         ) : (
-          <div className="mb-3.5 flex h-72 items-center justify-center rounded-xl border border-dashed border-border bg-input-bg text-sm text-muted">
+          <div className="mb-3.5 flex h-[440px] items-center justify-center rounded-xl border border-dashed border-border bg-input-bg text-sm text-muted">
             No photos yet
           </div>
         )}
