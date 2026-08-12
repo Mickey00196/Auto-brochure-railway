@@ -11,6 +11,15 @@ import { PROXY_BASE_URL } from "@/lib/api";
 const inputClass = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm";
 const labelClass = "text-sm";
 
+type TransportMode = "nearest_any" | "train" | "subway" | "tram" | "bus";
+const TRANSPORT_MODE_LABELS: Record<TransportMode, string> = {
+  nearest_any: "Nearest (any)",
+  train: "Train",
+  subway: "Metro",
+  tram: "Tram",
+  bus: "Bus",
+};
+
 const EMPTY_FORM = {
   name: "",
   address: "",
@@ -66,6 +75,7 @@ export function BuildingForm({
   const [form, setForm] = useState({ ...EMPTY_FORM, ...initial });
   const [locating, setLocating] = useState(false);
   const [locateNote, setLocateNote] = useState<string | null>(null);
+  const [transportMode, setTransportMode] = useState<TransportMode>("nearest_any");
 
   /** Fill the three transport distances from the address. Only ever fills
    * blanks — a figure the listing itself stated (or one typed by hand) is
@@ -86,6 +96,7 @@ export function BuildingForm({
           address: form.address,
           city: form.city,
           postal_code: form.postalCode || null,
+          transport_mode: transportMode,
         }),
       });
       if (!res.ok) throw new Error(`lookup failed (${res.status})`);
@@ -125,6 +136,42 @@ export function BuildingForm({
       );
     } catch {
       setLocateNote("Distance lookup is unavailable right now — fill them in by hand.");
+    } finally {
+      setLocating(false);
+    }
+  }
+
+  /** Switching the transport type is a deliberate, specific request — "show
+   * me the nearest bus stop instead" — so unlike lookUpDistances above, this
+   * always overwrites publicTransportNote with the new mode's answer, even
+   * if a value (from a capture, or the general lookup) is already there.
+   * The other two fields are untouched. */
+  async function runTransportModeLookup(mode: TransportMode) {
+    setTransportMode(mode);
+    if (!form.address.trim() && !form.city.trim()) return;
+    setLocating(true);
+    setLocateNote(null);
+    try {
+      const res = await fetch(`${PROXY_BASE_URL}/geo/distances`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: form.address,
+          city: form.city,
+          postal_code: form.postalCode || null,
+          transport_mode: mode,
+        }),
+      });
+      if (!res.ok) throw new Error(`lookup failed (${res.status})`);
+      const d = (await res.json()) as { public_transport: string | null };
+      if (d.public_transport) {
+        setForm((prev) => ({ ...prev, publicTransportNote: d.public_transport as string }));
+        setLocateNote(`Filled in the nearest ${TRANSPORT_MODE_LABELS[mode].toLowerCase()} stop — check it over.`);
+      } else {
+        setLocateNote(`Couldn't find a nearby ${TRANSPORT_MODE_LABELS[mode].toLowerCase()} stop for that address.`);
+      }
+    } catch {
+      setLocateNote("Distance lookup is unavailable right now — fill it in by hand.");
     } finally {
       setLocating(false);
     }
@@ -356,7 +403,27 @@ export function BuildingForm({
           </label>
           <label className={labelClass}>
             <span className="mb-1 block font-medium">Public transport note</span>
-            <input value={form.publicTransportNote} onChange={(e) => update("publicTransportNote", e.target.value)} placeholder="Station Noord 8 min" className={inputClass} />
+            <div className="flex gap-2">
+              <input
+                value={form.publicTransportNote}
+                onChange={(e) => update("publicTransportNote", e.target.value)}
+                placeholder="Station Noord 8 min"
+                className={inputClass}
+              />
+              <select
+                value={transportMode}
+                onChange={(e) => runTransportModeLookup(e.target.value as TransportMode)}
+                disabled={locating}
+                title="Look up a specific type of stop instead — replaces the note above"
+                className="rounded-lg border border-border bg-background px-2 text-sm"
+              >
+                {(Object.entries(TRANSPORT_MODE_LABELS) as [TransportMode, string][]).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </label>
           <div className="sm:col-span-2 -mt-1 flex flex-wrap items-center gap-3">
             <Button type="button" variant="ghost" disabled={locating} onClick={lookUpDistances}>

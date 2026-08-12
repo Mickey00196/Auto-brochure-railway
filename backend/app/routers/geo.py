@@ -6,12 +6,16 @@ Building.
 """
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.services.geo import distances_for_address
 
 router = APIRouter(prefix="/geo", tags=["geo"])
+
+TransportMode = Literal["nearest_any", "train", "subway", "tram", "bus"]
 
 
 class DistanceRequest(BaseModel):
@@ -21,6 +25,9 @@ class DistanceRequest(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     country: str | None = "Netherlands"
+    # Which kind of public-transport stop to look for — "nearest_any" (the
+    # default) preserves the original, untyped-nearest-station behaviour.
+    transport_mode: TransportMode = "nearest_any"
 
 
 class DistanceResponse(BaseModel):
@@ -41,6 +48,7 @@ def distances(payload: DistanceRequest) -> DistanceResponse:
         payload.latitude,
         payload.longitude,
         payload.country,
+        payload.transport_mode,
     )
     return DistanceResponse(
         latitude=d.latitude,

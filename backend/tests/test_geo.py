@@ -161,6 +161,82 @@ def test_ways_without_a_point_are_ignored_and_centres_are_used():
     assert d.public_transport.startswith("Amsterdam Zuid ")
 
 
+def test_transport_mode_train_excludes_a_subway_tagged_station():
+    """A metro stop tagged railway=station + station=subway (common in NL
+    OSM data) must not count as a "train" result — only nearest_any's
+    untyped query should ever pick it up."""
+    elements = [
+        {"lat": 52.3390, "lon": 4.8730, "tags": {"railway": "station", "station": "subway", "name": "Metro stop"}},
+    ]
+    d = nearby_distances(LAT, LON, "train", fetch=_stub(overpass=_overpass(elements)))
+    assert d.public_transport is None
+
+
+def test_transport_mode_bus_uses_the_bus_stop_tag_and_label():
+    elements = [
+        {"lat": 52.3390, "lon": 4.8730, "tags": {"highway": "bus_stop"}},  # no name — falls back to the label
+    ]
+    d = nearby_distances(LAT, LON, "bus", fetch=_stub(overpass=_overpass(elements)))
+    assert d.public_transport.startswith("Bushalte ")
+
+
+def test_transport_mode_subway_uses_the_metro_label():
+    elements = [
+        {"lat": 52.3390, "lon": 4.8730, "tags": {"station": "subway"}},
+    ]
+    d = nearby_distances(LAT, LON, "subway", fetch=_stub(overpass=_overpass(elements)))
+    assert d.public_transport.startswith("Metro ")
+
+
+def test_transport_mode_still_finds_highway_and_airport():
+    """A specific transport_mode only scopes the station clause — highway
+    and airport results must be unaffected."""
+    elements = [
+        {"lat": 52.3350, "lon": 4.8600, "tags": {"highway": "motorway_junction", "ref": "S109"}},
+        {"lat": 52.3105, "lon": 4.7683, "tags": {"aeroway": "aerodrome", "iata": "AMS", "name": "Schiphol"}},
+    ]
+    d = nearby_distances(LAT, LON, "bus", fetch=_stub(overpass=_overpass(elements)))
+    assert d.highway.startswith("S109 ")
+    assert d.airport.startswith("Schiphol ")
+
+
+def test_unknown_transport_mode_falls_back_to_nearest_any_behaviour():
+    elements = [{"lat": 52.3390, "lon": 4.8730, "tags": {"railway": "station", "name": "Amsterdam Zuid"}}]
+    d = nearby_distances(LAT, LON, "not-a-real-mode", fetch=_stub(overpass=_overpass(elements)))
+    assert d.public_transport.startswith("Amsterdam Zuid ")
+
+
+def test_endpoint_passes_transport_mode_through(client, monkeypatch):
+    seen = {}
+
+    def fake(*args, **kwargs):
+        seen["mode"] = args[6] if len(args) > 6 else kwargs.get("transport_mode")
+        return Distances(LAT, LON, "Bushalte 200 m", None, None)
+
+    monkeypatch.setattr("app.routers.geo.distances_for_address", fake)
+    r = client.post("/geo/distances", json={"address": "Hildegard von Bingenstraat 8", "transport_mode": "bus"})
+    assert r.status_code == 200
+    assert seen["mode"] == "bus"
+
+
+def test_endpoint_defaults_transport_mode_to_nearest_any(client, monkeypatch):
+    seen = {}
+
+    def fake(*args, **kwargs):
+        seen["mode"] = args[6] if len(args) > 6 else kwargs.get("transport_mode")
+        return Distances()
+
+    monkeypatch.setattr("app.routers.geo.distances_for_address", fake)
+    r = client.post("/geo/distances", json={"address": "Hildegard von Bingenstraat 8"})
+    assert r.status_code == 200
+    assert seen["mode"] == "nearest_any"
+
+
+def test_endpoint_rejects_an_invalid_transport_mode(client):
+    r = client.post("/geo/distances", json={"address": "Hildegard von Bingenstraat 8", "transport_mode": "spaceship"})
+    assert r.status_code == 422
+
+
 def test_endpoint_reports_found_false_when_nothing_resolves(client, monkeypatch):
     monkeypatch.setattr("app.routers.geo.distances_for_address", lambda *a, **k: Distances())
     r = client.post("/geo/distances", json={"address": "Nowhere 1", "city": "Atlantis"})

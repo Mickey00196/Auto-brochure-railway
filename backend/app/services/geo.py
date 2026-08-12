@@ -35,6 +35,20 @@ STATION_RADIUS_M = 20_000
 MOTORWAY_RADIUS_M = 30_000
 AIRPORT_RADIUS_M = 150_000
 
+# "nearest_any" (the default) preserves the original behaviour exactly —
+# nearest railway=station, whatever it turns out to be. Choosing a specific
+# mode instead scopes the Overpass query to just that OSM tag combination,
+# so the result is guaranteed to be that mode rather than merely labelled as
+# it. train excludes station=subway so a metro stop tagged as a railway
+# station (common in NL data) doesn't masquerade as a train result.
+_STATION_FILTERS = {
+    "train": '["railway"="station"]["station"!="subway"]',
+    "subway": '["station"="subway"]',
+    "tram": '["railway"="tram_stop"]',
+    "bus": '["highway"="bus_stop"]',
+}
+TRANSPORT_LABELS = {"train": "Station", "subway": "Metro", "tram": "Tramhalte", "bus": "Bushalte"}
+
 Fetcher = Callable[[str, bytes | None], str]
 
 
@@ -155,10 +169,11 @@ def geocode(
     return None
 
 
-def _overpass_query(lat: float, lon: float) -> str:
+def _overpass_query(lat: float, lon: float, transport_mode: str = "nearest_any") -> str:
+    station_filter = _STATION_FILTERS.get(transport_mode, '["railway"="station"]')
     return f"""[out:json][timeout:25];
 (
-  nwr(around:{STATION_RADIUS_M},{lat},{lon})["railway"="station"];
+  nwr(around:{STATION_RADIUS_M},{lat},{lon}){station_filter};
   nwr(around:{MOTORWAY_RADIUS_M},{lat},{lon})["highway"="motorway_junction"];
   nwr(around:{AIRPORT_RADIUS_M},{lat},{lon})["aeroway"="aerodrome"]["iata"];
 );
@@ -182,12 +197,33 @@ def _label(tags: dict, fallback: str) -> str:
     return fallback
 
 
-def nearby_distances(lat: float, lon: float, *, fetch: Fetcher = _http) -> Distances:
+def _matches_transport_mode(tags: dict, transport_mode: str) -> bool:
+    """Mirrors _STATION_FILTERS' OSM tag logic. Overpass already applies the
+    equivalent filter server-side, but re-checking it locally rather than
+    trusting every returned element means a response that shouldn't have
+    matched (or an unexpected shape) can't silently pass through as one —
+    and it's what makes this testable without a stub that parses queries."""
+    if transport_mode == "train":
+        return tags.get("railway") == "station" and tags.get("station") != "subway"
+    if transport_mode == "subway":
+        return tags.get("station") == "subway"
+    if transport_mode == "tram":
+        return tags.get("railway") == "tram_stop"
+    if transport_mode == "bus":
+        return tags.get("highway") == "bus_stop"
+    return tags.get("railway") == "station"  # nearest_any / unrecognised mode
+
+
+def nearby_distances(
+    lat: float, lon: float, transport_mode: str = "nearest_any", *, fetch: Fetcher = _http
+) -> Distances:
     try:
-        payload = _overpass_query(lat, lon).encode("utf-8")
+        payload = _overpass_query(lat, lon, transport_mode).encode("utf-8")
         data = json.loads(fetch(OVERPASS_URL, payload))
     except Exception:
         return Distances(latitude=lat, longitude=lon)
+
+    station_fallback = TRANSPORT_LABELS.get(transport_mode, "Station")
 
     best: dict[str, tuple[float, str]] = {}
     for el in data.get("elements", []):
@@ -195,12 +231,12 @@ def nearby_distances(lat: float, lon: float, *, fetch: Fetcher = _http) -> Dista
         point = _element_point(el)
         if not point:
             continue
-        if tags.get("railway") == "station":
-            kind, fallback = "public_transport", "Station"
-        elif tags.get("highway") == "motorway_junction":
+        if tags.get("highway") == "motorway_junction":
             kind, fallback = "highway", "Motorway exit"
         elif tags.get("aeroway") == "aerodrome":
             kind, fallback = "airport", "Airport"
+        elif _matches_transport_mode(tags, transport_mode):
+            kind, fallback = "public_transport", station_fallback
         else:
             continue
         distance = haversine_m(lat, lon, point[0], point[1])
@@ -225,6 +261,7 @@ def distances_for_address(
     latitude: float | None = None,
     longitude: float | None = None,
     country: str | None = "Netherlands",
+    transport_mode: str = "nearest_any",
     *,
     fetch: Fetcher = _http,
 ) -> Distances:
@@ -235,4 +272,4 @@ def distances_for_address(
         if not point:
             return Distances()
         latitude, longitude = point
-    return nearby_distances(latitude, longitude, fetch=fetch)
+    return nearby_distances(latitude, longitude, transport_mode, fetch=fetch)
