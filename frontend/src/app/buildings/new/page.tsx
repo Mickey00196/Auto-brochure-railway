@@ -5,8 +5,10 @@ import { BuildingForm, type BuildingFormInitial } from "@/components/BuildingFor
 // Fields the bookmarklet (see /import) can pre-fill via query params — it
 // reads the Funda page you're already viewing in your own browser and opens
 // this form with what it found, for you to review and submit. Only these
-// keys are read; anything else in the URL is ignored.
-const PREFILL_KEYS: (keyof BuildingFormInitial)[] = [
+// keys are read; anything else in the URL is ignored. (No "description" key
+// here on purpose — the redesigned Building card dropped that field, so a
+// bookmarklet/extension URL that still sends one is just silently ignored.)
+const PREFILL_TEXT_KEYS: Exclude<keyof BuildingFormInitial, "buildingAmenities">[] = [
   "name",
   "address",
   "postalCode",
@@ -15,8 +17,6 @@ const PREFILL_KEYS: (keyof BuildingFormInitial)[] = [
   "yearBuilt",
   "energyLabel",
   "totalBuildingAreaM2",
-  "buildingAmenities",
-  "description",
   "photos",
   // Executive-summary fields the extension capture also extracts —
   // building-level…
@@ -52,18 +52,26 @@ export default async function NewBuildingPage({
   const params = await searchParams;
 
   const initial: BuildingFormInitial = {};
-  for (const key of PREFILL_KEYS) {
+  for (const key of PREFILL_TEXT_KEYS) {
     const raw = params[key];
     const value = Array.isArray(raw) ? raw[0] : raw;
     if (value) initial[key] = value;
+  }
+  const rawAmenities = params.buildingAmenities;
+  const amenitiesParam = Array.isArray(rawAmenities) ? rawAmenities[0] : rawAmenities;
+  if (amenitiesParam) {
+    initial.buildingAmenities = amenitiesParam
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
   }
 
   return (
     <div>
       <PageHeader
-        eyebrow="Step 1"
+        eyebrow="§5.1 · Buildings & Units"
         title="Add Building"
-        description="Captured by the Chrome extension or typed in by hand — either way it's saved to your library and reusable for any client."
+        description="Captured by the Chrome extension — saved once, reusable across any client mandate."
       />
       <BuildingForm neighbourhoods={neighbourhoods} initial={initial} />
     </div>

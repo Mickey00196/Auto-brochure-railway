@@ -37,16 +37,15 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
     accessibilityNote: building.accessibility_note ?? "",
     airportNote: building.airport_note ?? "",
     publicTransportNote: building.public_transport_note ?? "",
-    buildingAmenities: (building.building_amenities ?? []).join(", "),
-    description: building.description ?? "",
+    buildingAmenities: building.building_amenities ?? [],
     photos: (building.photos ?? []).join(", "),
   };
 
   return (
     <div>
       <PageHeader
-        eyebrow={building.source_url ? "Captured from a listing" : "Added by hand"}
-        title={building.address}
+        eyebrow="§5.1 · Buildings & Units"
+        title={building.name}
         description="Everything here is editable — correct anything the capture got wrong, then save. Your changes stay; nothing re-scrapes over them."
         actions={
           <Link href={`/buildings/${id}/units/new`}>

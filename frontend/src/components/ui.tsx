@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 
+// Shared field styling for every form on the site (BuildingForm, UnitForm,
+// AmenityMultiSelect, ...): a filled, borderless input rather than a bordered
+// one, so it stays in one place instead of drifting per-form.
+export const fieldInputClass =
+  "w-full rounded-[10px] border border-transparent bg-input-bg px-3.5 py-2.5 text-sm text-foreground placeholder:text-placeholder transition focus:border-accent focus:bg-surface focus:outline-none";
+export const fieldLabelClass = "text-sm font-semibold";
+
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <div className={`rounded-2xl border border-border bg-surface p-6 shadow-sm ${className}`}>{children}</div>

@@ -4,17 +4,15 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Neighbourhood } from "@/lib/types";
 import { api } from "@/lib/api";
-import { Button, Card } from "@/components/ui";
+import { Button, Card, fieldInputClass, fieldLabelClass } from "@/components/ui";
 import { PhotoPicker } from "@/components/PhotoPicker";
+import { AmenityMultiSelect } from "@/components/AmenityMultiSelect";
 import { PROXY_BASE_URL } from "@/lib/api";
 
-// Matches the office_shortlist_redesign_v14 mock: tinted input fill instead
-// of a bordered field, and a bolder label. Applied across the whole Add
-// Building page, not just the "Building" card, so the page reads as one
-// consistent design rather than old- and new-style cards side by side.
-const inputClass =
-  "w-full rounded-[10px] border border-transparent bg-input-bg px-3.5 py-2.5 text-sm text-foreground placeholder:text-placeholder transition focus:border-accent focus:bg-surface focus:outline-none";
-const labelClass = "text-sm font-semibold";
+const inputClass = fieldInputClass;
+const labelClass = fieldLabelClass;
+const selectClass =
+  "rounded-[10px] border border-transparent bg-input-bg px-2 text-sm text-foreground transition focus:border-accent focus:bg-surface focus:outline-none";
 
 type TransportMode = "nearest_any" | "train" | "subway" | "tram" | "bus";
 const TRANSPORT_MODE_LABELS: Record<TransportMode, string> = {
@@ -60,8 +58,11 @@ const EMPTY_FORM = {
   accessibilityNote: "",
   airportNote: "",
   publicTransportNote: "",
-  buildingAmenities: "",
-  description: "",
+  // The API (backend/app/schemas.py) has always taken building_amenities as
+  // a JSON array, not a comma-joined string — the old comma-separated text
+  // field was a frontend-only simplification. AmenityMultiSelect operates on
+  // the array directly now, no split()/join() layer needed.
+  buildingAmenities: [] as string[],
   photos: "",
   // Executive summary — lease terms. These live on the building's first
   // Unit (and a parking AddOn), created together with the Building on
@@ -231,7 +232,7 @@ export function BuildingForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function update<K extends keyof typeof form>(key: K, value: string) {
+  function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -259,11 +260,7 @@ export function BuildingForm({
         accessibility_note: form.accessibilityNote || null,
         airport_note: form.airportNote || null,
         public_transport_note: form.publicTransportNote || null,
-        building_amenities: form.buildingAmenities
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        description: form.description || null,
+        building_amenities: form.buildingAmenities,
         photos: form.photos
           .split(",")
           .map((s) => s.trim())
@@ -324,15 +321,30 @@ export function BuildingForm({
     }
   }
 
+  // The executive-summary card doubles as this building's title block once a
+  // name/address exist (a Chrome-extension capture, or an existing building
+  // being edited) — a generic "Executive summary" label only where neither
+  // is known yet (a hand-typed new building, nothing filled in below yet).
+  const hasIdentity = Boolean(form.name.trim() || form.address.trim());
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {!isEdit && (
       <Card>
-        <h2 className="mb-1 text-lg font-semibold">Executive summary — lease terms</h2>
+        {hasIdentity ? (
+          <>
+            <h2 className="mb-0.5 text-[22px] font-bold tracking-tight">{form.name || form.address}</h2>
+            {form.address && form.name && form.address !== form.name && (
+              <p className="mb-4 text-sm text-muted">{form.address}</p>
+            )}
+          </>
+        ) : (
+          <h2 className="mb-1 text-lg font-semibold">Executive summary — lease terms</h2>
+        )}
         <p className="mb-4 text-sm text-muted">
           Filled in by the Chrome extension where the listing states them. Saving creates the
-          building&apos;s available space with these terms (plus a parking add-on if a parking price is
-          set) — leave them empty to add spaces by hand later instead.
+          building&apos;s available space with these terms — leave empty to add spaces by hand later
+          instead.
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className={labelClass}>
@@ -364,8 +376,29 @@ export function BuildingForm({
             <input value={form.availability} onChange={(e) => update("availability", e.target.value)} placeholder="Per direct / in overleg" className={inputClass} />
           </label>
         </div>
+
+        <div className="mt-6 border-t border-border pt-5">
+          <div className="mb-3.5 flex items-baseline justify-between gap-4">
+            <span className="text-xs font-bold uppercase tracking-wide text-muted">Amenities</span>
+            <span className="text-xs text-muted">Shown on the client brochure as tagged</span>
+          </div>
+          <AmenityMultiSelect
+            value={form.buildingAmenities}
+            onChange={(next) => update("buildingAmenities", next)}
+          />
+        </div>
       </Card>
       )}
+
+      <Card>
+        <h2 className="mb-1 text-lg font-semibold">Photos</h2>
+        <p className="mb-4 text-sm text-muted">
+          {form.photos.split(",").map((s) => s.trim()).filter(Boolean).length} photo
+          {form.photos.split(",").map((s) => s.trim()).filter(Boolean).length === 1 ? "" : "s"} captured —
+          duplicates from lazy-loading removed automatically.
+        </p>
+        <PhotoPicker value={form.photos} onChange={(next) => update("photos", next)} variant="gallery" />
+      </Card>
 
       <Card>
         <h2 className="mb-4 text-lg font-semibold">Building</h2>
@@ -431,65 +464,69 @@ export function BuildingForm({
       </Card>
 
       <Card>
-        <h2 className="mb-4 text-lg font-semibold">Accessibility &amp; extras</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className={labelClass}>
-            <span className="mb-1.5 block">Accessibility note</span>
-            <input value={form.accessibilityNote} onChange={(e) => update("accessibilityNote", e.target.value)} placeholder="A10 3 km" className={inputClass} />
-          </label>
-          <label className={labelClass}>
-            <span className="mb-1.5 block">Airport note</span>
-            <input value={form.airportNote} onChange={(e) => update("airportNote", e.target.value)} placeholder="Schiphol 15 km" className={inputClass} />
-          </label>
-          <label className={labelClass}>
-            <span className="mb-1.5 block">Public transport note</span>
-            <div className="flex gap-2">
-              <input
-                value={form.publicTransportNote}
-                onChange={(e) => update("publicTransportNote", e.target.value)}
-                placeholder="Station Noord 8 min"
-                className={inputClass}
-              />
-              <select
-                value={transportMode}
-                onChange={(e) => runTransportModeLookup(e.target.value as TransportMode)}
-                disabled={locating}
-                title="Look up a specific type of stop instead — replaces the note above"
-                className="rounded-[10px] border border-transparent bg-input-bg px-2 text-sm text-foreground transition focus:border-accent focus:bg-surface focus:outline-none"
-              >
-                {(Object.entries(TRANSPORT_MODE_LABELS) as [TransportMode, string][]).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </label>
-          <div className="sm:col-span-2 -mt-1 flex flex-wrap items-center gap-3">
-            <Button type="button" variant="ghost" disabled={locating} onClick={lookUpDistances}>
-              {locating ? "Looking up…" : "Look up distances from the address"}
-            </Button>
-            {locateNote && <span className="text-xs text-muted">{locateNote}</span>}
+        <h2 className="mb-1 text-lg font-semibold">Accessibility</h2>
+        <p className="mb-4 text-sm text-muted">Auto-filled once the address is confirmed — edit any field to override.</p>
+
+        <div className="mb-4">
+          <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-accent">Highway access</div>
+          <input
+            value={form.accessibilityNote}
+            onChange={(e) => update("accessibilityNote", e.target.value)}
+            placeholder="e.g. 3 km"
+            className={inputClass}
+          />
+        </div>
+        <div className="mb-4">
+          <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-accent">Airport access</div>
+          <input
+            value={form.airportNote}
+            onChange={(e) => update("airportNote", e.target.value)}
+            placeholder="e.g. 15 km"
+            className={inputClass}
+          />
+        </div>
+        <div className="mb-1">
+          <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-accent">Public transport</div>
+          <div className="flex gap-2">
+            <input
+              value={form.publicTransportNote}
+              onChange={(e) => update("publicTransportNote", e.target.value)}
+              placeholder="e.g. 0.8 km"
+              className={inputClass}
+            />
+            <select
+              value={transportMode}
+              onChange={(e) => runTransportModeLookup(e.target.value as TransportMode)}
+              disabled={locating}
+              title="Look up a specific type of stop instead — replaces the note above"
+              className={selectClass}
+            >
+              {(Object.entries(TRANSPORT_MODE_LABELS) as [TransportMode, string][]).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
           </div>
-          <label className={`${labelClass} sm:col-span-2`}>
-            <span className="mb-1.5 block">Amenities (comma-separated)</span>
-            <input value={form.buildingAmenities} onChange={(e) => update("buildingAmenities", e.target.value)} placeholder="Roof terrace, Bicycle storage, 24/7 access" className={inputClass} />
-          </label>
-          <div className={`${labelClass} sm:col-span-2`}>
-            <span className="mb-1.5 block">Photos</span>
-            <PhotoPicker value={form.photos} onChange={(next) => update("photos", next)} />
-          </div>
-          <label className={`${labelClass} sm:col-span-2`}>
-            <span className="mb-1.5 block">Description</span>
-            <textarea value={form.description} onChange={(e) => update("description", e.target.value)} rows={3} className={inputClass} />
-          </label>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button type="button" variant="ghost" disabled={locating} onClick={lookUpDistances}>
+            {locating ? "Looking up…" : "Look up distances"}
+          </Button>
+          {locateNote && <span className="text-xs text-accent">{locateNote}</span>}
         </div>
       </Card>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
-      <Button type="submit" disabled={submitting}>
-        {submitting ? "Saving…" : isEdit ? "Save changes" : "Save to library"}
-      </Button>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" disabled={submitting}>
+          {submitting ? "Saving…" : isEdit ? "Save changes" : "Save to library"}
+        </Button>
+        <Button type="button" variant="ghost" disabled={submitting} onClick={() => router.push("/buildings")}>
+          Discard
+        </Button>
+      </div>
       <p className="text-xs text-muted">
         {isEdit
           ? "Saves the building's own details. Its available spaces and add-ons are edited separately, below."

@@ -36,7 +36,7 @@ export default async function EditUnitPage({
     contractTerm: unit.contract_term ?? "",
     contractTermYears: unit.contract_term_years ? String(unit.contract_term_years) : "",
     availability: unit.availability ?? "",
-    unitAmenities: (unit.unit_amenities ?? []).join(", "),
+    unitAmenities: unit.unit_amenities ?? [],
     photos: (unit.photos ?? []).join(", "),
   };
 

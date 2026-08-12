@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PROXY_BASE_URL } from "@/lib/api";
+import { fieldInputClass } from "@/components/ui";
+
+const pillDarkClass =
+  "rounded-full bg-[rgba(30,58,138,0.72)] px-2.5 py-1 text-[11px] font-semibold text-white";
 
 /** The captured gallery, as a reviewable selection rather than a wall of
  * comma-separated text: hover a photo to drop it, spot a broken one, or paste
@@ -9,15 +13,21 @@ import { PROXY_BASE_URL } from "@/lib/api";
 export function PhotoPicker({
   value,
   onChange,
+  variant = "grid",
 }: {
   /** Comma-separated URLs — the shape the form already stores. */
   value: string;
   onChange: (next: string) => void;
+  /** "grid": even squares (used for a unit's own photos). "gallery": one
+   * large hero photo + a 2x2 thumbnail grid, matching the Building card's
+   * office_shortlist_redesign_v14 mock. */
+  variant?: "grid" | "gallery";
 }) {
   const [adding, setAdding] = useState("");
   const [broken, setBroken] = useState<Record<string, boolean>>({});
   const [checking, setChecking] = useState(false);
   const [removedDupes, setRemovedDupes] = useState<{ count: number; previous: string } | null>(null);
+  const [reordering, setReordering] = useState(false);
   const checkedRef = useRef<string>("");
 
   const photos = value
@@ -29,6 +39,14 @@ export function PhotoPicker({
 
   function remove(url: string) {
     commit(photos.filter((p) => p !== url));
+  }
+
+  function move(index: number, delta: number) {
+    const target = index + delta;
+    if (target < 0 || target >= photos.length) return;
+    const next = [...photos];
+    [next[index], next[target]] = [next[target], next[index]];
+    commit(next);
   }
 
   function add() {
@@ -75,6 +93,189 @@ export function PhotoPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the URL list itself
   }, [value]);
 
+  const statusRow = (
+    <div className="mb-2 flex flex-wrap items-center gap-3 text-xs">
+      {brokenCount > 0 && (
+        <button
+          type="button"
+          onClick={() => commit(photos.filter((p) => !broken[p]))}
+          className="text-amber-600 underline hover:text-amber-700"
+        >
+          {`Remove ${brokenCount} that won’t load`}
+        </button>
+      )}
+      {checking && <span className="text-muted">Checking for duplicates…</span>}
+      {removedDupes && (
+        <span className="text-muted">
+          {`Removed ${removedDupes.count} duplicate${removedDupes.count === 1 ? "" : "s"}`}{" "}
+          <button
+            type="button"
+            onClick={() => {
+              checkedRef.current = removedDupes.previous;
+              onChange(removedDupes.previous);
+              setRemovedDupes(null);
+            }}
+            className="underline hover:text-foreground"
+          >
+            Undo
+          </button>
+        </span>
+      )}
+    </div>
+  );
+
+  const urlRow = (
+    <div className="flex flex-wrap gap-2">
+      <input
+        type="url"
+        value={adding}
+        onChange={(e) => setAdding(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            // This lives inside the building form — Enter must not submit it.
+            e.preventDefault();
+            add();
+          }
+        }}
+        placeholder="Paste another photo URL…"
+        className={`flex-1 ${fieldInputClass}`}
+      />
+      <button
+        type="button"
+        onClick={add}
+        disabled={!adding.trim()}
+        className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-40"
+      >
+        Add
+      </button>
+    </div>
+  );
+
+  if (variant === "gallery") {
+    const [main, ...rest] = photos;
+    const thumbs = rest.slice(0, 4);
+    const overflow = rest.length - thumbs.length;
+
+    function Thumb({ src, index, extra }: { src: string; index: number; extra?: ReactNode }) {
+      return (
+        <div
+          className={`group relative aspect-square overflow-hidden rounded-[10px] border ${
+            broken[src] ? "border-amber-400 bg-amber-50" : "border-border bg-input-bg"
+          }`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary captured URLs, no fixed domain to allowlist */}
+          <img
+            src={src}
+            alt=""
+            loading="lazy"
+            onError={() => setBroken((b) => ({ ...b, [src]: true }))}
+            className="h-full w-full object-cover"
+          />
+          {extra}
+          {reordering ? (
+            <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1 bg-black/55 py-1">
+              <button
+                type="button"
+                onClick={() => move(index, -1)}
+                aria-label="Move earlier"
+                className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-xs text-white hover:bg-white/35"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                onClick={() => move(index, 1)}
+                aria-label="Move later"
+                className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-xs text-white hover:bg-white/35"
+              >
+                ›
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => remove(src)}
+              aria-label="Remove this photo"
+              title="Remove this photo"
+              className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-sm font-bold leading-none text-white opacity-0 transition group-hover:opacity-100 focus:opacity-100"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        {statusRow}
+        {main ? (
+          <div className="mb-3.5 grid grid-cols-[1.7fr_1fr] gap-2">
+            <div className="relative aspect-[16/10] overflow-hidden rounded-xl border border-border bg-input-bg">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={main}
+                alt=""
+                onError={() => setBroken((b) => ({ ...b, [main]: true }))}
+                className="h-full w-full object-cover"
+              />
+              <div className={`absolute bottom-2.5 left-2.5 ${pillDarkClass}`}>
+                {photos.length} photo{photos.length === 1 ? "" : "s"}
+              </div>
+              <div className="absolute right-2.5 top-2.5 flex gap-1.5">
+                <button type="button" onClick={() => setReordering((r) => !r)} className={pillDarkClass}>
+                  {reordering ? "Done" : "Reorder"}
+                </button>
+                <button type="button" onClick={() => commit([])} className={pillDarkClass}>
+                  Remove all
+                </button>
+              </div>
+              {reordering && rest.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => move(0, 1)}
+                  aria-label="Move this photo later"
+                  className={`absolute bottom-2.5 right-2.5 ${pillDarkClass}`}
+                >
+                  Move later ›
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 grid-rows-2 gap-2">
+              {thumbs.map((src, i) => (
+                <Thumb
+                  key={src}
+                  src={src}
+                  index={i + 1}
+                  extra={
+                    i === thumbs.length - 1 && overflow > 0 ? (
+                      <div className="absolute inset-0 flex items-center justify-center bg-[rgba(30,58,138,0.6)] text-sm font-bold text-white">
+                        +{overflow}
+                      </div>
+                    ) : undefined
+                  }
+                />
+              ))}
+              {/* pad empty thumbnail slots so the 2x2 grid stays intact with < 4 extra photos */}
+              {Array.from({ length: Math.max(0, 4 - thumbs.length) }).map((_, i) => (
+                <div key={`empty-${i}`} className="aspect-square rounded-[10px] border border-dashed border-border" />
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="mb-3.5 flex aspect-[16/10] items-center justify-center rounded-xl border border-dashed border-border bg-input-bg text-sm text-muted">
+            No photos yet
+          </div>
+        )}
+        {urlRow}
+        <p className="mt-2 text-xs text-muted">
+          Hover a thumbnail and click × to drop it, or Reorder to move photos — they appear in the client PDF in
+          this order.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center gap-3 text-xs">
@@ -87,7 +288,7 @@ export function PhotoPicker({
             onClick={() => commit(photos.filter((p) => !broken[p]))}
             className="text-amber-600 underline hover:text-amber-700"
           >
-            {`Remove ${brokenCount} that won\u2019t load`}
+            {`Remove ${brokenCount} that won’t load`}
           </button>
         )}
         {photos.length > 0 && (
@@ -147,40 +348,12 @@ export function PhotoPicker({
               >
                 ×
               </button>
-              {broken[src] && (
-                <span className="absolute inset-x-0 bottom-0 bg-amber-100/90 px-1 py-0.5 text-center text-[9px] text-amber-800">
-                  won&apos;t load
-                </span>
-              )}
             </div>
           ))}
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <input
-          type="url"
-          value={adding}
-          onChange={(e) => setAdding(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              // This lives inside the building form — Enter must not submit it.
-              e.preventDefault();
-              add();
-            }
-          }}
-          placeholder="Paste another photo URL…"
-          className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm"
-        />
-        <button
-          type="button"
-          onClick={add}
-          disabled={!adding.trim()}
-          className="rounded-full border border-border px-3 py-2 text-sm font-semibold disabled:opacity-40"
-        >
-          Add
-        </button>
-      </div>
+      {urlRow}
       <p className="mt-2 text-xs text-muted">
         Hover a photo and click × to drop it. They appear in the client PDF in this order.
       </p>

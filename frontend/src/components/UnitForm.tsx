@@ -3,10 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { Button, Card } from "@/components/ui";
+import { Button, Card, fieldInputClass, fieldLabelClass } from "@/components/ui";
+import { AmenityMultiSelect } from "@/components/AmenityMultiSelect";
 
-const inputClass = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm";
-const labelClass = "text-sm";
+const inputClass = fieldInputClass;
+const labelClass = fieldLabelClass;
 
 const EMPTY_UNIT = {
   floor: "",
@@ -25,7 +26,9 @@ const EMPTY_UNIT = {
   contractTerm: "",
   contractTermYears: "",
   availability: "",
-  unitAmenities: "",
+  // See BuildingForm — the API always took this as a JSON array; the old
+  // comma-separated text field was a frontend-only simplification.
+  unitAmenities: [] as string[],
   photos: "",
 };
 
@@ -52,7 +55,7 @@ export function UnitForm({
   const [pricingModel, setPricingModel] = useState<"per_sqm_annual" | "per_desk_monthly">(initialPricingModel);
   const [form, setForm] = useState({ ...EMPTY_UNIT, ...initial });
 
-  function update<K extends keyof typeof form>(key: K, value: string) {
+  function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -89,7 +92,7 @@ export function UnitForm({
         contract_term: form.contractTerm || null,
         contract_term_years: form.contractTermYears ? Number(form.contractTermYears) : null,
         availability: form.availability || null,
-        unit_amenities: form.unitAmenities.split(",").map((s) => s.trim()).filter(Boolean),
+        unit_amenities: form.unitAmenities,
         photos: form.photos.split(",").map((s) => s.trim()).filter(Boolean),
       };
       if (unitId) {
@@ -112,11 +115,11 @@ export function UnitForm({
         <h2 className="mb-4 text-lg font-semibold">Unit</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className={labelClass}>
-            <span className="mb-1 block font-medium">Floor</span>
+            <span className="mb-1.5 block">Floor</span>
             <input value={form.floor} onChange={(e) => update("floor", e.target.value)} placeholder="2nd floor" className={inputClass} />
           </label>
           <label className={labelClass}>
-            <span className="mb-1 block font-medium">Delivery condition</span>
+            <span className="mb-1.5 block">Delivery condition</span>
             <select value={form.deliveryCondition} onChange={(e) => update("deliveryCondition", e.target.value)} className={inputClass}>
               <option value="turn_key">Turn key</option>
               <option value="shell_and_core">Shell and core</option>
@@ -125,11 +128,11 @@ export function UnitForm({
             </select>
           </label>
           <label className={labelClass}>
-            <span className="mb-1 block font-medium">Available area (m²) *</span>
+            <span className="mb-1.5 block">Available area (m²) *</span>
             <input type="number" value={form.availableAreaM2} onChange={(e) => update("availableAreaM2", e.target.value)} className={inputClass} required />
           </label>
           <label className={labelClass}>
-            <span className="mb-1 block font-medium">Min divisible area (m²)</span>
+            <span className="mb-1.5 block">Min divisible area (m²)</span>
             <input type="number" value={form.minDivisibleAreaM2} onChange={(e) => update("minDivisibleAreaM2", e.target.value)} placeholder="e.g. units from 75 m²" className={inputClass} />
           </label>
         </div>
@@ -152,7 +155,7 @@ export function UnitForm({
         {pricingModel === "per_sqm_annual" ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <label className={labelClass}>
-              <span className="mb-1 block font-medium">Rent price type</span>
+              <span className="mb-1.5 block">Rent price type</span>
               <select value={form.rentPriceType} onChange={(e) => update("rentPriceType", e.target.value)} className={inputClass}>
                 <option value="fixed">Fixed</option>
                 <option value="from">From (starting price)</option>
@@ -161,33 +164,33 @@ export function UnitForm({
               </select>
             </label>
             <label className={labelClass}>
-              <span className="mb-1 block font-medium">Rent (€/m²/yr)</span>
+              <span className="mb-1.5 block">Rent (€/m²/yr)</span>
               <input type="number" value={form.rentEurPerM2Year} onChange={(e) => update("rentEurPerM2Year", e.target.value)} className={inputClass} />
             </label>
             <label className={labelClass}>
-              <span className="mb-1 block font-medium">Service charge price type</span>
+              <span className="mb-1.5 block">Service charge price type</span>
               <select value={form.serviceChargePriceType} onChange={(e) => update("serviceChargePriceType", e.target.value)} className={inputClass}>
                 <option value="fixed">Fixed</option>
                 <option value="tbd">TBD</option>
               </select>
             </label>
             <label className={labelClass}>
-              <span className="mb-1 block font-medium">Service charge (€/m²/yr)</span>
+              <span className="mb-1.5 block">Service charge (€/m²/yr)</span>
               <input type="number" value={form.serviceChargeEurPerM2Year} onChange={(e) => update("serviceChargeEurPerM2Year", e.target.value)} className={inputClass} />
             </label>
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             <label className={labelClass}>
-              <span className="mb-1 block font-medium">Desk count</span>
+              <span className="mb-1.5 block">Desk count</span>
               <input type="number" value={form.deskCount} onChange={(e) => update("deskCount", e.target.value)} className={inputClass} />
             </label>
             <label className={labelClass}>
-              <span className="mb-1 block font-medium">Price per desk / month (€)</span>
+              <span className="mb-1.5 block">Price per desk / month (€)</span>
               <input type="number" value={form.pricePerDeskMonthEur} onChange={(e) => update("pricePerDeskMonthEur", e.target.value)} className={inputClass} />
             </label>
             <label className={labelClass}>
-              <span className="mb-1 block font-medium">Space provider / brand</span>
+              <span className="mb-1.5 block">Space provider / brand</span>
               <input value={form.spaceProvider} onChange={(e) => update("spaceProvider", e.target.value)} placeholder="Flexspace Central" className={inputClass} />
             </label>
           </div>
@@ -198,31 +201,31 @@ export function UnitForm({
         <h2 className="mb-4 text-lg font-semibold">Terms & extras</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className={labelClass}>
-            <span className="mb-1 block font-medium">Contract term</span>
+            <span className="mb-1.5 block">Contract term</span>
             <input value={form.contractTerm} onChange={(e) => update("contractTerm", e.target.value)} placeholder="5 years" className={inputClass} />
           </label>
           <label className={labelClass}>
-            <span className="mb-1 block font-medium">Contract term (years, numeric)</span>
+            <span className="mb-1.5 block">Contract term (years, numeric)</span>
             <input type="number" value={form.contractTermYears} onChange={(e) => update("contractTermYears", e.target.value)} className={inputClass} />
           </label>
           <label className={labelClass}>
-            <span className="mb-1 block font-medium">Availability</span>
+            <span className="mb-1.5 block">Availability</span>
             <input value={form.availability} onChange={(e) => update("availability", e.target.value)} placeholder="Available per direct" className={inputClass} />
           </label>
           <label className={labelClass}>
-            <span className="mb-1 block font-medium">Meeting room note</span>
+            <span className="mb-1.5 block">Meeting room note</span>
             <input value={form.meetingRoomNote} onChange={(e) => update("meetingRoomNote", e.target.value)} className={inputClass} />
           </label>
           <label className={labelClass}>
-            <span className="mb-1 block font-medium">Parking ratio</span>
+            <span className="mb-1.5 block">Parking ratio</span>
             <input value={form.parkingRatio} onChange={(e) => update("parkingRatio", e.target.value)} placeholder="1:100" className={inputClass} />
           </label>
-          <label className={labelClass}>
-            <span className="mb-1 block font-medium">Amenities (comma-separated)</span>
-            <input value={form.unitAmenities} onChange={(e) => update("unitAmenities", e.target.value)} placeholder="LED lighting, Air conditioning" className={inputClass} />
-          </label>
+          <div className={`${labelClass} sm:col-span-2`}>
+            <span className="mb-1.5 block">Amenities</span>
+            <AmenityMultiSelect value={form.unitAmenities} onChange={(next) => update("unitAmenities", next)} />
+          </div>
           <label className={`${labelClass} sm:col-span-2`}>
-            <span className="mb-1 block font-medium">Photo URLs (comma-separated)</span>
+            <span className="mb-1 block">Photo URLs (comma-separated)</span>
             <input value={form.photos} onChange={(e) => update("photos", e.target.value)} className={inputClass} />
           </label>
         </div>
