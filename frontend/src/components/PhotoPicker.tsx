@@ -282,8 +282,10 @@ export function PhotoPicker({
           // to h-full: the thumbnail 2x2 grid used to size itself off its own
           // (narrower) column width via aspect-square, so its total height
           // rarely matched the hero photo's — now it always fills exactly the
-          // same height the hero photo does, flush at top and bottom.
-          <div className="mb-3.5 grid grid-cols-[1.7fr_1fr] gap-2 [aspect-ratio:16/10]">
+          // same height the hero photo does, flush at top and bottom. A wider
+          // ratio than a plain photo (16:10) keeps the card from reading as a
+          // tall, stretched block.
+          <div className="mb-3.5 grid grid-cols-[1.7fr_1fr] gap-2 [aspect-ratio:2.4/1]">
             <div className="group relative h-full overflow-hidden rounded-xl border border-border bg-input-bg">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -356,11 +358,10 @@ export function PhotoPicker({
             </div>
           </div>
         ) : (
-          <div className="mb-3.5 flex aspect-[16/10] items-center justify-center rounded-xl border border-dashed border-border bg-input-bg text-sm text-muted">
+          <div className="mb-3.5 flex [aspect-ratio:2.4/1] items-center justify-center rounded-xl border border-dashed border-border bg-input-bg text-sm text-muted">
             No photos yet
           </div>
         )}
-        {urlRow}
         <p className="mt-2 text-xs text-muted">
           Click a photo to view it full-size, hover and click × to drop it, or Reorder to drag photos into
           order — they appear in the client PDF in this order.
