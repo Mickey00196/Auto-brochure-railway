@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Neighbourhood } from "@/lib/types";
 import { api } from "@/lib/api";
 import { Button, Card } from "@/components/ui";
@@ -129,6 +129,34 @@ export function BuildingForm({
       setLocating(false);
     }
   }
+
+  // Auto-run once on mount rather than waiting for someone to remember the
+  // button: a building arriving with an address but no distances yet — a
+  // fresh capture, or an older one saved before this existed — shouldn't
+  // need a click just to get straight-line estimates. Same blanks-only
+  // behaviour as the button, so a figure the listing (or a person) already
+  // stated is still never overwritten, and the same loading/error state
+  // shows either way.
+  const autoLookupRan = useRef(false);
+  useEffect(() => {
+    if (autoLookupRan.current) return;
+    autoLookupRan.current = true;
+    if (
+      (form.address.trim() || form.city.trim()) &&
+      !form.publicTransportNote &&
+      !form.accessibilityNote &&
+      !form.airportNote
+    ) {
+      // Deferred a tick: lookUpDistances's first line sets state
+      // synchronously, and calling it directly in the effect body trips
+      // react-hooks/set-state-in-effect (cascading-render risk) even though
+      // this only ever runs once, guarded by the ref above.
+      queueMicrotask(() => lookUpDistances());
+    }
+    // Deliberately mount-only — not on every address edit, so it can't fire
+    // on every keystroke/blur while someone is still typing an address.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function update<K extends keyof typeof form>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
