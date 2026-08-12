@@ -42,6 +42,18 @@ export interface Building {
   units: Unit[];
 }
 
+export interface DuplicateCandidate {
+  building_id: string;
+  name: string;
+  address: string;
+  city: string;
+  space_count: number;
+  is_draft: boolean;
+  thumbnail_url: string | null;
+  similarity_score: number;
+  tier: "exact" | "postcode_house" | "name";
+}
+
 export interface Unit {
   unit_id: string;
   building_id: string;

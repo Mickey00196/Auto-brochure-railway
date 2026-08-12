@@ -56,3 +56,42 @@ def test_deleting_an_unknown_building_is_404(client):
 def _library_buildings(client) -> list[dict]:
     client.post("/seed/demo")
     return client.get("/buildings").json()
+
+
+def test_check_duplicate_flags_exact_reentry(client):
+    client.post(
+        "/buildings",
+        json={"name": "Existing", "address": "Eduard van Beinumstraat 4-36", "city": "Amsterdam"},
+    )
+    r = client.get(
+        "/buildings/check-duplicate",
+        params={"address": "Eduard van Beinumstraat 4-36", "city": "Amsterdam"},
+    )
+    assert r.status_code == 200
+    matches = r.json()
+    assert matches and matches[0]["tier"] == "exact" and matches[0]["is_draft"] is True
+
+
+def test_check_duplicate_no_match_for_different_building(client):
+    client.post("/buildings", json={"name": "A", "address": "Keizersgracht 4", "city": "Amsterdam"})
+    r = client.get(
+        "/buildings/check-duplicate", params={"address": "Keizersgracht 812", "city": "Amsterdam"}
+    )
+    assert r.json() == []
+
+
+def test_check_duplicate_excludes_own_building_when_editing(client):
+    created = client.post(
+        "/buildings", json={"name": "Self", "address": "Damrak 1", "city": "Amsterdam"}
+    ).json()
+    r = client.get(
+        "/buildings/check-duplicate",
+        params={"address": "Damrak 1", "city": "Amsterdam", "exclude_building_id": created["building_id"]},
+    )
+    assert r.json() == []
+
+
+def test_check_duplicate_empty_query_returns_nothing(client):
+    r = client.get("/buildings/check-duplicate", params={"address": "", "city": ""})
+    assert r.status_code == 200
+    assert r.json() == []

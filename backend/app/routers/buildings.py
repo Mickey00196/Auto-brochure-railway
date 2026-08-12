@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app import schemas
 from app.database import get_db
 from app.models import Building, Listing, ProposalUnit, Selection
+from app.services.scraping.deduplicator import find_similar_buildings
 
 router = APIRouter(prefix="/buildings", tags=["buildings"])
 
@@ -16,6 +17,48 @@ def list_buildings(city: str | None = None, db: Session = Depends(get_db)):
     if city:
         query = query.filter(Building.city == city)
     return query.all()
+
+
+# Registered ahead of GET /{building_id} — Starlette matches routes in
+# registration order, and "check-duplicate" would otherwise be swallowed as
+# a building_id path param.
+@router.get("/check-duplicate", response_model=list[schemas.DuplicateCandidate])
+def check_duplicate(
+    address: str = "",
+    city: str = "",
+    postal_code: str | None = None,
+    name: str = "",
+    exclude_building_id: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """Powers the Add Building form's live "this looks similar to..."
+    warning — called debounced as someone types, so it needs to stay cheap;
+    find_similar_buildings runs entirely in Python over one team's
+    buildings table, not a network call, so it comfortably does."""
+    if not address.strip() and not city.strip():
+        return []
+    candidates = find_similar_buildings(
+        db,
+        address=address,
+        city=city,
+        postal_code=postal_code,
+        name=name,
+        exclude_building_id=exclude_building_id,
+    )
+    return [
+        schemas.DuplicateCandidate(
+            building_id=c.building.building_id,
+            name=c.building.name,
+            address=c.building.address,
+            city=c.building.city,
+            space_count=len(c.building.units),
+            is_draft=len(c.building.units) == 0,
+            thumbnail_url=(c.building.photos or [None])[0],
+            similarity_score=c.score,
+            tier=c.tier,
+        )
+        for c in candidates
+    ]
 
 
 @router.post("", response_model=schemas.BuildingOut, status_code=201)

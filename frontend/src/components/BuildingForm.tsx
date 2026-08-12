@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import type { Neighbourhood } from "@/lib/types";
+import type { DuplicateCandidate, Neighbourhood } from "@/lib/types";
 import { api } from "@/lib/api";
 import { Badge, Button, Card, fieldInputClass, fieldLabelClass } from "@/components/ui";
 import { PhotoPicker } from "@/components/PhotoPicker";
@@ -102,6 +103,38 @@ export function BuildingForm({
   const [locating, setLocating] = useState(false);
   const [locateNote, setLocateNote] = useState<string | null>(null);
   const [transportMode, setTransportMode] = useState<TransportMode>("nearest_any");
+  const [duplicates, setDuplicates] = useState<DuplicateCandidate[]>([]);
+  const [duplicatesDismissed, setDuplicatesDismissed] = useState(false);
+
+  // Debounced "does this already exist?" check — only for a genuinely new
+  // building (editing one obviously matches itself) and only once there's
+  // enough to check against. This is the manual-form half of duplicate
+  // detection; POST /imports/urls (the bulk importer) does its own check
+  // server-side since that path has no human typing to debounce against.
+  useEffect(() => {
+    if (isEdit || duplicatesDismissed) return;
+    if (!form.address.trim() || !form.city.trim()) {
+      // Deferred a tick (queueMicrotask): a synchronous setState call in the
+      // effect body trips react-hooks/set-state-in-effect (cascading-render
+      // risk) — same pattern as the distance-lookup effect above.
+      queueMicrotask(() => setDuplicates([]));
+      return;
+    }
+    const timer = setTimeout(() => {
+      api
+        .checkDuplicateBuilding({
+          address: form.address,
+          city: form.city,
+          postalCode: form.postalCode || undefined,
+          name: form.name || undefined,
+        })
+        .then(setDuplicates)
+        .catch(() => {
+          /* the warning is a convenience — never block typing on it */
+        });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [form.address, form.city, form.postalCode, form.name, isEdit, duplicatesDismissed]);
 
   /** Fill the three transport distances from the address. Only ever fills
    * blanks — a figure the listing itself stated (or one typed by hand) is
@@ -281,9 +314,6 @@ export function BuildingForm({
       // Total building area is only a fallback for the rare listing that
       // states nothing else — the offered area is the figure that matters.
       const areaForUnit = form.availableAreaM2 || form.totalBuildingAreaM2;
-      const hasLeaseTerms = Boolean(
-        form.rentEurPerM2Year || form.serviceChargeEurPerM2Year || form.parkingRatio || form.availability,
-      );
       if (areaForUnit && hasLeaseTerms) {
         const unit = await api.createUnit({
           building_id: building.building_id,
@@ -327,6 +357,10 @@ export function BuildingForm({
   // is known yet (a hand-typed new building, nothing filled in below yet).
   const hasIdentity = Boolean(form.name.trim() || form.address.trim());
   const photoCount = form.photos.split(",").map((s) => s.trim()).filter(Boolean).length;
+  const hasLeaseTerms = Boolean(
+    form.rentEurPerM2Year || form.serviceChargeEurPerM2Year || form.parkingRatio || form.availability,
+  );
+  const draftMatch = duplicates.find((d) => d.is_draft);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -464,6 +498,58 @@ export function BuildingForm({
             <input type="number" value={form.totalBuildingAreaM2} onChange={(e) => update("totalBuildingAreaM2", e.target.value)} className={inputClass} />
           </label>
         </div>
+
+        {duplicates.length > 0 && !duplicatesDismissed && (
+          <div className="mt-4 rounded-xl bg-warn-bg p-4 text-sm text-warn-foreground">
+            {draftMatch && hasLeaseTerms ? (
+              <p className="font-semibold">
+                There&apos;s an incomplete draft of this building — consider completing that one instead of
+                creating a new entry.
+              </p>
+            ) : (
+              <p className="font-semibold">
+                This looks similar to {duplicates.length} building{duplicates.length === 1 ? "" : "s"} already
+                in the library:
+              </p>
+            )}
+            <ul className="mt-2 space-y-2">
+              {duplicates.map((d) => (
+                <li key={d.building_id} className="flex items-center justify-between gap-3 rounded-lg bg-white/40 px-3 py-2">
+                  <div className="flex items-center gap-2.5 overflow-hidden">
+                    {d.thumbnail_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- arbitrary captured URLs, no fixed domain to allowlist
+                      <img src={d.thumbnail_url} alt="" className="h-9 w-9 shrink-0 rounded-md object-cover" />
+                    ) : (
+                      <div className="h-9 w-9 shrink-0 rounded-md bg-warn-foreground/15" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{d.name || d.address}</div>
+                      <div className="truncate text-xs opacity-80">
+                        {d.address}
+                        {d.is_draft
+                          ? " — draft, no spaces yet"
+                          : ` — ${d.space_count} space${d.space_count === 1 ? "" : "s"}`}
+                      </div>
+                    </div>
+                  </div>
+                  <Link
+                    href={`/buildings/${d.building_id}`}
+                    className="shrink-0 whitespace-nowrap text-xs font-semibold underline hover:no-underline"
+                  >
+                    View / Edit instead →
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={() => setDuplicatesDismissed(true)}
+              className="mt-2.5 text-xs font-semibold underline hover:no-underline"
+            >
+              Not a duplicate — this is a different building
+            </button>
+          </div>
+        )}
       </Card>
 
       <Card>

@@ -24,6 +24,7 @@ from app.database import get_db
 from app.models import AddOn, Building, Unit
 from app.models.enums import RentPriceType, ServiceChargePriceType
 from app.schemas import ScrapePreviewRequest, ScrapePreviewResult
+from app.services.scraping.deduplicator import DUPLICATE_MERGE_THRESHOLD, find_similar_buildings
 from app.services.scraping.generic_scraper import scrape
 
 router = APIRouter(prefix="/imports", tags=["imports"])
@@ -57,10 +58,52 @@ class ImportUrlsRequest(BaseModel):
 
 class ImportResult(BaseModel):
     url: str
-    status: str  # "created" | "error"
+    status: str  # "created" | "updated" | "error" | "blocked"
     building_id: str | None = None
     title: str | None = None
     message: str | None = None
+
+
+def _merge_scraped_into_existing(building: Building, listing) -> str:
+    """A confident duplicate match (>= DUPLICATE_MERGE_THRESHOLD) updates the
+    existing record instead of creating a second one — this is the actual
+    fix for the "same address twice, once empty once filled in" pattern,
+    since the unconditional-create below was never checking for one.
+
+    Fill-blanks-only, never overwrite: a person may have already corrected
+    something the scraper got wrong, and a re-scrape re-running that same
+    scraper flaw should not silently stomp their fix. (Flagged rather than
+    assumed per the brief — "last scraped wins" would be a one-line change
+    to the conditions below if that's ever preferred instead.)"""
+    filled: list[str] = []
+    if not building.description and listing.description:
+        building.description = listing.description
+        filled.append("description")
+    if not building.photos and listing.photos:
+        building.photos = listing.photos
+        filled.append("photos")
+    elif listing.photos:
+        # Still worth adding any genuinely new shots, even if some exist.
+        new_photos = [p for p in listing.photos if p not in building.photos]
+        if new_photos:
+            building.photos = [*building.photos, *new_photos]
+            filled.append(f"{len(new_photos)} new photo(s)")
+    if not building.energy_label and listing.energy_label:
+        building.energy_label = listing.energy_label
+        filled.append("energy label")
+    if not building.year_built and listing.year_built:
+        building.year_built = listing.year_built
+        filled.append("year built")
+    if not building.source_url and listing.source_url:
+        building.source_url = listing.source_url
+    if listing.amenities:
+        new_amenities = [a for a in listing.amenities if a not in building.building_amenities]
+        if new_amenities:
+            building.building_amenities = [*building.building_amenities, *new_amenities]
+            filled.append("amenities")
+    return f"Matched an existing building — filled in {', '.join(filled)}." if filled else (
+        "Matched an existing building — nothing new to add, left it as-is."
+    )
 
 
 def _parse_amount(raw: str) -> float | None:
@@ -193,21 +236,37 @@ def import_urls(payload: ImportUrlsRequest, db: Session = Depends(get_db)):
             results.append(ImportResult(url=url, status="blocked", message=_BLOCK_MESSAGE))
             continue
 
-        building = Building(
-            name=listing.title or url,
-            address=listing.address or "TBD",
-            city=listing.city or "TBD",
-            description=listing.description or None,
-            photos=listing.photos,
-            source_url=listing.source_url,
-            energy_label=listing.energy_label,
-            year_built=listing.year_built,
-            building_amenities=listing.amenities,
+        # This loop is the actual unconditional-create path that produced
+        # the "same address twice, once empty once filled in" duplicates —
+        # every prior call here created a Building with no check at all.
+        # A confident match updates that existing record instead.
+        candidates = find_similar_buildings(
+            db, address=listing.address, city=listing.city, name=listing.title,
         )
-        db.add(building)
-        db.flush()
+        existing = candidates[0].building if candidates and candidates[0].score >= DUPLICATE_MERGE_THRESHOLD else None
 
-        if listing.parking_price_raw and listing.parking_price_raw != "tbd":
+        status = "created"
+        message = None
+        if existing:
+            building = existing
+            message = _merge_scraped_into_existing(building, listing)
+            status = "updated"
+        else:
+            building = Building(
+                name=listing.title or url,
+                address=listing.address or "TBD",
+                city=listing.city or "TBD",
+                description=listing.description or None,
+                photos=listing.photos,
+                source_url=listing.source_url,
+                energy_label=listing.energy_label,
+                year_built=listing.year_built,
+                building_amenities=listing.amenities,
+            )
+            db.add(building)
+            db.flush()
+
+        if listing.parking_price_raw and listing.parking_price_raw != "tbd" and not existing:
             parking_price = _parse_amount(listing.parking_price_raw)
             if parking_price is not None:
                 db.add(
@@ -219,30 +278,36 @@ def import_urls(payload: ImportUrlsRequest, db: Session = Depends(get_db)):
                     )
                 )
 
-        message = None
-        for scraped_unit in listing.units:
-            if scraped_unit.area_m2 is None:
-                message = "Area could not be determined from the page — building created without a unit; add one manually."
-                continue
-            rent_type, rent_value = _parse_rent(scraped_unit.rent_raw)
-            service_charge_type, service_charge_value = _parse_service_charge(scraped_unit.service_charge_raw)
-            db.add(
-                Unit(
-                    building_id=building.building_id,
-                    floor=scraped_unit.floor,
-                    available_area_m2=scraped_unit.area_m2,
-                    min_divisible_area_m2=scraped_unit.min_divisible_area_m2,
-                    rent_price_type=rent_type,
-                    rent_eur_per_m2_year=rent_value,
-                    service_charge_price_type=service_charge_type,
-                    service_charge_eur_per_m2_year=service_charge_value,
-                    contract_term=None if scraped_unit.contract_term_raw == "tbd" else scraped_unit.contract_term_raw,
+        # Matched an existing building that already has space(s) recorded —
+        # adding another Unit from this scrape would just be a second,
+        # possibly-conflicting figure for the same space. Only a genuine
+        # draft (no units yet) gets this scrape's units, same as a fresh
+        # create would.
+        if not existing or len(building.units) == 0:
+            for scraped_unit in listing.units:
+                if scraped_unit.area_m2 is None:
+                    if not existing:
+                        message = "Area could not be determined from the page — building created without a unit; add one manually."
+                    continue
+                rent_type, rent_value = _parse_rent(scraped_unit.rent_raw)
+                service_charge_type, service_charge_value = _parse_service_charge(scraped_unit.service_charge_raw)
+                db.add(
+                    Unit(
+                        building_id=building.building_id,
+                        floor=scraped_unit.floor,
+                        available_area_m2=scraped_unit.area_m2,
+                        min_divisible_area_m2=scraped_unit.min_divisible_area_m2,
+                        rent_price_type=rent_type,
+                        rent_eur_per_m2_year=rent_value,
+                        service_charge_price_type=service_charge_type,
+                        service_charge_eur_per_m2_year=service_charge_value,
+                        contract_term=None if scraped_unit.contract_term_raw == "tbd" else scraped_unit.contract_term_raw,
+                    )
                 )
-            )
 
         db.commit()
         results.append(
-            ImportResult(url=url, status="created", building_id=building.building_id, title=listing.title, message=message)
+            ImportResult(url=url, status=status, building_id=building.building_id, title=listing.title, message=message)
         )
 
     return results

@@ -102,6 +102,21 @@ class BuildingWithUnits(BuildingOut):
     units: list["UnitOut"] = Field(default_factory=list)
 
 
+class DuplicateCandidate(BaseModel):
+    """One possible existing match for a building someone's about to create —
+    see services/scraping/deduplicator.find_similar_buildings."""
+
+    building_id: str
+    name: str
+    address: str
+    city: str
+    space_count: int
+    is_draft: bool  # zero spaces — an incomplete capture, worth completing instead of duplicating
+    thumbnail_url: str | None = None
+    similarity_score: float
+    tier: str  # "exact" | "postcode_house" | "name"
+
+
 # ─────────────────────────────────────────── Unit ───────────────────────────────────────────
 
 

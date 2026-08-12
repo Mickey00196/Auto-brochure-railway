@@ -4,6 +4,7 @@ import type {
   Client,
   ComparisonRow,
   DashboardData,
+  DuplicateCandidate,
   ImportResult,
   IngestionJob,
   IngestionRequest,
@@ -36,6 +37,19 @@ export function makeApi(request: DoRequest) {
     updateBuilding: (id: string, payload: Record<string, unknown>) =>
       request<Building>(`/buildings/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
     deleteBuilding: (id: string) => request<void>(`/buildings/${id}`, { method: "DELETE" }),
+    checkDuplicateBuilding: (params: {
+      address: string;
+      city: string;
+      postalCode?: string;
+      name?: string;
+      excludeBuildingId?: string;
+    }) => {
+      const query = new URLSearchParams({ address: params.address, city: params.city });
+      if (params.postalCode) query.set("postal_code", params.postalCode);
+      if (params.name) query.set("name", params.name);
+      if (params.excludeBuildingId) query.set("exclude_building_id", params.excludeBuildingId);
+      return request<DuplicateCandidate[]>(`/buildings/check-duplicate?${query.toString()}`);
+    },
 
     units: (buildingId?: string) =>
       request<Unit[]>(`/units${buildingId ? `?building_id=${buildingId}` : ""}`),

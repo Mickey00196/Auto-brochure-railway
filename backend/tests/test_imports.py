@@ -95,6 +95,71 @@ def test_import_without_area_creates_building_but_no_unit(client, monkeypatch):
     assert len(match["units"]) == 0
 
 
+def test_import_merges_into_existing_draft_instead_of_duplicating(client, monkeypatch):
+    """The exact pattern reported in production: an earlier scrape created a
+    bare-address building with no unit (a "draft"); re-scraping the same
+    listing must update that record — filling in the description/photos/
+    amenities/unit it was missing — rather than creating a second building
+    at the same address."""
+    draft = client.post(
+        "/buildings", json={"name": "Teststraat 1", "address": "Teststraat 1", "city": "Amsterdam"}
+    ).json()
+
+    monkeypatch.setattr(imports_router, "scrape", _fake_listing_with_unit)
+    r = client.post("/imports/urls", json={"urls": ["https://example.test/listing-1"]})
+    body = r.json()
+    assert body[0]["status"] == "updated"
+    assert body[0]["building_id"] == draft["building_id"]
+
+    buildings = client.get("/buildings").json()
+    assert len(buildings) == 1, "must not have created a second building at the same address"
+    updated = buildings[0]
+    assert updated["description"] == "A test listing"
+    assert updated["building_amenities"] == ["Roof Terrace"]
+    assert len(updated["units"]) == 1
+    assert updated["units"][0]["available_area_m2"] == 250
+
+
+def test_import_does_not_overwrite_manually_corrected_fields(client, monkeypatch):
+    """Fill-blanks-only: a field the team already filled in by hand must
+    survive a later re-scrape untouched, even if the scraper found a
+    (possibly different) value for it."""
+    client.post(
+        "/buildings",
+        json={
+            "name": "Teststraat 1",
+            "address": "Teststraat 1",
+            "city": "Amsterdam",
+            "description": "Hand-corrected description — do not overwrite",
+        },
+    )
+
+    monkeypatch.setattr(imports_router, "scrape", _fake_listing_with_unit)
+    client.post("/imports/urls", json={"urls": ["https://example.test/listing-1"]})
+
+    buildings = client.get("/buildings").json()
+    assert buildings[0]["description"] == "Hand-corrected description — do not overwrite"
+
+
+def test_import_does_not_duplicate_units_on_a_building_that_already_has_one(client, monkeypatch):
+    """A matched building that already has a real Unit must not gain a
+    second, possibly-conflicting figure for the same space from a re-scrape."""
+    building = client.post(
+        "/buildings", json={"name": "Teststraat 1", "address": "Teststraat 1", "city": "Amsterdam"}
+    ).json()
+    client.post(
+        "/units",
+        json={"building_id": building["building_id"], "available_area_m2": 999},
+    )
+
+    monkeypatch.setattr(imports_router, "scrape", _fake_listing_with_unit)
+    client.post("/imports/urls", json={"urls": ["https://example.test/listing-1"]})
+
+    buildings = client.get("/buildings").json()
+    assert len(buildings[0]["units"]) == 1
+    assert buildings[0]["units"][0]["available_area_m2"] == 999
+
+
 def test_import_reports_error_per_url_without_failing_batch(client, monkeypatch):
     def _raising_scrape(url: str) -> ScrapedListing:
         if "bad" in url:
