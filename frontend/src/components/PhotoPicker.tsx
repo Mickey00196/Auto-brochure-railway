@@ -7,6 +7,8 @@ import { PhotoLightbox } from "@/components/PhotoLightbox";
 
 const pillDarkClass =
   "rounded-full bg-[rgba(30,58,138,0.72)] px-2.5 py-1 text-[11px] font-semibold text-white";
+const navCircleClass =
+  "flex h-9 w-9 items-center justify-center rounded-full bg-[rgba(30,58,138,0.72)] text-lg font-semibold text-white transition hover:bg-[rgba(30,58,138,0.9)]";
 const scrimTopClass =
   "pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/40 to-transparent";
 const scrimBottomClass =
@@ -135,6 +137,10 @@ export function PhotoPicker({
   const [removedDupes, setRemovedDupes] = useState<{ count: number; previous: string } | null>(null);
   const [reorderOpen, setReorderOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  // Which photo sits in the hero slot — browsing only, doesn't touch the
+  // saved order (that's what "Reorder" is for). The ‹ › arrows on the
+  // gallery card just step this forward/back.
+  const [heroIndex, setHeroIndex] = useState(0);
   const checkedRef = useRef<string>("");
 
   const photos = value
@@ -254,9 +260,21 @@ export function PhotoPicker({
   );
 
   if (variant === "gallery") {
-    const [main, ...rest] = photos;
-    const thumbs = rest.slice(0, 4);
-    const overflow = rest.length - thumbs.length;
+    // heroIndex can drift out of range as photos are added/removed — wrap it
+    // back in bounds rather than reset to 0, so removing a later photo
+    // doesn't unexpectedly jump the hero back to the first one.
+    const safeHeroIndex = photos.length ? ((heroIndex % photos.length) + photos.length) % photos.length : 0;
+    const main = photos[safeHeroIndex] as string | undefined;
+    // The rest, in original order, starting right after the hero and
+    // wrapping around — so stepping the hero forward/back always surfaces
+    // "the next/previous photo" without touching the saved order.
+    const rest = photos
+      .map((src, i) => ({ src, i }))
+      .filter((p) => p.i !== safeHeroIndex);
+    const rotatedRest = [...rest.slice(safeHeroIndex), ...rest.slice(0, safeHeroIndex)];
+    const thumbs = rotatedRest.slice(0, 4);
+    const overflow = rotatedRest.length - thumbs.length;
+    const stepHero = (delta: number) => setHeroIndex((h) => h + delta);
 
     return (
       <div>
@@ -285,14 +303,14 @@ export function PhotoPicker({
           // same height the hero photo does, flush at top and bottom. A wider
           // ratio than a plain photo (16:10) keeps the card from reading as a
           // tall, stretched block.
-          <div className="mb-3.5 grid grid-cols-[1.7fr_1fr] gap-2 [aspect-ratio:2.4/1]">
+          <div className="group/gallery relative mb-3.5 grid grid-cols-[1.7fr_1fr] gap-2 [aspect-ratio:2.4/1]">
             <div className="group relative h-full overflow-hidden rounded-xl border border-border bg-input-bg">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={main}
                 alt=""
                 onError={() => setBroken((b) => ({ ...b, [main]: true }))}
-                onClick={() => setViewerIndex(0)}
+                onClick={() => setViewerIndex(safeHeroIndex)}
                 className={`h-full w-full cursor-pointer object-cover ${hoverImgClass}`}
               />
               <div className={scrimTopClass} />
@@ -310,9 +328,8 @@ export function PhotoPicker({
               </div>
             </div>
             <div className="grid h-full grid-cols-2 grid-rows-2 gap-2">
-              {thumbs.map((src, i) => {
+              {thumbs.map(({ src, i: photoIndex }, i) => {
                 const isOverflowTile = i === thumbs.length - 1 && overflow > 0;
-                const photoIndex = i + 1; // offset past the hero photo (index 0)
                 return (
                   <div
                     key={src}
@@ -356,6 +373,26 @@ export function PhotoPicker({
                 <div key={`empty-${i}`} className="h-full w-full rounded-xl border border-dashed border-border" />
               ))}
             </div>
+            {photos.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => stepHero(-1)}
+                  aria-label="Show previous photo as the hero"
+                  className={`absolute left-2 top-1/2 z-10 -translate-y-1/2 ${navCircleClass}`}
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  onClick={() => stepHero(1)}
+                  aria-label="Show next photo as the hero"
+                  className={`absolute right-2 top-1/2 z-10 -translate-y-1/2 ${navCircleClass}`}
+                >
+                  ›
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <div className="mb-3.5 flex [aspect-ratio:2.4/1] items-center justify-center rounded-xl border border-dashed border-border bg-input-bg text-sm text-muted">
