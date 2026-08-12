@@ -143,9 +143,7 @@ export function BuildingForm({
     autoLookupRan.current = true;
     if (
       (form.address.trim() || form.city.trim()) &&
-      !form.publicTransportNote &&
-      !form.accessibilityNote &&
-      !form.airportNote
+      (!form.publicTransportNote || !form.accessibilityNote || !form.airportNote)
     ) {
       // Deferred a tick: lookUpDistances's first line sets state
       // synchronously, and calling it directly in the effect body trips
