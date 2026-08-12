@@ -72,12 +72,12 @@ export function ImportForm() {
                 {r.message && <p className="mt-1 text-xs text-amber-600">{r.message}</p>}
                 {r.status === "blocked" && (
                   <Link href="/buildings/new" className="mt-1 inline-block text-xs text-accent hover:underline">
-                    Naar Add Building (plak-optie) →
+                    Go to Add Building (paste option) →
                   </Link>
                 )}
                 {r.status === "created" && r.building_id && (
                   <Link href="/buildings" className="mt-1 inline-block text-xs text-accent hover:underline">
-                    View in Buildings & Units →
+                    View in Building library →
                   </Link>
                 )}
               </div>

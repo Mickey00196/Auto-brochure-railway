@@ -33,14 +33,21 @@ def _slug(text: str) -> str:
 
 @router.post("/pdf")
 def generate_library_pdf(payload: LibraryPdfRequest, db: Session = Depends(get_db)):
-    pdf_bytes = build_library_pdf(
-        db,
-        client_name=payload.client_name.strip(),
-        building_ids=payload.building_ids,
-        prepared_by=(payload.prepared_by or "").strip() or None,
-    )
+    try:
+        pdf_bytes = build_library_pdf(
+            db,
+            client_name=payload.client_name.strip(),
+            building_ids=payload.building_ids,
+            prepared_by=(payload.prepared_by or "").strip() or None,
+        )
+    except Exception as exc:
+        # Without this, a rendering failure reaches the client as a bare
+        # 500 with no body — "HTTP 500" is all the frontend can show. The
+        # underlying reportlab/data error is safe to surface: it's this
+        # request's own selection/content, never another user's data.
+        raise HTTPException(500, f"Could not generate the PDF: {exc}") from exc
     if not pdf_bytes:
-        raise HTTPException(500, "Could not generate the PDF")
+        raise HTTPException(500, "Could not generate the PDF — the renderer returned nothing.")
     filename = f"availability-{_slug(payload.client_name)}.pdf"
     return Response(
         content=pdf_bytes,

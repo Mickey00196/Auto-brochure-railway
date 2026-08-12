@@ -44,7 +44,7 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
   return (
     <div>
       <PageHeader
-        eyebrow="§5.1 · Buildings & Units"
+        eyebrow="Building library"
         title={building.name}
         description="Everything here is editable — correct anything the capture got wrong, then save. Your changes stay; nothing re-scrapes over them."
         actions={

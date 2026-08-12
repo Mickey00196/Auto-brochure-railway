@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { serverApi as api } from "@/lib/serverApi";
 import { PageHeader } from "@/components/ui";
 import { ClientFolder } from "@/components/ClientFolder";
+import { DeleteClientButton } from "@/components/DeleteClientButton";
 
 /** A client's folder: the buildings a broker has copied in from the shared
  * library for this client specifically, independent from the library and
@@ -19,6 +20,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         eyebrow="Client folder"
         title={client.display_name}
         description="Buildings copied in from your shared library for this client. Editing a copy here never changes the library, and editing the library never changes what's copied here."
+        actions={<DeleteClientButton client={client} />}
       />
       <ClientFolder client={client} buildings={buildings} />
     </div>

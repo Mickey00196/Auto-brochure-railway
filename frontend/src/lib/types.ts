@@ -111,65 +111,6 @@ export interface Client {
   updated_at: string;
 }
 
-export interface Proposal {
-  proposal_id: string;
-  client_id: string;
-  title: string;
-  prepared_by: string | null;
-  prepared_at: string;
-  status: ProposalStatus;
-  notes: string | null;
-  document_type: string;
-  search_area_label: string | null;
-  project_team: { name?: string; role?: string; email?: string; phone?: string }[];
-  generated_outputs: { format: string; path: string; generated_at: string }[];
-  selected_unit_ids: string[];
-}
-
-export interface ProposalWithUnits extends Proposal {
-  selected_units: Unit[];
-  client: Client;
-}
-
-export interface ComparisonRow {
-  unit_id: string;
-  building_name: string;
-  address: string;
-  floor: string | null;
-  available_area_m2: number;
-  pricing_model: PricingModel;
-  rent_eur_per_m2_year: number | null;
-  rent_price_type: RentPriceType;
-  service_charge_eur_per_m2_year: number | null;
-  service_charge_price_type: ServiceChargePriceType;
-  all_in_rate_eur_per_m2_year: number | null;
-  estimated_annual_cost_eur: number | null;
-  desk_count: number | null;
-  price_per_desk_month_eur: number | null;
-  monthly_total_eur: number | null;
-  is_tbd: boolean;
-  energy_label: string | null;
-  contract_term: string | null;
-  availability: string | null;
-  parking_price_range: string | null;
-}
-
-export interface QAIssue {
-  severity: "blocking" | "warning" | "info";
-  code: string;
-  message: string;
-  unit_id: string | null;
-  field: string | null;
-}
-
-export interface QAReport {
-  is_export_ready: boolean;
-  issue_count: number;
-  blocking_count: number;
-  warning_count: number;
-  issues: QAIssue[];
-}
-
 export interface DashboardData {
   imported_properties: { buildings: number; units: number };
   proposals_by_status: Record<ProposalStatus, number>;

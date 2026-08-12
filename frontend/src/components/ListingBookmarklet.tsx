@@ -16,7 +16,7 @@ function buildBookmarklet(origin: string): string {
 try{
 var B=["je bent bijna op de pagina die je zoekt","even geduld","checking your browser","verify you are human","captcha"];
 var bt=(document.body?document.body.innerText:"")||"";
-if(B.some(function(m){return bt.toLowerCase().indexOf(m)>-1;})){alert("Dit lijkt een verificatiepagina — open eerst de echte listing.");return;}
+if(B.some(function(m){return bt.toLowerCase().indexOf(m)>-1;})){alert("This looks like a verification page — open the real listing first.");return;}
 var o={name:null,address:null,street:null,house:null,pc:null,city:null,desc:null,energy:null,year:null,area:null,am:[],ph:[]};
 var pk=function(s,a){var e=document.querySelector(s);if(!e)return null;var v=a?e.getAttribute(a):e.textContent;return v?v.trim():null;};
 var L=document.querySelectorAll('script[type="application/ld+json"]');
@@ -37,7 +37,7 @@ o.ph=o.ph.map(function(u){try{return new URL(u,location.href).href;}catch(e){ret
 var q=[];var st=function(k,v){if(v!==null&&v!==undefined&&String(v).trim()!=="")q.push(k+"="+encodeURIComponent(v));};
 st("name",o.name);st("address",o.address);st("postalCode",o.pc);st("city",o.city);st("energyLabel",o.energy);st("yearBuilt",o.year);st("totalBuildingAreaM2",o.area);st("buildingAmenities",(o.am||[]).join(", "));st("description",o.desc);st("photos",(o.ph||[]).join(","));
 window.open("${origin}/buildings/new?"+q.join("&"),"_blank");
-}catch(err){alert("Kon deze pagina niet lezen: "+err);}
+}catch(err){alert("Could not read this page: "+err);}
 })();`;
   return "javascript:" + encodeURIComponent(src.replace(/\n\s*/g, ""));
 }
@@ -53,16 +53,16 @@ export function ListingBookmarklet() {
 
   return (
     <Card className="mb-8">
-      <h2 className="mb-1 text-lg font-semibold">Geen extensie mogelijk? Gebruik de bookmarklet</h2>
+      <h2 className="mb-1 text-lg font-semibold">Can&apos;t install the extension? Use the bookmarklet</h2>
       <p className="mb-4 text-sm text-muted">
-        Werkt je browser managed (developer mode uit door IT)? Deze bookmarklet doet hetzelfde als de
-        Chrome-extensie — hij leest de listing die je <em>zelf open hebt</em> en opent het Add Building-formulier
-        voorgevuld — maar zonder iets te installeren. Er wordt niets automatisch opgehaald.
+        On a managed browser (developer mode disabled by IT)? This bookmarklet does the same thing as the
+        Chrome extension — it reads the listing you <em>already have open</em> and opens the Add Building form
+        pre-filled — without installing anything. Nothing is fetched automatically.
       </p>
       <ol className="mb-4 list-decimal space-y-1 pl-5 text-sm text-muted">
-        <li>Maak je bladwijzerbalk zichtbaar (Ctrl/Cmd+Shift+B).</li>
+        <li>Show your bookmarks bar (Ctrl/Cmd+Shift+B).</li>
         <li>
-          Sleep deze knop erop:{" "}
+          Drag this button onto it:{" "}
           <a
             href={href}
             onClick={(e) => e.preventDefault()}
@@ -71,11 +71,11 @@ export function ListingBookmarklet() {
             + Capture listing
           </a>
         </li>
-        <li>Open een listing die je zelf bekijkt, klik de bookmarklet → dit formulier opent voorgevuld.</li>
+        <li>Open a listing you&apos;re viewing, click the bookmarklet → this form opens pre-filled.</li>
       </ol>
       <p className="text-xs text-muted">
-        Klikken op de knop hier doet niets (werkt alleen op een listing-pagina). Zie je een verificatiepagina,
-        dan meldt de bookmarklet dat in plaats van rommel op te slaan.
+        Clicking the button here does nothing (it only works on a listing page). If you see a verification
+        page, the bookmarklet will say so instead of saving junk.
       </p>
     </Card>
   );

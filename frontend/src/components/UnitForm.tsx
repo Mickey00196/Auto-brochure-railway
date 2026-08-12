@@ -5,6 +5,7 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { Button, Card, fieldInputClass, fieldLabelClass } from "@/components/ui";
 import { AmenityMultiSelect } from "@/components/AmenityMultiSelect";
+import { useUnsavedChangesWarning } from "@/lib/useUnsavedChangesWarning";
 
 const inputClass = fieldInputClass;
 const labelClass = fieldLabelClass;
@@ -54,6 +55,9 @@ export function UnitForm({
 
   const [pricingModel, setPricingModel] = useState<"per_sqm_annual" | "per_desk_monthly">(initialPricingModel);
   const [form, setForm] = useState({ ...EMPTY_UNIT, ...initial });
+  useUnsavedChangesWarning(
+    JSON.stringify(form) !== JSON.stringify({ ...EMPTY_UNIT, ...initial }) || pricingModel !== initialPricingModel,
+  );
 
   function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));

@@ -9,6 +9,7 @@ import { Badge, Button, Card, fieldInputClass, fieldLabelClass } from "@/compone
 import { PhotoPicker } from "@/components/PhotoPicker";
 import { AmenityMultiSelect } from "@/components/AmenityMultiSelect";
 import { PROXY_BASE_URL } from "@/lib/api";
+import { useUnsavedChangesWarning } from "@/lib/useUnsavedChangesWarning";
 
 const inputClass = fieldInputClass;
 const labelClass = fieldLabelClass;
@@ -100,6 +101,7 @@ export function BuildingForm({
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({ ...EMPTY_FORM, ...initial });
+  useUnsavedChangesWarning(JSON.stringify(form) !== JSON.stringify({ ...EMPTY_FORM, ...initial }));
   const [locating, setLocating] = useState(false);
   const [locateNote, setLocateNote] = useState<string | null>(null);
   const [transportMode, setTransportMode] = useState<TransportMode>("nearest_any");
@@ -612,7 +614,12 @@ export function BuildingForm({
         <Button type="submit" disabled={submitting}>
           {submitting ? "Saving…" : isEdit ? "Save changes" : "Save to library"}
         </Button>
-        <Button type="button" variant="ghost" disabled={submitting} onClick={() => router.push("/buildings")}>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={submitting}
+          onClick={() => (isEdit ? setForm({ ...EMPTY_FORM, ...initial }) : router.push("/buildings"))}
+        >
           Discard
         </Button>
       </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PROXY_BASE_URL } from "@/lib/api";
-import { fieldInputClass } from "@/components/ui";
+import { ConfirmDialog, fieldInputClass } from "@/components/ui";
 import { PhotoLightbox } from "@/components/PhotoLightbox";
 
 const pillDarkClass =
@@ -137,6 +137,10 @@ export function PhotoPicker({
   const [removedDupes, setRemovedDupes] = useState<{ count: number; previous: string } | null>(null);
   const [reorderOpen, setReorderOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  // "Remove all" wipes every captured photo in one click — a genuinely hard
+  // action to undo (unlike a single photo, which is trivial to re-add), so
+  // unlike every other button in this component it gets a confirm step.
+  const [removeAllConfirming, setRemoveAllConfirming] = useState(false);
   // Which photo sits in the hero slot — browsing only, doesn't touch the
   // saved order (that's what "Reorder" is for). The ‹ › arrows on the
   // gallery card just step this forward/back.
@@ -153,6 +157,22 @@ export function PhotoPicker({
   function remove(url: string) {
     commit(photos.filter((p) => p !== url));
   }
+
+  function confirmRemoveAll() {
+    commit([]);
+    setRemoveAllConfirming(false);
+  }
+
+  const removeAllDialog = removeAllConfirming && (
+    <ConfirmDialog
+      title="Remove all photos?"
+      message={`All ${photos.length} photo${photos.length === 1 ? "" : "s"} will be dropped. This can't be undone — you'd need to re-add them one at a time or re-capture.`}
+      confirmLabel="Yes, remove all"
+      cancelLabel="No, keep them"
+      onConfirm={confirmRemoveAll}
+      onCancel={() => setRemoveAllConfirming(false)}
+    />
+  );
 
   function add() {
     const url = adding.trim();
@@ -280,6 +300,7 @@ export function PhotoPicker({
       <div>
         {statusRow}
         {dedupeToast}
+        {removeAllDialog}
         <PhotoLightbox
           photos={photos.map((url) => ({ url }))}
           initialIndex={viewerIndex ?? 0}
@@ -331,7 +352,7 @@ export function PhotoPicker({
                 <button type="button" onClick={() => setReorderOpen(true)} className={pillDarkClass}>
                   Reorder
                 </button>
-                <button type="button" onClick={() => commit([])} className={pillDarkClass}>
+                <button type="button" onClick={() => setRemoveAllConfirming(true)} className={pillDarkClass}>
                   Remove all
                 </button>
               </div>
@@ -420,7 +441,7 @@ export function PhotoPicker({
         {photos.length > 0 && (
           <button
             type="button"
-            onClick={() => commit([])}
+            onClick={() => setRemoveAllConfirming(true)}
             className="text-muted underline hover:text-foreground"
           >
             Remove all
@@ -429,6 +450,7 @@ export function PhotoPicker({
         {checking && <span className="text-muted">Checking for duplicates…</span>}
       </div>
       {dedupeToast}
+      {removeAllDialog}
 
       {photos.length > 0 && (
         <div className="mb-3 grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-2">

@@ -7,7 +7,7 @@ export default function NewClientPage() {
       <PageHeader
         eyebrow="Client"
         title="Add Client"
-        description="Add whoever you're preparing an availability overview for. You'll pick them when you build the PDF."
+        description="Create a folder for whoever you're preparing an availability overview for. Once created, you'll browse your building library and add the ones that fit into their folder."
       />
       <ClientForm />
     </div>

@@ -2,7 +2,6 @@ import type {
   AddOn,
   Building,
   Client,
-  ComparisonRow,
   DashboardData,
   DuplicateCandidate,
   ImportResult,
@@ -10,9 +9,6 @@ import type {
   IngestionRequest,
   MatchResult,
   Neighbourhood,
-  Proposal,
-  ProposalWithUnits,
-  QAReport,
   ScrapePreviewResult,
   SourceHealth,
   Unit,
@@ -86,27 +82,8 @@ export function makeApi(request: DoRequest) {
       request<Client>(`/clients/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
     deleteClient: (id: string) => request<void>(`/clients/${id}`, { method: "DELETE" }),
 
-    proposals: (clientId?: string) =>
-      request<Proposal[]>(`/proposals${clientId ? `?client_id=${clientId}` : ""}`),
-    proposal: (id: string) => request<ProposalWithUnits>(`/proposals/${id}`),
-    createProposal: (payload: { client_id: string; title: string; prepared_by?: string; unit_ids: string[] }) =>
-      request<ProposalWithUnits>("/proposals", { method: "POST", body: JSON.stringify(payload) }),
-    updateProposal: (
-      id: string,
-      payload: Partial<{ title: string; prepared_by: string; status: string; notes: string; unit_ids: string[] }>,
-    ) => request<ProposalWithUnits>(`/proposals/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
-    deleteProposal: (id: string) => request<void>(`/proposals/${id}`, { method: "DELETE" }),
-
-    comparison: (proposalId: string) => request<ComparisonRow[]>(`/proposals/${proposalId}/comparison`),
-    qa: (proposalId: string, acknowledgedUnitIds: string[] = []) => {
-      const params = acknowledgedUnitIds.map((id) => `acknowledged_unit_ids=${id}`).join("&");
-      return request<QAReport>(`/proposals/${proposalId}/qa${params ? `?${params}` : ""}`);
-    },
-
     match: (criteria: Record<string, unknown>) =>
       request<MatchResult[]>("/match", { method: "POST", body: JSON.stringify(criteria) }),
-
-    seedDemo: () => request<ProposalWithUnits>("/seed/demo", { method: "POST" }),
 
     importUrls: (urls: string[]) =>
       request<ImportResult[]>("/imports/urls", { method: "POST", body: JSON.stringify({ urls }) }),

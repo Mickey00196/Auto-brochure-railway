@@ -69,7 +69,7 @@ export default async function NewBuildingPage({
   return (
     <div>
       <PageHeader
-        eyebrow="§5.1 · Buildings & Units"
+        eyebrow="Building library"
         title="Add Building"
         description="Captured by the Chrome extension — saved once, reusable across any client mandate."
       />
