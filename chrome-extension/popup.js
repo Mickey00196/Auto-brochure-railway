@@ -409,11 +409,17 @@ function extractListing() {
   }
 
   // --- images -----------------------------------------------------------
+  const isFunda = /(^|\.)funda\.nl$/i.test(location.hostname);
   // The page states its own photo count ("Foto's 15"); read it up front so
   // the scan below can stop early instead of walking every image reference
-  // in a multi-megabyte page (a real listing embeds thousands).
-  const photoCountMatch = bodyText.match(/foto['\u2019\u02bc]?s?\s*(\d{1,3})/i);
-  out.photoTarget = photoCountMatch ? parseInt(photoCountMatch[1], 10) : 0;
+  // in a multi-megabyte page (a real listing embeds thousands). Prefer
+  // funda's own count element when present \u2014 precise, no risk of matching
+  // an unrelated "15" elsewhere in the page text.
+  const countElText = isFunda
+    ? document.querySelector(".media-viewer-overview__section-title-number")?.textContent?.trim()
+    : null;
+  const photoCountMatch = countElText ? [null, countElText] : bodyText.match(/foto['\u2019\u02bc]?s?\s*(\d{1,3})/i);
+  out.photoTarget = photoCountMatch ? parseInt(photoCountMatch[1], 10) || 0 : 0;
   const PHOTO_SCAN_LIMIT = Math.max((out.photoTarget || 0) * 4, 60);
 
   const SKIP = ["logo", "icon", "sprite", "avatar", "pixel", "placeholder", "spinner", "loading"];
@@ -440,27 +446,30 @@ function extractListing() {
     }
   };
 
-  // Pass 0 — funda's own media CDN, scoped to the hero photo block. Every
-  // funda gallery photo is served from cloud.funda.nl/valentina_media/, and
-  // nothing else on the page is, but the CDN check alone isn't enough:
-  // "Vergelijkbaar in de buurt" (similar nearby listings) further down the
-  // page is served from the same CDN, and its cards aren't reliably wrapped
-  // in a real <a href> (often a JS-driven carousel instead), so link-based
-  // exclusion alone lets them through. #overzicht (the "Alle media"
-  // lightbox) would scope this perfectly, but it doesn't exist in the DOM
-  // until that view is actually opened — most captures happen straight from
-  // the listing page, so it can't be the primary mechanism.
+  // Pass 0 — funda's own media CDN, scoped to a container that structurally
+  // can't hold anything but this listing's own photos. Confirmed against
+  // live markup: #overview-photos (the "Alle media" grid) is server-
+  // rendered with the full photo set already present — the real URL sits
+  // in each <img>'s data-lazy attribute (src is a 1x1 placeholder until the
+  // lazy-loader swaps it in later), so reading data-lazy directly needs no
+  // waiting. "Vergelijkbaar in de buurt" (similar nearby listings) is an
+  // empty carousel in the raw HTML, only populated later by a separate
+  // request into a different section entirely — it can't appear inside
+  // #overview-photos regardless of timing, which is why scoping beats
+  // trying to exclude it by link or by CDN origin alone (the CDN check
+  // alone isn't enough: that module is served from the same CDN).
   //
-  // Instead: find the "Foto's N" caption that sits directly under the hero
-  // grid (present on the plain listing page) and walk up from it until we
-  // reach an ancestor that also contains that grid's own <img> elements —
-  // that ancestor is the whole hero block. Everything below it in the page
-  // (description, footer, similar-listings) is a SIBLING of that block, not
-  // a descendant, so scoping the scan to it excludes them structurally,
-  // regardless of whether they're link-wrapped. The CDN check and the
-  // link-based exclusion below both still run inside it, as a second layer
-  // — cheap, and it's what still filters out an agent photo or a stray icon
-  // that happens to sit inside the block itself.
+  // In priority order:
+  //   1. #overview-photos — the full set, server-rendered, via data-lazy.
+  //   2. .media-viewer-fotos__slides inside [data-media-viewer-fotos] — the
+  //      lightbox's own slideshow, same data-lazy pattern, same full set.
+  //   3. [data-object-media-fotos] — the always-visible hero grid; real
+  //      src/srcset (no data-lazy), but usually only 5-6 of the photos.
+  //   4. findHeroBlock() — walks up from the "Foto's N" caption; a
+  //      last-resort heuristic for when funda's markup has moved.
+  //   5. The whole document, same as before any of this existed.
+  // The CDN check and the link-based exclusion below still run inside
+  // whichever container is chosen, as a second, cheap layer.
   const FUNDA_CDN_RE = /^https:\/\/cloud\.funda\.nl\/valentina_media\//;
   const currentObjectId = (location.pathname.match(/\/object-(\d+)/) || [])[1] || null;
 
@@ -479,23 +488,13 @@ function extractListing() {
     }
     return null;
   };
-  // Gated behind a cheap hostname check: the walk inside findHeroBlock()
-  // reads .textContent on every button/a/span/div/p on the page, which
-  // would otherwise run in full on every popup open, on any site — the same
-  // kind of unconditional expensive-scan mistake fixed above for the
-  // closest("a[href]") walk. On a non-funda page it's simply skipped.
-  const isFunda = /(^|\.)funda\.nl$/i.test(location.hostname);
-  // Preferred: funda's own slide container for the photo viewer — a direct
-  // class name, so this is both cheaper and more reliable than walking up
-  // from the "Foto's N" caption. Only the BEM class itself, not the
-  // "absolute inset-0" utility classes alongside it, since those are layout
-  // helpers likely reused all over the page and carry no identity of their
-  // own. Falls back to the caption-walk, then to the whole document, if
-  // funda ever renames or restructures this (the CDN + link-exclusion
-  // checks below still apply either way, so this degrades to the old
-  // behaviour rather than capturing nothing).
+  // The container search itself is gated behind the same cheap hostname
+  // check as findHeroBlock()'s .textContent walk, so none of this runs
+  // unconditionally on every popup open on every site.
   const scanRoot =
-    (isFunda && document.querySelector(".media-viewer-fotos__slides")) ||
+    (isFunda && document.getElementById("overview-photos")) ||
+    (isFunda && document.querySelector("[data-media-viewer-fotos] .media-viewer-fotos__slides")) ||
+    (isFunda && document.querySelector("[data-object-media-fotos]")) ||
     (isFunda && findHeroBlock()) ||
     document;
 
@@ -503,10 +502,17 @@ function extractListing() {
   for (const img of scanRoot.querySelectorAll("img")) {
     // Cheap string tests first — closest("a[href]") walks the ancestor
     // chain, so it must only run for images that already look like a funda
-    // gallery photo, not for every <img> in scanRoot.
-    const srcCandidates = [img.currentSrc || null, img.getAttribute("src"), img.getAttribute("data-src")];
+    // gallery photo, not for every <img> in scanRoot. data-lazy first: it's
+    // where #overview-photos and the lightbox slideshow hold the real URL
+    // (src is a placeholder there until lazy-load swaps it in).
+    const srcCandidates = [
+      img.getAttribute("data-lazy"),
+      img.currentSrc || null,
+      img.getAttribute("src"),
+      img.getAttribute("data-src"),
+    ];
     pushSrcset(img.getAttribute("srcset") || img.getAttribute("data-srcset"), srcCandidates);
-    const matches = srcCandidates.filter((c) => c && FUNDA_CDN_RE.test(c));
+    const matches = srcCandidates.filter((c) => c && FUNDA_CDN_RE.test(c.split("?")[0]));
     if (matches.length === 0) continue;
 
     const parentLink = img.closest("a[href]");
@@ -515,7 +521,7 @@ function extractListing() {
       const otherObjectId = (href.match(/\/object-(\d+)/) || [])[1] || null;
       if (href.includes("/makelaar/") || (otherObjectId && otherObjectId !== currentObjectId)) continue;
     }
-    for (const c of matches) addPhoto(c);
+    for (const c of matches) addPhoto(c.split("?")[0]);
   }
 
   // Pass 1/2 only run when Pass 0 found nothing of its own — i.e. this isn't
