@@ -20,6 +20,26 @@ const TRANSPORT_MODE_LABELS: Record<TransportMode, string> = {
   bus: "Bus",
 };
 
+/** A non-2xx response's body is usually FastAPI's {"detail": "..."} (a
+ * validation error, or an HTTPException) — surface that instead of just the
+ * status code, so a failure is actually diagnosable from the UI rather than
+ * generic "unavailable" text that looks identical for every possible cause. */
+async function describeFailedResponse(res: Response): Promise<string> {
+  try {
+    const body = await res.json();
+    const detail = body?.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail) && detail.length) {
+      // FastAPI's 422 shape: a list of {loc, msg, type}.
+      return detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join("; ") || `HTTP ${res.status}`;
+    }
+  } catch {
+    // Body wasn't JSON (e.g. an HTML error page from a proxy/gateway) — fall
+    // through to the status-only message below.
+  }
+  return `HTTP ${res.status}`;
+}
+
 const EMPTY_FORM = {
   name: "",
   address: "",
@@ -99,7 +119,7 @@ export function BuildingForm({
           transport_mode: transportMode,
         }),
       });
-      if (!res.ok) throw new Error(`lookup failed (${res.status})`);
+      if (!res.ok) throw new Error(await describeFailedResponse(res));
       const d = (await res.json()) as {
         found: boolean;
         public_transport: string | null;
@@ -134,8 +154,11 @@ export function BuildingForm({
           ? `Filled in ${filled.join(", ")} — straight-line distances, check them over.`
           : "Those three are already filled in — clear one to look it up again.",
       );
-    } catch {
-      setLocateNote("Distance lookup is unavailable right now — fill them in by hand.");
+    } catch (e) {
+      // Surface the real reason instead of a hardcoded "unavailable" string
+      // that hides whatever actually failed (bad request, backend error,
+      // network failure) behind identical-looking text every time.
+      setLocateNote(`Distance lookup failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setLocating(false);
     }
@@ -162,7 +185,7 @@ export function BuildingForm({
           transport_mode: mode,
         }),
       });
-      if (!res.ok) throw new Error(`lookup failed (${res.status})`);
+      if (!res.ok) throw new Error(await describeFailedResponse(res));
       const d = (await res.json()) as { public_transport: string | null };
       if (d.public_transport) {
         setForm((prev) => ({ ...prev, publicTransportNote: d.public_transport as string }));
@@ -170,8 +193,8 @@ export function BuildingForm({
       } else {
         setLocateNote(`Couldn't find a nearby ${TRANSPORT_MODE_LABELS[mode].toLowerCase()} stop for that address.`);
       }
-    } catch {
-      setLocateNote("Distance lookup is unavailable right now — fill it in by hand.");
+    } catch (e) {
+      setLocateNote(`Distance lookup failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setLocating(false);
     }
