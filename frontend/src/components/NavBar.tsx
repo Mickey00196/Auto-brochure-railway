@@ -2,14 +2,15 @@ import Link from "next/link";
 import { LogoutButton } from "@/components/LogoutButton";
 import { NavHistoryButtons } from "@/components/NavHistoryButtons";
 
-/** The whole workflow is three screens: the library you select from, the
- * capture screen that fills it, and saved per-client selections you can
- * reopen, adjust or duplicate. Clients/proposals/other export formats still
- * exist at their URLs but are deliberately out of the primary flow. */
+/** The whole workflow is three screens: the shared library you capture
+ * buildings into, the capture screen that fills it, and each client's own
+ * folder of buildings copied in from that library. Proposals/other export
+ * formats still exist at their URLs but are deliberately out of the primary
+ * flow. */
 const LINKS = [
   { href: "/buildings", label: "Building library" },
   { href: "/buildings/new", label: "Add building" },
-  { href: "/selections", label: "Client selections" },
+  { href: "/clients", label: "Clients" },
 ];
 
 export function NavBar({ user }: { user?: { name: string; email: string } | null }) {

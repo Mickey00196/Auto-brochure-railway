@@ -100,7 +100,7 @@ export function ProposalForm({ clients, buildings }: { clients: Client[]; buildi
             >
               {clients.map((c) => (
                 <option key={c.client_id} value={c.client_id}>
-                  {c.company_name}
+                  {c.display_name}
                 </option>
               ))}
             </select>

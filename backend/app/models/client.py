@@ -18,8 +18,15 @@ class Client(Base):
     __tablename__ = "clients"
 
     client_id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
-    company_name: Mapped[str] = mapped_column(String, nullable=False)
+    # The "client folder" display name — always present. company_name predates
+    # this feature and used to be the only name a Client had (required); kept
+    # as an optional second field rather than dropped, since existing Client
+    # rows (and Proposal, which still FKs to Client) already rely on it.
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
+    company_name: Mapped[str | None] = mapped_column(String, nullable=True)
     industry: Mapped[str | None] = mapped_column(String, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # list[dict]: e.g. [{"name": "...", "role": "...", "email": "...", "phone": "..."}]
     contacts: Mapped[list] = mapped_column(JSON, default=list)
@@ -33,3 +40,18 @@ class Client(Base):
     )
 
     proposals: Mapped[list["Proposal"]] = relationship(back_populates="client")
+    # Buildings copied into this client's folder — see models/building.py
+    # client_id/source_building_id and services/building_copy.py. Deleting a
+    # Client cascades its copies (they're meaningless without the folder);
+    # the library masters they were copied from are never touched.
+    buildings: Mapped[list["Building"]] = relationship(
+        back_populates="client", cascade="all, delete-orphan", foreign_keys="Building.client_id"
+    )
+
+    @property
+    def display_name(self) -> str:
+        return self.name or self.company_name or "Unnamed client"
+
+    @property
+    def building_count(self) -> int:
+        return len(self.buildings)

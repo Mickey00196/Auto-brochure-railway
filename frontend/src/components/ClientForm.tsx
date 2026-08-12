@@ -12,6 +12,7 @@ const labelClass = "text-sm";
  * (which every Proposal requires) used to be loading the demo seed data. */
 export function ClientForm() {
   const router = useRouter();
+  const [name, setName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [industry, setIndustry] = useState("");
   const [contactName, setContactName] = useState("");
@@ -22,8 +23,8 @@ export function ClientForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!companyName.trim()) {
-      setError("Company name is required.");
+    if (!name.trim()) {
+      setError("Client name is required.");
       return;
     }
     setSubmitting(true);
@@ -33,12 +34,13 @@ export function ClientForm() {
       if (contactName.trim()) contact.name = contactName.trim();
       if (contactRole.trim()) contact.role = contactRole.trim();
       if (contactEmail.trim()) contact.email = contactEmail.trim();
-      await api.createClient({
-        company_name: companyName.trim(),
+      const created = await api.createClient({
+        name: name.trim(),
+        company_name: companyName.trim() || null,
         industry: industry.trim() || null,
         contacts: Object.keys(contact).length ? [contact] : [],
       });
-      router.push("/clients");
+      router.push(`/clients/${created.client_id}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create client");
@@ -52,8 +54,12 @@ export function ClientForm() {
       <Card>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className={labelClass}>
-            <span className="mb-1 block font-medium">Company name *</span>
-            <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className={inputClass} required />
+            <span className="mb-1 block font-medium">Client name *</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} required />
+          </label>
+          <label className={labelClass}>
+            <span className="mb-1 block font-medium">Company</span>
+            <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className={inputClass} />
           </label>
           <label className={labelClass}>
             <span className="mb-1 block font-medium">Industry</span>

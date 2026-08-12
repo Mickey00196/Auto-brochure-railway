@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { serverApi as api } from "@/lib/serverApi";
-import { Button, Card, PageHeader } from "@/components/ui";
+import { Badge, Button, Card, PageHeader } from "@/components/ui";
 
+/** Every client's folder: their own copy of whichever buildings a broker has
+ * added from the shared library — never the library itself. See
+ * services/building_copy.py on the backend for why each folder holds
+ * independent rows instead of a live view onto the library. */
 export default async function ClientsPage() {
   const clients = await api.clients().catch(() => []);
 
@@ -9,12 +13,12 @@ export default async function ClientsPage() {
     <div>
       <div className="flex items-start justify-between gap-4">
         <PageHeader
-          eyebrow="Who you send to"
+          eyebrow="Client folders"
           title="Clients"
-          description="Who you send availability overviews to. Each client PDF is a dated selection of buildings prepared for one of them."
+          description="Each client has their own folder of buildings copied in from the library — edit or send those without touching the shared library."
         />
         <Link href="/clients/new">
-          <Button>+ Add Client</Button>
+          <Button>+ New client</Button>
         </Link>
       </div>
 
@@ -24,37 +28,41 @@ export default async function ClientsPage() {
           <Link href="/clients/new" className="text-accent hover:underline">
             Add your first client
           </Link>{" "}
-          to prepare a proposal for them, or load the reference brochure demo data from the{" "}
-          <Link href="/" className="text-accent hover:underline">
-            dashboard
-          </Link>
-          .
+          to start a folder for them.
         </Card>
       )}
 
       <div className="grid gap-6 sm:grid-cols-2">
         {clients.map((c) => (
-          <Card key={c.client_id}>
-            <h2 className="text-lg font-semibold">{c.company_name}</h2>
-            {c.industry && <p className="text-sm text-muted">{c.industry}</p>}
-
-            {c.contacts.length > 0 && (
-              <div className="mt-4 space-y-1 text-sm">
-                {c.contacts.map((contact, i) => (
-                  <div key={i}>
-                    <span className="font-medium">{contact.name}</span>
-                    {contact.role && <span className="text-muted"> — {contact.role}</span>}
-                  </div>
-                ))}
+          <Link key={c.client_id} href={`/clients/${c.client_id}`}>
+            <Card className="h-full transition hover:border-accent">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold">{c.display_name}</h2>
+                  {c.company_name && c.name && <p className="text-sm text-muted">{c.company_name}</p>}
+                  {c.industry && <p className="text-sm text-muted">{c.industry}</p>}
+                </div>
+                <Badge tone={c.building_count > 0 ? "accent" : "default"}>
+                  {c.building_count} building{c.building_count === 1 ? "" : "s"}
+                </Badge>
               </div>
-            )}
 
-            {c.search_brief && (
-              <div className="mt-4 rounded-xl bg-background/60 p-3 text-xs text-muted">
-                <pre className="whitespace-pre-wrap">{JSON.stringify(c.search_brief, null, 2)}</pre>
-              </div>
-            )}
-          </Card>
+              {c.contacts.length > 0 && (
+                <div className="mt-4 space-y-1 text-sm">
+                  {c.contacts.map((contact, i) => (
+                    <div key={i}>
+                      <span className="font-medium">{contact.name}</span>
+                      {contact.role && <span className="text-muted"> — {contact.role}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <p className="mt-4 text-xs text-muted">
+                Updated {new Date(c.updated_at).toLocaleDateString()}
+              </p>
+            </Card>
+          </Link>
         ))}
       </div>
     </div>

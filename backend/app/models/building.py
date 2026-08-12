@@ -31,6 +31,16 @@ class Building(Base):
     neighbourhood_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("neighbourhoods.neighbourhood_id"), nullable=True
     )
+
+    # NULL = a library master, reusable across any client. Set = a copy that
+    # belongs to one client's folder (services/building_copy.py) — a fully
+    # independent row from the moment it's created, never live-synced back
+    # to the master. source_building_id is purely "copied from" traceability
+    # for display; nothing reads it to keep data in sync.
+    client_id: Mapped[str | None] = mapped_column(String, ForeignKey("clients.client_id"), nullable=True)
+    source_building_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("buildings.building_id"), nullable=True
+    )
     submarket: Mapped[str | None] = mapped_column(String, nullable=True)
     building_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
@@ -64,6 +74,7 @@ class Building(Base):
     )
 
     neighbourhood: Mapped["Neighbourhood"] = relationship(back_populates="buildings")
+    client: Mapped["Client"] = relationship(back_populates="buildings", foreign_keys=[client_id])
     units: Mapped[list["Unit"]] = relationship(back_populates="building", cascade="all, delete-orphan")
     addons: Mapped[list["AddOn"]] = relationship(
         back_populates="building",

@@ -39,6 +39,13 @@ export interface Building {
   description: string | null;
   photos: string[];
   source_url: string | null;
+  // NULL = a shared library master. Set = a copy that belongs to one
+  // client's folder — a fully independent row, never live-synced to the
+  // master. source_building_id is provenance only ("Copied from library
+  // on {date}"), never used to keep data in sync.
+  client_id: string | null;
+  source_building_id: string | null;
+  created_at?: string;
   units: Unit[];
 }
 
@@ -91,17 +98,15 @@ export interface AddOn {
 
 export interface Client {
   client_id: string;
-  company_name: string;
+  name: string | null;
+  company_name: string | null;
   industry: string | null;
+  notes: string | null;
+  created_by: string | null;
   contacts: { name?: string; role?: string; email?: string }[];
   search_brief: Record<string, unknown> | null;
-}
-
-export interface Selection {
-  selection_id: string;
-  client_name: string;
-  prepared_by: string | null;
-  building_ids: string[];
+  display_name: string;
+  building_count: number;
   created_at: string;
   updated_at: string;
 }

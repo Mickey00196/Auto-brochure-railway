@@ -5,15 +5,23 @@ from sqlalchemy.orm import Session
 
 from app import schemas
 from app.database import get_db
-from app.models import Building, Listing, ProposalUnit, Selection
+from app.models import Building, Client, Listing, ProposalUnit, Selection
+from app.services.building_copy import copy_building_to_client
 from app.services.scraping.deduplicator import find_similar_buildings
 
 router = APIRouter(prefix="/buildings", tags=["buildings"])
 
 
 @router.get("", response_model=list[schemas.BuildingWithUnits])
-def list_buildings(city: str | None = None, db: Session = Depends(get_db)):
+def list_buildings(city: str | None = None, client_id: str | None = None, db: Session = Depends(get_db)):
+    """No client_id -> the shared library (masters only, client_id IS NULL —
+    a client's copies never leak into the library view). client_id=X -> only
+    that client's folder (their copies only — never the full library)."""
     query = db.query(Building)
+    if client_id:
+        query = query.filter(Building.client_id == client_id)
+    else:
+        query = query.filter(Building.client_id.is_(None))
     if city:
         query = query.filter(Building.city == city)
     return query.all()
@@ -83,11 +91,34 @@ def update_building(building_id: str, payload: schemas.BuildingCreate, db: Sessi
     obj = db.get(Building, building_id)
     if not obj:
         raise HTTPException(404, "Building not found")
-    for key, value in payload.model_dump().items():
+    # client_id/source_building_id are set only by the copy operation below,
+    # never by a normal edit — the edit form doesn't know about them and
+    # would otherwise send them back as None, silently un-scoping a client's
+    # copy back into the shared library.
+    for key, value in payload.model_dump(exclude={"client_id", "source_building_id"}).items():
         setattr(obj, key, value)
     db.commit()
     db.refresh(obj)
     return obj
+
+
+@router.post("/{building_id}/copy-to-client", response_model=schemas.BuildingWithUnits, status_code=201)
+def copy_to_client(building_id: str, payload: schemas.CopyToClientRequest, db: Session = Depends(get_db)):
+    """"Add from library" in a client folder — deep-copies the library
+    master (and its Units/AddOns) into a fully independent set of rows
+    scoped to this client. See services/building_copy.py for why: once a
+    PDF with specific terms has gone out, it must never silently change
+    because someone updated the master afterward."""
+    master = db.get(Building, building_id)
+    if not master:
+        raise HTTPException(404, "Building not found")
+    if master.client_id is not None:
+        raise HTTPException(400, "Can only copy a library master, not another client's copy.")
+    client = db.get(Client, payload.client_id)
+    if not client:
+        raise HTTPException(404, "Client not found")
+    copy = copy_building_to_client(db, master, client_id=payload.client_id)
+    return copy
 
 
 @router.delete("/{building_id}", status_code=204)

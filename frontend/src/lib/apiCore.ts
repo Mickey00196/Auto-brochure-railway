@@ -14,7 +14,6 @@ import type {
   ProposalWithUnits,
   QAReport,
   ScrapePreviewResult,
-  Selection,
   SourceHealth,
   Unit,
 } from "./types";
@@ -30,13 +29,21 @@ export function makeApi(request: DoRequest) {
   return {
     dashboard: () => request<DashboardData>("/dashboard"),
 
-    buildings: () => request<Building[]>("/buildings"),
+    // No clientId -> the shared library (masters only). clientId -> only
+    // that client's folder (their copies only — the library never leaks in).
+    buildings: (clientId?: string) =>
+      request<Building[]>(`/buildings${clientId ? `?client_id=${clientId}` : ""}`),
     building: (id: string) => request<Building>(`/buildings/${id}`),
     createBuilding: (payload: Record<string, unknown>) =>
       request<Building>("/buildings", { method: "POST", body: JSON.stringify(payload) }),
     updateBuilding: (id: string, payload: Record<string, unknown>) =>
       request<Building>(`/buildings/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
     deleteBuilding: (id: string) => request<void>(`/buildings/${id}`, { method: "DELETE" }),
+    copyBuildingToClient: (buildingId: string, clientId: string) =>
+      request<Building>(`/buildings/${buildingId}/copy-to-client`, {
+        method: "POST",
+        body: JSON.stringify({ client_id: clientId }),
+      }),
     checkDuplicateBuilding: (params: {
       address: string;
       city: string;
@@ -71,20 +78,13 @@ export function makeApi(request: DoRequest) {
 
     neighbourhoods: () => request<Neighbourhood[]>("/neighbourhoods"),
 
-    selections: () => request<Selection[]>("/selections"),
-    selection: (id: string) => request<Selection>(`/selections/${id}`),
-    createSelection: (payload: { client_name: string; prepared_by?: string | null; building_ids: string[] }) =>
-      request<Selection>("/selections", { method: "POST", body: JSON.stringify(payload) }),
-    updateSelection: (
-      id: string,
-      payload: Partial<{ client_name: string; prepared_by: string | null; building_ids: string[] }>,
-    ) => request<Selection>(`/selections/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
-    deleteSelection: (id: string) => request<void>(`/selections/${id}`, { method: "DELETE" }),
-
     clients: () => request<Client[]>("/clients"),
     client: (id: string) => request<Client>(`/clients/${id}`),
     createClient: (payload: Partial<Client>) =>
       request<Client>("/clients", { method: "POST", body: JSON.stringify(payload) }),
+    updateClient: (id: string, payload: Partial<Client>) =>
+      request<Client>(`/clients/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+    deleteClient: (id: string) => request<void>(`/clients/${id}`, { method: "DELETE" }),
 
     proposals: (clientId?: string) =>
       request<Proposal[]>(`/proposals${clientId ? `?client_id=${clientId}` : ""}`),

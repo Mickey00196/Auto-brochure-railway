@@ -85,6 +85,11 @@ class BuildingBase(BaseModel):
     description: str | None = None
     photos: list[str] = Field(default_factory=list)
     source_url: str | None = None
+    # NULL = library master (the default for anything created/imported the
+    # normal way). Set only by POST /buildings/{id}/copy-to-client — see
+    # services/building_copy.py — not something a manual create/edit sets.
+    client_id: str | None = None
+    source_building_id: str | None = None
 
 
 class BuildingCreate(BuildingBase):
@@ -163,8 +168,11 @@ class UnitWithBuilding(UnitOut):
 
 
 class ClientBase(BaseModel):
-    company_name: str
+    name: str | None = None
+    company_name: str | None = None
     industry: str | None = None
+    notes: str | None = None
+    created_by: str | None = None
     contacts: list[dict[str, Any]] = Field(default_factory=list)
     search_brief: dict[str, Any] | None = None
 
@@ -176,8 +184,14 @@ class ClientCreate(ClientBase):
 class ClientOut(ClientBase):
     model_config = ConfigDict(from_attributes=True)
     client_id: str
+    display_name: str
+    building_count: int
     created_at: datetime
     updated_at: datetime
+
+
+class CopyToClientRequest(BaseModel):
+    client_id: str
 
 
 # ─────────────────────────────────────────── Selection ───────────────────────────────────────────

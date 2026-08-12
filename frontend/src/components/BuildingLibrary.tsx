@@ -4,10 +4,10 @@ import Link from "next/link";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Building } from "@/lib/types";
-import { api, PROXY_BASE_URL } from "@/lib/api";
-import { Badge, Button, Card } from "@/components/ui";
+import { PROXY_BASE_URL } from "@/lib/api";
+import { Button, Card } from "@/components/ui";
 import { DeleteBuildingButton } from "@/components/DeleteBuildingButton";
-import { formatArea } from "@/lib/format";
+import { BuildingCard } from "@/components/BuildingCard";
 
 // A ticked selection used to be plain component state, so navigating away
 // mid-shortlist — to capture one more listing, say — silently threw it away.
@@ -51,7 +51,6 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
   const [hydrated, setHydrated] = useState(false);
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [savingSelection, setSavingSelection] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const clientInputRef = useRef<HTMLInputElement>(null);
@@ -161,26 +160,6 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
     }
   }
 
-  // Everything above is an ephemeral, in-progress pick — saving it here is
-  // what turns it into a named record on the /selections page, reopenable
-  // and duplicable later instead of rebuilt from scratch each time.
-  async function saveAsSelection() {
-    if (!clientName.trim() || selected.length === 0) return;
-    setSavingSelection(true);
-    setError(null);
-    try {
-      const created = await api.createSelection({
-        client_name: clientName.trim(),
-        prepared_by: preparedBy.trim() || null,
-        building_ids: selected,
-      });
-      router.push(`/selections/${created.selection_id}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save the selection");
-      setSavingSelection(false);
-    }
-  }
-
   if (buildings.length === 0) {
     return (
       <Card>
@@ -220,28 +199,19 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
       <div className="space-y-3">
         {visible.map((building) => {
           const isSelected = selected.includes(building.building_id);
-          const totalAvailable = building.units.reduce((sum, u) => sum + (u.available_area_m2 ?? 0), 0);
-          const rents = building.units
-            .map((u) => u.rent_eur_per_m2_year)
-            .filter((r): r is number => typeof r === "number");
-          const rentLabel = rents.length
-            ? rents.length === 1 || Math.min(...rents) === Math.max(...rents)
-              ? `€${Math.min(...rents).toLocaleString("en-US")}/m²/yr`
-              : `€${Math.min(...rents).toLocaleString("en-US")}–€${Math.max(...rents).toLocaleString("en-US")}/m²/yr`
-            : "Rent TBD";
-
           return (
-            <Card
+            <BuildingCard
               key={building.building_id}
-              className={`relative transition ${isSelected ? "border-accent ring-1 ring-accent" : ""} ${
-                building.building_id === justAdded ? "ring-2 ring-accent" : ""
-              }`}
-            >
-              <DeleteBuildingButton building={building} onDeleted={() => handleBuildingDeleted(building.building_id)} />
-              <div className="flex items-start gap-4">
-                {/* Selecting and opening are different intents, so they get
-                    different targets: this padded hit area ticks the box,
-                    the row itself opens the building for editing. */}
+              building={building}
+              selected={isSelected}
+              highlighted={building.building_id === justAdded}
+              cornerAction={
+                <DeleteBuildingButton building={building} onDeleted={() => handleBuildingDeleted(building.building_id)} />
+              }
+              leading={
+                // Selecting and opening are different intents, so they get
+                // different targets: this padded hit area ticks the box,
+                // the row itself opens the building for editing.
                 <label
                   className="-m-2 shrink-0 cursor-pointer p-2"
                   aria-label={`Select ${building.address}`}
@@ -254,70 +224,8 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
                     className="mt-1 h-5 w-5 cursor-pointer accent-accent"
                   />
                 </label>
-                <Link href={`/buildings/${building.building_id}`} className="shrink-0">
-                  {building.photos.length > 0 ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- arbitrary captured URLs, no fixed domain to allowlist
-                    <img
-                      src={building.photos[0]}
-                      alt=""
-                      className="h-16 w-16 rounded-lg border border-border object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-border text-[10px] text-muted">
-                      No photo
-                    </div>
-                  )}
-                </Link>
-
-                <Link href={`/buildings/${building.building_id}`} className="group flex-1">
-                  <p className="font-semibold group-hover:text-accent group-hover:underline">{building.address}</p>
-                  <p className="text-sm text-muted">
-                    {[building.submarket, building.city].filter(Boolean).join(" · ")}
-                  </p>
-                  <p className="mt-1 text-sm">
-                    <span className="font-medium">
-                      {totalAvailable > 0 ? formatArea(totalAvailable) : "Area TBD"}
-                    </span>
-                    <span className="text-muted"> · {rentLabel}</span>
-                    {building.energy_label && <span className="text-muted"> · Energy {building.energy_label}</span>}
-                  </p>
-                  {(building.public_transport_note || building.accessibility_note || building.airport_note) && (
-                    <p className="mt-1 flex flex-wrap gap-x-3 text-xs text-muted">
-                      {building.public_transport_note && <span>🚉 {building.public_transport_note}</span>}
-                      {building.accessibility_note && <span>🛣️ {building.accessibility_note}</span>}
-                      {building.airport_note && <span>✈️ {building.airport_note}</span>}
-                    </p>
-                  )}
-                  {building.building_amenities.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {building.building_amenities.slice(0, 6).map((a) => (
-                        <span
-                          key={a}
-                          className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent"
-                        >
-                          {a}
-                        </span>
-                      ))}
-                      {building.building_amenities.length > 6 && (
-                        <span className="px-1 py-0.5 text-[11px] text-muted">
-                          +{building.building_amenities.length - 6} more
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </Link>
-
-                <div className="flex shrink-0 flex-col items-end gap-2">
-                  <Badge>{building.units.length} space{building.units.length === 1 ? "" : "s"}</Badge>
-                  <Link
-                    href={`/buildings/${building.building_id}`}
-                    className="text-xs font-semibold text-accent hover:underline"
-                  >
-                    Edit →
-                  </Link>
-                </div>
-              </div>
-            </Card>
+              }
+            />
           );
         })}
         {visible.length === 0 && (
@@ -367,13 +275,6 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
             disabled={generating || selected.length === 0 || !clientName.trim()}
           >
             {generating ? "Generating…" : "Generate PDF"}
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={saveAsSelection}
-            disabled={savingSelection || selected.length === 0 || !clientName.trim()}
-          >
-            {savingSelection ? "Saving…" : "Save as selection"}
           </Button>
           {error && <p className="w-full text-xs text-red-500">{error}</p>}
           {!error && selected.length > 0 && !clientName.trim() && (

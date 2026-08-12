@@ -19,7 +19,7 @@ export default async function ProposalDetailPage({ params }: { params: Promise<{
   return (
     <div>
       <PageHeader
-        eyebrow={`Prepared for ${proposal.client.company_name}`}
+        eyebrow={`Prepared for ${proposal.client.display_name}`}
         title={proposal.title}
         description={proposal.notes ?? undefined}
         actions={<Badge tone="accent">{proposal.status.replace("_", " ")}</Badge>}

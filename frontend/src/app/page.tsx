@@ -13,9 +13,9 @@ const PILLARS = [
     href: "/import",
   },
   {
-    title: "Client selections",
-    description: "Saved shortlists of buildings, one per client. Reopen, adjust, or duplicate one instead of starting over.",
-    href: "/selections",
+    title: "Clients",
+    description: "Each client has their own folder of buildings copied in from the library, ready to send as a PDF.",
+    href: "/clients",
   },
 ];
 

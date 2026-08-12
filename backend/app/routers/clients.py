@@ -42,3 +42,15 @@ def update_client(client_id: str, payload: schemas.ClientCreate, db: Session = D
     db.commit()
     db.refresh(obj)
     return obj
+
+
+@router.delete("/{client_id}", status_code=204)
+def delete_client(client_id: str, db: Session = Depends(get_db)):
+    """Cascades to every building copied into this client's folder
+    (models/client.py Client.buildings relationship) — the library masters
+    they were copied from are untouched."""
+    obj = db.get(Client, client_id)
+    if not obj:
+        raise HTTPException(404, "Client not found")
+    db.delete(obj)
+    db.commit()

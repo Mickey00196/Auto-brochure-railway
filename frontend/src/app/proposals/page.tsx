@@ -47,7 +47,7 @@ export default async function ProposalsPage() {
                 <div>
                   <h2 className="text-lg font-semibold">{p.title}</h2>
                   <p className="text-sm text-muted">
-                    {clientById.get(p.client_id)?.company_name ?? "Unknown client"} · {p.selected_unit_ids.length}{" "}
+                    {clientById.get(p.client_id)?.display_name ?? "Unknown client"} · {p.selected_unit_ids.length}{" "}
                     location{p.selected_unit_ids.length === 1 ? "" : "s"} · prepared by {p.prepared_by ?? "—"}
                   </p>
                 </div>

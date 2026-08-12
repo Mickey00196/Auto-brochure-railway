@@ -69,7 +69,7 @@ def match_building(session: Session, listing: NormalizedListing) -> BuildingMatc
     # Pull candidate buildings once. The dataset here is a single team's
     # inventory, not millions of rows, so an in-Python comparison over all
     # buildings is fine and keeps the matching logic readable/testable.
-    buildings = session.query(Building).all()
+    buildings = session.query(Building).filter(Building.client_id.is_(None)).all()
 
     # Tier 1 — exact normalized address key.
     if listing_key:
@@ -135,7 +135,7 @@ def find_similar_buildings(
         seen_ids.add(building.building_id)
         candidates.append(DuplicateCandidate(building=building, tier=tier, score=score))
 
-    buildings = session.query(Building).all()
+    buildings = session.query(Building).filter(Building.client_id.is_(None)).all()
 
     # Tier 1 — exact normalized address key.
     if key:
