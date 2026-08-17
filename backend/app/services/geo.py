@@ -24,12 +24,15 @@ a missing distance is a blank field the broker can fill in, not a broken save.
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Callable
+
+logger = logging.getLogger(__name__)
 
 GOOGLE_GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
@@ -157,13 +160,23 @@ def _google_geocode(query: str, api_key: str, *, fetch: Fetcher) -> tuple[float,
     try:
         data = json.loads(fetch(url, None))
     except Exception:
+        logger.warning("Google geocoding request failed for %r", query, exc_info=True)
         return None
-    if data.get("status") != "OK":
+    status = data.get("status")
+    if status != "OK":
+        # Logged at warning (not error) — this is expected for ZERO_RESULTS
+        # on a genuinely bad address, but for REQUEST_DENIED / INVALID_REQUEST
+        # / OVER_QUERY_LIMIT it's the only place the real reason (Google's
+        # error_message) ever surfaces; the caller only ever sees "not found".
+        logger.warning(
+            "Google geocoding returned status=%s for %r: %s", status, query, data.get("error_message")
+        )
         return None
     try:
         location = data["results"][0]["geometry"]["location"]
         return float(location["lat"]), float(location["lng"])
     except (KeyError, IndexError, TypeError, ValueError):
+        logger.warning("Google geocoding returned an unexpected shape for %r: %r", query, data)
         return None
 
 
