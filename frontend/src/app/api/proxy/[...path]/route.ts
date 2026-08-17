@@ -15,6 +15,16 @@ const INTERNAL_API_BASE_URL = internalApiBaseUrl();
 // every proxied request indefinitely instead of surfacing a clear error.
 const BACKEND_TIMEOUT_MS = 10_000;
 
+// /geo/distances calls out to Nominatim and Overpass (app/services/geo.py),
+// each allowed up to 20s on the backend — comfortably past the default
+// 10s budget above, so a slow-but-working OSM lookup was indistinguishable
+// from a genuinely unreachable backend and always surfaced as a timeout.
+const GEO_TIMEOUT_MS = 45_000;
+
+function timeoutFor(path: string[]): number {
+  return path[0] === "geo" ? GEO_TIMEOUT_MS : BACKEND_TIMEOUT_MS;
+}
+
 async function forward(request: Request, path: string[], search: string): Promise<Response> {
   const token = (await cookies()).get("session")?.value;
   if (!token) {
@@ -34,7 +44,7 @@ async function forward(request: Request, path: string[], search: string): Promis
       },
       body: hasBody ? await request.arrayBuffer() : undefined,
       cache: "no-store",
-      signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutFor(path)),
     });
   } catch (e) {
     const reason = e instanceof Error ? e.message : String(e);
