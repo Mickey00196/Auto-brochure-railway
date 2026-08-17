@@ -14,6 +14,7 @@ import pytest
 from app.services.geo import (
     Distances,
     _geocode_query_candidates,
+    _nearest_known_airport,
     distances_for_address,
     format_distance,
     geocode,
@@ -58,49 +59,60 @@ def test_distance_formatting_reads_like_a_broker_wrote_it(metres, expected):
     assert format_distance(metres) == expected
 
 
+def test_nearest_known_airport_picks_the_right_one_not_just_schiphol():
+    """Amsterdam's nearest airport is genuinely Schiphol — that alone
+    wouldn't catch a bug where the function always returned the first list
+    entry regardless of location. Rotterdam is close enough to both
+    Schiphol and Rotterdam The Hague Airport that picking the wrong one
+    would still look plausible without this."""
+    rotterdam_lat, rotterdam_lon = 51.9244, 4.4777  # Rotterdam Centraal
+    distance, label = _nearest_known_airport(rotterdam_lat, rotterdam_lon)
+    assert label == "Rotterdam The Hague Airport (RTM)"
+    assert distance < 15_000
+
+    amsterdam_distance, amsterdam_label = _nearest_known_airport(LAT, LON)
+    assert amsterdam_label == "Schiphol (AMS)"
+    assert amsterdam_distance < 15_000
+
+
 def test_picks_the_nearest_of_each_kind():
     elements = [
         {"lat": 52.3390, "lon": 4.8730, "tags": {"railway": "station", "name": "Amsterdam Zuid"}},
         {"lat": 52.3700, "lon": 4.8900, "tags": {"railway": "station", "name": "Amsterdam Centraal"}},
         {"lat": 52.3350, "lon": 4.8600, "tags": {"highway": "motorway_junction", "ref": "S109"}},
         {"lat": 52.3000, "lon": 4.9500, "tags": {"highway": "motorway_junction", "ref": "S112"}},
-        {"lat": 52.3105, "lon": 4.7683, "tags": {"aeroway": "aerodrome", "iata": "AMS", "name": "Schiphol"}},
     ]
     d = nearby_distances(LAT, LON, fetch=_stub(overpass=_overpass(elements)))
 
     assert d.public_transport.startswith("Amsterdam Zuid ")   # not Centraal
     assert d.highway.startswith("S109 ")                       # not S112
-    assert d.airport.startswith("Schiphol ")
+    assert d.airport.startswith("Schiphol (AMS) ")             # from NL_MAJOR_AIRPORTS, not Overpass
     assert d.airport.endswith("km")
     assert (d.latitude, d.longitude) == (LAT, LON)
 
 
-def test_prefers_google_places_for_transit_and_airport_when_a_key_is_configured(monkeypatch):
+def test_prefers_google_places_for_transit_when_a_key_is_configured(monkeypatch):
     """Highway has no Google Places equivalent, so Overpass still supplies
-    it — but transit and airport should come from Google, not Overpass,
-    when both could answer. The Overpass stub below deliberately returns a
-    WORSE (farther/differently-named) station and airport than Google's, so
-    a wrong assertion here would mean Overpass's answer won it instead."""
+    it — but transit should come from Google, not Overpass, when both could
+    answer. The Overpass stub below deliberately returns a WORSE
+    (farther/differently-named) station than Google's, so a wrong assertion
+    here would mean Overpass's answer won it instead."""
     monkeypatch.setenv("GOOGLE_MAPS_GEOCODING_API_KEY", "test-key")
     overpass_elements = [
         {"lat": 52.3700, "lon": 4.8900, "tags": {"railway": "station", "name": "Wrong Station"}},
         {"lat": 52.3350, "lon": 4.8600, "tags": {"highway": "motorway_junction", "ref": "S109"}},
-        {"lat": 52.4000, "lon": 4.6000, "tags": {"aeroway": "aerodrome", "iata": "XXX", "name": "Wrong Airport"}},
     ]
 
     def fetch(url: str, body: bytes | None) -> str:
         if "place/nearbysearch" in url:
-            if "type=airport" in url:
-                place = {"name": "Schiphol", "geometry": {"location": {"lat": 52.3105, "lng": 4.7683}}}
-            else:
-                place = {"name": "Amsterdam Zuid", "geometry": {"location": {"lat": 52.3390, "lng": 4.8730}}}
+            place = {"name": "Amsterdam Zuid", "geometry": {"location": {"lat": 52.3390, "lng": 4.8730}}}
             return json.dumps({"status": "OK", "results": [place]})
         return _overpass(overpass_elements)
 
     d = nearby_distances(LAT, LON, fetch=fetch)
     assert d.public_transport.startswith("Amsterdam Zuid ")
-    assert d.airport.startswith("Schiphol ")
     assert d.highway.startswith("S109 ")  # only Overpass can supply this
+    assert d.airport.startswith("Schiphol (AMS) ")  # unaffected by either source above
 
 
 def test_falls_back_to_overpass_when_google_places_finds_nothing(monkeypatch):
@@ -259,7 +271,10 @@ def test_geocoder_outage_degrades_quietly():
 def test_overpass_outage_keeps_the_coordinates():
     d = nearby_distances(LAT, LON, fetch=_stub(overpass=None))
     assert (d.latitude, d.longitude) == (LAT, LON)
-    assert d.public_transport is None and d.highway is None and d.airport is None
+    assert d.public_transport is None and d.highway is None
+    # Airport doesn't depend on Overpass (or Google) at all — an outage of
+    # either must not blank it.
+    assert d.airport.startswith("Schiphol (AMS) ")
 
 
 def test_ways_without_a_point_are_ignored_and_centres_are_used():
@@ -301,14 +316,12 @@ def test_transport_mode_subway_uses_the_metro_label():
 
 def test_transport_mode_still_finds_highway_and_airport():
     """A specific transport_mode only scopes the station clause — highway
-    and airport results must be unaffected."""
-    elements = [
-        {"lat": 52.3350, "lon": 4.8600, "tags": {"highway": "motorway_junction", "ref": "S109"}},
-        {"lat": 52.3105, "lon": 4.7683, "tags": {"aeroway": "aerodrome", "iata": "AMS", "name": "Schiphol"}},
-    ]
+    (from Overpass) and airport (from NL_MAJOR_AIRPORTS) must be
+    unaffected."""
+    elements = [{"lat": 52.3350, "lon": 4.8600, "tags": {"highway": "motorway_junction", "ref": "S109"}}]
     d = nearby_distances(LAT, LON, "bus", fetch=_stub(overpass=_overpass(elements)))
     assert d.highway.startswith("S109 ")
-    assert d.airport.startswith("Schiphol ")
+    assert d.airport.startswith("Schiphol (AMS) ")
 
 
 def test_unknown_transport_mode_falls_back_to_nearest_any_behaviour():

@@ -12,14 +12,33 @@ cloud IP ranges, which made real addresses come back as "not found" from a
 Railway deployment. OSM/Nominatim is still the geocoding fallback so the
 feature still works on a deployment with no API key configured.
 
-The nearest-station and nearest-airport search prefers Google's Places API
-(same key) for the same reason. Highway access has no clean Places
-equivalent (no "nearest motorway junction" place type), so it — and
-public_transport/airport whenever Google found nothing — still comes from
-Overpass, tried across several public mirrors in turn: overpass-api.de, the
-default and best-maintained instance, has been observed to hang
-indefinitely (not merely slow — no response at all) from Railway's network,
-and a single dead mirror must not blank every field that depends on it.
+The nearest-station search prefers Google's Places API (same key) for the
+same reason, falling back to Overpass — tried across several public
+mirrors in turn — only when no key is configured or Google found nothing.
+Overpass itself has been confirmed entirely unreachable from Railway's
+network (every mirror times out with zero bytes, not merely slow — checked
+directly from a Railway-side sandbox, not just inferred from an app-level
+symptom), so it is no longer relied on for anything else here.
+
+Airport distance is looked up against NL_MAJOR_AIRPORTS, a short hardcoded
+list of the Netherlands' actual commercial airports, instead of a live
+"nearest place of type=airport" search: Google Places' airport type also
+matches nearby airport-adjacent businesses (a transfer/shuttle company
+physically closer to the search point than the terminal itself easily
+outranks the airport in a plain nearest-match), and Overpass — besides
+being unreachable — has the same false-match risk via any POI tagged
+aeroway=aerodrome without actually being a scheduled-service airport.
+There are only a handful of real candidates in this market, so naming them
+is both more accurate and cheaper than searching for one. This does mean
+the feature is Netherlands-specific for airport distance specifically (see
+the module's other Dutch-specific defaults, e.g. country="Netherlands").
+
+Highway access has no clean Places equivalent (no "nearest motorway
+junction" place type) and no small enumerable list the way airports do, so
+it's the one field still dependent on Overpass succeeding — the query for
+it no longer bundles the airport search that used to ride along with it,
+since a lighter, single-purpose query is more likely to complete before a
+loaded public instance's response times out.
 
 Distances are straight-line ("as the crow flies"); a driving time would
 need a routing service and a key, and would still be a different number
@@ -59,15 +78,37 @@ OVERPASS_MIRRORS = [
 # Nominatim's usage policy requires a genuine identifying User-Agent.
 USER_AGENT = "ProposalEngine/1.0 (office availability tool; contact via deployment owner)"
 TIMEOUT_SECONDS = 20
-# Shorter than TIMEOUT_SECONDS deliberately: trying up to 3 mirrors at 20s
-# each could take a minute before falling back to "no answer", which is
-# worse than a snappier per-mirror give-up.
-OVERPASS_MIRROR_TIMEOUT_SECONDS = 10
+# Much shorter than TIMEOUT_SECONDS deliberately, and shorter than it might
+# look like it needs to be: confirmed directly (both from a Railway-side
+# sandbox and in this app's own production logs) that every mirror in
+# OVERPASS_MIRRORS is currently completely unreachable from Railway's
+# network — connections either hang with zero bytes back or fail outright,
+# never "answers, just slowly". Waiting the old 10s per mirror for a
+# doorbell nobody answers only made the one field with no fallback (highway
+# access) the slowest part of every lookup for no benefit. 5s still gives a
+# mirror that recovers, or a non-Railway deployment where these aren't
+# blocked at all, a real chance to answer.
+OVERPASS_MIRROR_TIMEOUT_SECONDS = 5
 
 # How far out it is still worth looking for each kind of thing.
 STATION_RADIUS_M = 20_000
 MOTORWAY_RADIUS_M = 30_000
-AIRPORT_RADIUS_M = 150_000
+
+# The Netherlands' commercial airports (scheduled passenger service) — see
+# the module docstring for why this is a short hardcoded list rather than a
+# live "nearest place tagged as an airport" search. (name, IATA code,
+# latitude, longitude); IATA is carried only for the label, e.g. "Schiphol
+# (AMS)". Coordinates are the published airport reference point for each,
+# accurate to well within the precision this feature already promises
+# (straight-line, rounded to the nearest 50m/whole km).
+NL_MAJOR_AIRPORTS = [
+    ("Schiphol", "AMS", 52.3086, 4.7639),
+    ("Rotterdam The Hague Airport", "RTM", 51.9569, 4.4372),
+    ("Eindhoven Airport", "EIN", 51.4500, 5.3745),
+    ("Groningen Airport Eelde", "GRQ", 53.1197, 6.5794),
+    ("Maastricht Aachen Airport", "MST", 50.9117, 5.7703),
+    ("Lelystad Airport", "LEY", 52.4603, 5.5267),
+]
 
 # "nearest_any" (the default) preserves the original behaviour exactly —
 # nearest railway=station, whatever it turns out to be. Choosing a specific
@@ -125,6 +166,15 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     dl = math.radians(lon2 - lon1)
     a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
     return 2 * r * math.asin(math.sqrt(a))
+
+
+def _nearest_known_airport(lat: float, lon: float) -> tuple[float, str]:
+    """Always returns something — NL_MAJOR_AIRPORTS is short and fixed, so
+    there's no "not found" case the way a live search has. Outside the
+    Netherlands the "nearest" entry is simply far away and not a meaningful
+    answer; see the module docstring."""
+    name, iata, alat, alon = min(NL_MAJOR_AIRPORTS, key=lambda a: haversine_m(lat, lon, a[2], a[3]))
+    return haversine_m(lat, lon, alat, alon), f"{name} ({iata})"
 
 
 def format_distance(metres: float) -> str:
@@ -255,12 +305,16 @@ def geocode(
 
 
 def _overpass_query(lat: float, lon: float, transport_mode: str = "nearest_any") -> str:
+    # No airport clause — that's NL_MAJOR_AIRPORTS' job now (see module
+    # docstring). Dropping it isn't just about relevance: it was a 150km-
+    # radius search, by far the most expensive part of the old combined
+    # query, and a lighter query is more likely to complete before a loaded
+    # public Overpass instance's response times out.
     station_filter = _STATION_FILTERS.get(transport_mode, '["railway"="station"]')
     return f"""[out:json][timeout:25];
 (
   nwr(around:{STATION_RADIUS_M},{lat},{lon}){station_filter};
   nwr(around:{MOTORWAY_RADIUS_M},{lat},{lon})["highway"="motorway_junction"];
-  nwr(around:{AIRPORT_RADIUS_M},{lat},{lon})["aeroway"="aerodrome"]["iata"];
 );
 out center tags;"""
 
@@ -371,8 +425,6 @@ def _overpass_nearby(
             continue
         if tags.get("highway") == "motorway_junction":
             kind, fallback = "highway", "Motorway exit"
-        elif tags.get("aeroway") == "aerodrome":
-            kind, fallback = "airport", "Airport"
         elif _matches_transport_mode(tags, transport_mode):
             kind, fallback = "public_transport", station_fallback
         else:
@@ -387,7 +439,10 @@ def _overpass_nearby(
 def nearby_distances(
     lat: float, lon: float, transport_mode: str = "nearest_any", *, fetch: Fetcher = _http
 ) -> Distances:
-    best: dict[str, tuple[float, str]] = {}
+    # Always available, no network call: see NL_MAJOR_AIRPORTS / module
+    # docstring for why airport doesn't go through a live nearest-place
+    # search at all.
+    best: dict[str, tuple[float, str]] = {"airport": _nearest_known_airport(lat, lon)}
 
     api_key = _google_maps_api_key()
     if api_key:
@@ -395,13 +450,10 @@ def nearby_distances(
         transit = _google_nearby(lat, lon, place_type, api_key, fetch=fetch, kind="public_transport")
         if transit:
             best["public_transport"] = transit
-        airport = _google_nearby(lat, lon, "airport", api_key, fetch=fetch, kind="airport")
-        if airport:
-            best["airport"] = airport
 
     # Overpass always runs: it's the only source for highway access, and the
-    # fallback for public_transport/airport whenever Google found nothing
-    # (no key configured, the call failed, or it genuinely had no results).
+    # fallback for public_transport whenever Google found nothing (no key
+    # configured, the call failed, or it genuinely had no results).
     for kind, value in _overpass_nearby(lat, lon, transport_mode, fetch=fetch).items():
         best.setdefault(kind, value)
 
