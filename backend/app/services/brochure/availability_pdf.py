@@ -39,6 +39,7 @@ from sqlalchemy.orm import Session
 
 from app.models import AddOn, Building, Proposal, Unit
 from app.services.comparison import build_comparison_row
+from app.services.maps import build_region_map_url, fetch_static_map_image, location_map_url
 
 # Deep navy leads, vivid blue accents — matching the app's palette.
 ACCENT = colors.HexColor("#0F2557")
@@ -94,6 +95,55 @@ def _fetch_image(url: str) -> ImageReader | None:
         return ImageReader(io.BytesIO(data))
     except Exception:
         return None
+
+
+def _map_flowable(url: str | None, width: float) -> Image | None:
+    """Best-effort static map, sized to `width` with the source image's own
+    aspect ratio (same pattern as the listing-photo flowable below) — never
+    raises, and returns None on any failure. Deliberately no "map
+    unavailable" placeholder: this document goes straight to a client, so a
+    missing map is simply a section that isn't there, the same way any
+    other unconfirmed fact in this PDF renders as nothing rather than an
+    internal configuration hint."""
+    if not url:
+        return None
+    try:
+        image_bytes = fetch_static_map_image(url)
+        if not image_bytes:
+            return None
+        iw, ih = ImageReader(io.BytesIO(image_bytes)).getSize()
+        # A fresh BytesIO, not the ImageReader used for sizing above:
+        # reportlab's Image flowable requires its source to expose .read(),
+        # which ImageReader itself doesn't — passing it directly raises
+        # inside reportlab's own __init__ (TypeError from os.path.splitext
+        # on a non-path object). BytesIO satisfies that directly.
+        return Image(io.BytesIO(image_bytes), width=width, height=width * (ih / iw))
+    except Exception:
+        return None
+
+
+def _overview_legend(numbered_buildings: list[tuple[int, Building]], st: dict) -> Table:
+    """Matches the numbered pins on the portfolio overview map back to
+    addresses, two per row so a large selection doesn't run down the page."""
+    pairs = [(str(i), b.address) for i, b in numbered_buildings]
+    number_style = ParagraphStyle("legend-n", parent=st["cell"], textColor=HIGHLIGHT, fontName="Helvetica-Bold")
+    cells = []
+    for idx in range(0, len(pairs), 2):
+        row = []
+        for number, address in pairs[idx : idx + 2]:
+            row.append(Paragraph(number, number_style))
+            row.append(Paragraph(address, st["cell"]))
+        while len(row) < 4:
+            row.append("")
+        cells.append(row)
+    table = Table(cells, colWidths=[8 * mm, 79 * mm, 8 * mm, 79 * mm])
+    table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    return table
 
 
 def _styles() -> dict:
@@ -316,6 +366,13 @@ def _building_page(entry: LibraryEntry, number: int, addons: list[AddOn], st: di
     else:
         flow.append(facts)
 
+    map_image = _map_flowable(location_map_url(b), width=174 * mm)
+    if map_image:
+        flow.append(Spacer(1, 8))
+        flow.append(Paragraph('<font color="#6B6B70">Location</font>', st["body"]))
+        flow.append(Spacer(1, 3))
+        flow.append(map_image)
+
     if len(entry.units) > 1:
         flow.append(Spacer(1, 8))
         flow.append(Paragraph(f"<b>{len(entry.units)} available spaces</b>", st["body"]))
@@ -381,6 +438,24 @@ def render_availability_pdf(
             "by the source listing and are still being confirmed.",
             ParagraphStyle("fn", parent=st["meta"], fontSize=7.5, leading=10),
         ))
+
+        # Portfolio overview: one map with a numbered pin per building, in
+        # the same order/numbering as the summary table above and each
+        # building's own detail page — so a badge means the same property
+        # everywhere in the document. Silently omitted (no page, no
+        # placeholder) when nothing has coordinates or the map can't be
+        # fetched, same graceful-degradation rule as everything else here.
+        numbered_buildings = [(i, e.building) for i, e in enumerate(entries, start=1)]
+        overview_map = _map_flowable(build_region_map_url(numbered_buildings, grayscale=False), width=174 * mm)
+        if overview_map:
+            flow.append(PageBreak())
+            flow.append(Paragraph("PORTFOLIO OVERVIEW", st["eyebrow"]))
+            flow.append(Paragraph("All locations in this selection", st["h2"]))
+            flow.append(Spacer(1, 6))
+            flow.append(overview_map)
+            flow.append(Spacer(1, 8))
+            flow.append(_overview_legend(numbered_buildings, st))
+
         # One detail page per building.
         for i, entry in enumerate(entries, start=1):
             flow.append(PageBreak())
