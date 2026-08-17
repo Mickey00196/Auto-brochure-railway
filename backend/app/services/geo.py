@@ -264,9 +264,20 @@ def nearby_distances(
 ) -> Distances:
     try:
         payload = _overpass_query(lat, lon, transport_mode).encode("utf-8")
-        data = json.loads(fetch(OVERPASS_URL, payload))
+        raw = fetch(OVERPASS_URL, payload)
+        data = json.loads(raw)
     except Exception:
+        logger.warning("Overpass request failed for (%s, %s) mode=%s", lat, lon, transport_mode, exc_info=True)
         return Distances(latitude=lat, longitude=lon)
+
+    if "elements" not in data:
+        # Overpass answers a rejected/rate-limited query with a 200 and an
+        # error body (or a remark/error field), not an HTTP failure — so the
+        # try/except above never fires. Surface that instead of silently
+        # returning three blank fields that look identical to "nothing nearby".
+        logger.warning(
+            "Overpass returned no 'elements' for (%s, %s) mode=%s: %r", lat, lon, transport_mode, data
+        )
 
     station_fallback = TRANSPORT_LABELS.get(transport_mode, "Station")
 
