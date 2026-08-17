@@ -4,12 +4,18 @@ Listings state these only sometimes, and inconsistently ("A10 3 km", "NS-
 station 800 m", nothing at all). This derives them from the address instead,
 so every building in a client PDF can carry the same three facts.
 
-Uses OpenStreetMap — Nominatim to turn the address into coordinates, Overpass
-to find the nearest station, motorway access and airport — deliberately, so
-the feature works on a deployment with no API key configured. Distances are
-straight-line ("as the crow flies"); a driving time would need a routing
-service and a key, and would still be a different number from the one agents
-quote. The UI labels them as approximate for that reason.
+Geocoding (address → coordinates) prefers Google's Geocoding API when
+GOOGLE_MAPS_GEOCODING_API_KEY (or GOOGLE_MAPS_API_KEY, since one key can
+cover both) is configured — Nominatim's public instance is meant for light,
+human-driven use and silently rate-limits/soft-blocks traffic from shared
+cloud IP ranges, which made real addresses come back as "not found" from a
+Railway deployment. OSM/Nominatim is still the geocoding fallback (and the
+only source for the nearest-station/motorway/airport search below, via
+Overpass) so the feature still works on a deployment with no API key
+configured. Distances are straight-line ("as the crow flies"); a driving
+time would need a routing service and a key, and would still be a different
+number from the one agents quote. The UI labels them as approximate for
+that reason.
 
 Every network call is injectable so the logic can be tested without touching
 the internet, and every failure degrades to "no answer" rather than an error:
@@ -19,11 +25,13 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Callable
 
+GOOGLE_GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 # Nominatim's usage policy requires a genuine identifying User-Agent.
@@ -144,6 +152,21 @@ def _geocode_query_candidates(
     return ordered
 
 
+def _google_geocode(query: str, api_key: str, *, fetch: Fetcher) -> tuple[float, float] | None:
+    url = f"{GOOGLE_GEOCODE_URL}?" + urllib.parse.urlencode({"address": query, "key": api_key})
+    try:
+        data = json.loads(fetch(url, None))
+    except Exception:
+        return None
+    if data.get("status") != "OK":
+        return None
+    try:
+        location = data["results"][0]["geometry"]["location"]
+        return float(location["lat"]), float(location["lng"])
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+
+
 def geocode(
     address: str,
     city: str | None = None,
@@ -152,7 +175,16 @@ def geocode(
     *,
     fetch: Fetcher = _http,
 ) -> tuple[float, float] | None:
-    for query in _geocode_query_candidates(address, city, postal_code, country):
+    candidates = _geocode_query_candidates(address, city, postal_code, country)
+
+    api_key = os.environ.get("GOOGLE_MAPS_GEOCODING_API_KEY") or os.environ.get("GOOGLE_MAPS_API_KEY")
+    if api_key:
+        for query in candidates:
+            point = _google_geocode(query, api_key, fetch=fetch)
+            if point:
+                return point
+
+    for query in candidates:
         url = f"{NOMINATIM_URL}?" + urllib.parse.urlencode(
             {"q": query, "format": "json", "limit": 1, "addressdetails": 0}
         )
