@@ -127,6 +127,48 @@ def test_geocode_stops_at_the_first_candidate_that_resolves():
     assert len(calls) == 2, "must not keep trying once a candidate resolves"
 
 
+def test_prefers_google_geocoding_when_a_key_is_configured(monkeypatch):
+    """The Nominatim stub is intentionally missing (nominatim=None below) —
+    if the code fell through to it instead of using Google, this fails with
+    RuntimeError("geocoder unavailable") rather than a wrong assertion."""
+    monkeypatch.setenv("GOOGLE_MAPS_GEOCODING_API_KEY", "test-key")
+    google_response = json.dumps({"status": "OK", "results": [{"geometry": {"location": {"lat": LAT, "lng": LON}}}]})
+    point = geocode(
+        "Hildegard von Bingenstraat 8", "Amsterdam", "1081 LH", "Netherlands",
+        fetch=lambda url, body: google_response,
+    )
+    assert point == (LAT, LON)
+
+
+def test_falls_back_to_nominatim_when_google_finds_nothing(monkeypatch):
+    """A configured key that fails to resolve (bad status, quota, wrong
+    address) must not strand the lookup — Nominatim still gets a turn."""
+    monkeypatch.setenv("GOOGLE_MAPS_GEOCODING_API_KEY", "test-key")
+    calls = {"google": 0, "nominatim": 0}
+
+    def fetch(url: str, body: bytes | None) -> str:
+        if "maps.googleapis.com" in url:
+            calls["google"] += 1
+            return json.dumps({"status": "ZERO_RESULTS", "results": []})
+        calls["nominatim"] += 1
+        return json.dumps([{"lat": str(LAT), "lon": str(LON)}])
+
+    point = geocode("Hildegard von Bingenstraat 8", "Amsterdam", "1081 LH", "Netherlands", fetch=fetch)
+    assert point == (LAT, LON)
+    assert calls["google"] >= 1
+    assert calls["nominatim"] == 1
+
+
+def test_skips_google_entirely_without_a_key(monkeypatch):
+    monkeypatch.delenv("GOOGLE_MAPS_GEOCODING_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
+    nominatim = json.dumps([{"lat": str(LAT), "lon": str(LON)}])
+    point = geocode(
+        "Hildegard von Bingenstraat 8", "Amsterdam", "1081 LH", "Netherlands", fetch=_stub(nominatim=nominatim)
+    )
+    assert point == (LAT, LON)
+
+
 def test_existing_coordinates_skip_the_geocoder():
     """A building already located must not be geocoded again — the stub has no
     geocoder at all, so this raises if it tries."""
