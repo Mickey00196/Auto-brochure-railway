@@ -9,13 +9,22 @@ GOOGLE_MAPS_GEOCODING_API_KEY (or GOOGLE_MAPS_API_KEY, since one key can
 cover both) is configured — Nominatim's public instance is meant for light,
 human-driven use and silently rate-limits/soft-blocks traffic from shared
 cloud IP ranges, which made real addresses come back as "not found" from a
-Railway deployment. OSM/Nominatim is still the geocoding fallback (and the
-only source for the nearest-station/motorway/airport search below, via
-Overpass) so the feature still works on a deployment with no API key
-configured. Distances are straight-line ("as the crow flies"); a driving
-time would need a routing service and a key, and would still be a different
-number from the one agents quote. The UI labels them as approximate for
-that reason.
+Railway deployment. OSM/Nominatim is still the geocoding fallback so the
+feature still works on a deployment with no API key configured.
+
+The nearest-station and nearest-airport search prefers Google's Places API
+(same key) for the same reason. Highway access has no clean Places
+equivalent (no "nearest motorway junction" place type), so it — and
+public_transport/airport whenever Google found nothing — still comes from
+Overpass, tried across several public mirrors in turn: overpass-api.de, the
+default and best-maintained instance, has been observed to hang
+indefinitely (not merely slow — no response at all) from Railway's network,
+and a single dead mirror must not blank every field that depends on it.
+
+Distances are straight-line ("as the crow flies"); a driving time would
+need a routing service and a key, and would still be a different number
+from the one agents quote. The UI labels them as approximate for that
+reason.
 
 Every network call is injectable so the logic can be tested without touching
 the internet, and every failure degrades to "no answer" rather than an error:
@@ -23,6 +32,7 @@ a missing distance is a blank field the broker can fill in, not a broken save.
 """
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import math
@@ -35,11 +45,24 @@ from typing import Callable
 logger = logging.getLogger(__name__)
 
 GOOGLE_GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
+GOOGLE_PLACES_NEARBY_URL = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+# Tried in order; the first to answer with a well-formed body wins. Public
+# mirrors of the same dataset — overpass-api.de is the default and
+# best-maintained, but a dead/rate-limiting instance must not take the
+# whole feature down with it.
+OVERPASS_MIRRORS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.openstreetmap.ru/api/interpreter",
+]
 # Nominatim's usage policy requires a genuine identifying User-Agent.
 USER_AGENT = "ProposalEngine/1.0 (office availability tool; contact via deployment owner)"
 TIMEOUT_SECONDS = 20
+# Shorter than TIMEOUT_SECONDS deliberately: trying up to 3 mirrors at 20s
+# each could take a minute before falling back to "no answer", which is
+# worse than a snappier per-mirror give-up.
+OVERPASS_MIRROR_TIMEOUT_SECONDS = 10
 
 # How far out it is still worth looking for each kind of thing.
 STATION_RADIUS_M = 20_000
@@ -60,13 +83,30 @@ _STATION_FILTERS = {
 }
 TRANSPORT_LABELS = {"train": "Station", "subway": "Metro", "tram": "Tramhalte", "bus": "Bushalte"}
 
+# Google Places "type" filter closest to each OSM tag combination above.
+# Places has no tram-specific type — light_rail_station is the nearest
+# match — and bus_station only covers major terminals, not curb-side stops,
+# so a "bus" lookup is more likely to fall through to the Overpass path
+# below than the other modes are.
+_GOOGLE_PLACE_TYPES = {
+    "train": "train_station",
+    "subway": "subway_station",
+    "tram": "light_rail_station",
+    "bus": "bus_station",
+}
+_GOOGLE_TRANSIT_FALLBACK_TYPE = "transit_station"  # nearest_any / unrecognised mode
+
 Fetcher = Callable[[str, bytes | None], str]
 
 
-def _http(url: str, body: bytes | None = None) -> str:
+def _http(url: str, body: bytes | None = None, *, timeout: float = TIMEOUT_SECONDS) -> str:
     req = urllib.request.Request(url, data=body, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read().decode("utf-8", "replace")
+
+
+def _google_maps_api_key() -> str | None:
+    return os.environ.get("GOOGLE_MAPS_GEOCODING_API_KEY") or os.environ.get("GOOGLE_MAPS_API_KEY")
 
 
 @dataclass
@@ -190,7 +230,7 @@ def geocode(
 ) -> tuple[float, float] | None:
     candidates = _geocode_query_candidates(address, city, postal_code, country)
 
-    api_key = os.environ.get("GOOGLE_MAPS_GEOCODING_API_KEY") or os.environ.get("GOOGLE_MAPS_API_KEY")
+    api_key = _google_maps_api_key()
     if api_key:
         for query in candidates:
             point = _google_geocode(query, api_key, fetch=fetch)
@@ -259,28 +299,70 @@ def _matches_transport_mode(tags: dict, transport_mode: str) -> bool:
     return tags.get("railway") == "station"  # nearest_any / unrecognised mode
 
 
-def nearby_distances(
-    lat: float, lon: float, transport_mode: str = "nearest_any", *, fetch: Fetcher = _http
-) -> Distances:
+def _google_nearby(
+    lat: float, lon: float, place_type: str, api_key: str, *, fetch: Fetcher, kind: str
+) -> tuple[float, str] | None:
+    """Nearest place of `place_type`, ranked by distance. Returns
+    (distance_metres, label) — the same shape the Overpass path below
+    produces — so the two sources are interchangeable to the caller."""
+    params = {"location": f"{lat},{lon}", "rankby": "distance", "type": place_type, "key": api_key}
+    url = f"{GOOGLE_PLACES_NEARBY_URL}?" + urllib.parse.urlencode(params)
     try:
-        payload = _overpass_query(lat, lon, transport_mode).encode("utf-8")
-        raw = fetch(OVERPASS_URL, payload)
-        data = json.loads(raw)
+        data = json.loads(fetch(url, None))
     except Exception:
-        logger.warning("Overpass request failed for (%s, %s) mode=%s", lat, lon, transport_mode, exc_info=True)
-        return Distances(latitude=lat, longitude=lon)
+        logger.warning("Google Places request failed for %s (type=%s) at (%s, %s)", kind, place_type, lat, lon,
+                        exc_info=True)
+        return None
+    status = data.get("status")
+    if status not in ("OK", "ZERO_RESULTS"):
+        logger.warning(
+            "Google Places returned status=%s for %s (type=%s): %s", status, kind, place_type, data.get("error_message")
+        )
+    if status != "OK":
+        return None
+    results = data.get("results") or []
+    if not results:
+        return None
+    try:
+        location = results[0]["geometry"]["location"]
+        distance = haversine_m(lat, lon, float(location["lat"]), float(location["lng"]))
+        label = results[0].get("name") or place_type.replace("_", " ").title()
+        return distance, label
+    except (KeyError, TypeError, ValueError):
+        logger.warning("Google Places returned an unexpected shape for %s (type=%s): %r", kind, place_type, data)
+        return None
 
-    if "elements" not in data:
+
+def _overpass_nearby(
+    lat: float, lon: float, transport_mode: str, *, fetch: Fetcher
+) -> dict[str, tuple[float, str]]:
+    """Tries each mirror in OVERPASS_MIRRORS in turn, using a shorter
+    per-attempt timeout than the default (see OVERPASS_MIRROR_TIMEOUT_SECONDS)
+    so a dead mirror doesn't eat the whole request budget before the next
+    one gets a turn. Only overrides the timeout for the real network
+    fetcher — an injected test stub keeps whatever signature it already has."""
+    overpass_fetch = functools.partial(_http, timeout=OVERPASS_MIRROR_TIMEOUT_SECONDS) if fetch is _http else fetch
+
+    payload = _overpass_query(lat, lon, transport_mode).encode("utf-8")
+    data = None
+    for mirror in OVERPASS_MIRRORS:
+        try:
+            candidate = json.loads(overpass_fetch(mirror, payload))
+        except Exception:
+            logger.warning("Overpass mirror %s failed for (%s, %s)", mirror, lat, lon, exc_info=True)
+            continue
+        if "elements" in candidate:
+            data = candidate
+            break
         # Overpass answers a rejected/rate-limited query with a 200 and an
         # error body (or a remark/error field), not an HTTP failure — so the
-        # try/except above never fires. Surface that instead of silently
-        # returning three blank fields that look identical to "nothing nearby".
-        logger.warning(
-            "Overpass returned no 'elements' for (%s, %s) mode=%s: %r", lat, lon, transport_mode, data
-        )
+        # except above never catches it. Surface that instead of silently
+        # moving on to a result that looks identical to "nothing nearby".
+        logger.warning("Overpass mirror %s returned no 'elements' for (%s, %s): %r", mirror, lat, lon, candidate)
+    if data is None:
+        return {}
 
     station_fallback = TRANSPORT_LABELS.get(transport_mode, "Station")
-
     best: dict[str, tuple[float, str]] = {}
     for el in data.get("elements", []):
         tags = el.get("tags") or {}
@@ -299,6 +381,29 @@ def nearby_distances(
         label = _label(tags, fallback)
         if kind not in best or distance < best[kind][0]:
             best[kind] = (distance, label)
+    return best
+
+
+def nearby_distances(
+    lat: float, lon: float, transport_mode: str = "nearest_any", *, fetch: Fetcher = _http
+) -> Distances:
+    best: dict[str, tuple[float, str]] = {}
+
+    api_key = _google_maps_api_key()
+    if api_key:
+        place_type = _GOOGLE_PLACE_TYPES.get(transport_mode, _GOOGLE_TRANSIT_FALLBACK_TYPE)
+        transit = _google_nearby(lat, lon, place_type, api_key, fetch=fetch, kind="public_transport")
+        if transit:
+            best["public_transport"] = transit
+        airport = _google_nearby(lat, lon, "airport", api_key, fetch=fetch, kind="airport")
+        if airport:
+            best["airport"] = airport
+
+    # Overpass always runs: it's the only source for highway access, and the
+    # fallback for public_transport/airport whenever Google found nothing
+    # (no key configured, the call failed, or it genuinely had no results).
+    for kind, value in _overpass_nearby(lat, lon, transport_mode, fetch=fetch).items():
+        best.setdefault(kind, value)
 
     return Distances(
         latitude=lat,

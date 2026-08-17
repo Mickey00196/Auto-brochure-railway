@@ -75,6 +75,75 @@ def test_picks_the_nearest_of_each_kind():
     assert (d.latitude, d.longitude) == (LAT, LON)
 
 
+def test_prefers_google_places_for_transit_and_airport_when_a_key_is_configured(monkeypatch):
+    """Highway has no Google Places equivalent, so Overpass still supplies
+    it — but transit and airport should come from Google, not Overpass,
+    when both could answer. The Overpass stub below deliberately returns a
+    WORSE (farther/differently-named) station and airport than Google's, so
+    a wrong assertion here would mean Overpass's answer won it instead."""
+    monkeypatch.setenv("GOOGLE_MAPS_GEOCODING_API_KEY", "test-key")
+    overpass_elements = [
+        {"lat": 52.3700, "lon": 4.8900, "tags": {"railway": "station", "name": "Wrong Station"}},
+        {"lat": 52.3350, "lon": 4.8600, "tags": {"highway": "motorway_junction", "ref": "S109"}},
+        {"lat": 52.4000, "lon": 4.6000, "tags": {"aeroway": "aerodrome", "iata": "XXX", "name": "Wrong Airport"}},
+    ]
+
+    def fetch(url: str, body: bytes | None) -> str:
+        if "place/nearbysearch" in url:
+            if "type=airport" in url:
+                place = {"name": "Schiphol", "geometry": {"location": {"lat": 52.3105, "lng": 4.7683}}}
+            else:
+                place = {"name": "Amsterdam Zuid", "geometry": {"location": {"lat": 52.3390, "lng": 4.8730}}}
+            return json.dumps({"status": "OK", "results": [place]})
+        return _overpass(overpass_elements)
+
+    d = nearby_distances(LAT, LON, fetch=fetch)
+    assert d.public_transport.startswith("Amsterdam Zuid ")
+    assert d.airport.startswith("Schiphol ")
+    assert d.highway.startswith("S109 ")  # only Overpass can supply this
+
+
+def test_falls_back_to_overpass_when_google_places_finds_nothing(monkeypatch):
+    monkeypatch.setenv("GOOGLE_MAPS_GEOCODING_API_KEY", "test-key")
+    elements = [{"lat": 52.3390, "lon": 4.8730, "tags": {"railway": "station", "name": "Amsterdam Zuid"}}]
+
+    def fetch(url: str, body: bytes | None) -> str:
+        if "place/nearbysearch" in url:
+            return json.dumps({"status": "ZERO_RESULTS", "results": []})
+        return _overpass(elements)
+
+    d = nearby_distances(LAT, LON, fetch=fetch)
+    assert d.public_transport.startswith("Amsterdam Zuid ")
+
+
+def test_overpass_retries_the_next_mirror_when_the_first_fails():
+    calls: list[str] = []
+    elements = [{"lat": 52.3390, "lon": 4.8730, "tags": {"railway": "station", "name": "Amsterdam Zuid"}}]
+
+    def fetch(url: str, body: bytes | None) -> str:
+        calls.append(url)
+        if len(calls) == 1:
+            raise TimeoutError("mirror 1 is dead")
+        return _overpass(elements)
+
+    d = nearby_distances(LAT, LON, fetch=fetch)
+    assert d.public_transport.startswith("Amsterdam Zuid ")
+    assert len(calls) == 2
+
+
+def test_google_places_skipped_entirely_without_a_key(monkeypatch):
+    monkeypatch.delenv("GOOGLE_MAPS_GEOCODING_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
+
+    def fetch(url: str, body: bytes | None) -> str:
+        assert "place/nearbysearch" not in url, "must not call Google Places without a key"
+        elements = [{"lat": 52.3390, "lon": 4.8730, "tags": {"railway": "station", "name": "Amsterdam Zuid"}}]
+        return _overpass(elements)
+
+    d = nearby_distances(LAT, LON, fetch=fetch)
+    assert d.public_transport.startswith("Amsterdam Zuid ")
+
+
 def test_geocodes_when_the_building_has_no_coordinates():
     nominatim = json.dumps([{"lat": str(LAT), "lon": str(LON)}])
     elements = [{"lat": 52.3390, "lon": 4.8730, "tags": {"railway": "station", "name": "Amsterdam Zuid"}}]
