@@ -124,6 +124,20 @@ TIMEOUT_SECONDS = 20
 # legitimately take a few seconds under load. 10s balances "still bounded"
 # against "don't false-negative a genuinely slow-but-working response."
 OVERPASS_MIRROR_TIMEOUT_SECONDS = 10
+# The [timeout:N] value embedded in every Overpass QL query below — the
+# budget WE tell the Overpass server it has to compute an answer, distinct
+# from OVERPASS_MIRROR_TIMEOUT_SECONDS above (how long OUR http client waits
+# for a response). These must stay in this relationship: strictly less than
+# the client timeout, with a real margin for network/processing overhead on
+# top of Overpass's own compute time. Get it backwards — as this was
+# briefly, at 25 vs. a 10s client timeout — and a query genuinely needing
+# more time than the client allows gets cut off by our own client before
+# Overpass, which still thinks it has time left, can ever finish: the
+# request is then guaranteed to "time out" every single time, not
+# occasionally, regardless of how many times it's retried. Confirmed in
+# production: nearest_highway_line's widen-to-10km hop — a heavier query
+# than the 2km pass — kept hitting exactly this self-inflicted wall.
+_OVERPASS_QUERY_TIMEOUT_SECONDS = OVERPASS_MIRROR_TIMEOUT_SECONDS - 3
 
 # How far out it is still worth looking for each kind of thing.
 STATION_RADIUS_M = 20_000
@@ -457,7 +471,7 @@ def _overpass_query(lat: float, lon: float, transport_mode: str = "nearest_any")
     # query, and a lighter query is more likely to complete before a loaded
     # public Overpass instance's response times out.
     station_filter = _STATION_FILTERS.get(transport_mode, '["railway"="station"]')
-    return f"""[out:json][timeout:25];
+    return f"""[out:json][timeout:{_OVERPASS_QUERY_TIMEOUT_SECONDS}];
 (
   nwr(around:{STATION_RADIUS_M},{lat},{lon}){station_filter};
   nwr(around:{MOTORWAY_RADIUS_M},{lat},{lon})["highway"="motorway_junction"];
@@ -584,7 +598,7 @@ def _overpass_nearby(
 
 def _highway_line_query(lat: float, lon: float, radius_m: int, *, include_trunk_roads: bool) -> str:
     tag_filter = _highway_line_tag_filter(include_trunk_roads=include_trunk_roads)
-    return f"""[out:json][timeout:25];
+    return f"""[out:json][timeout:{_OVERPASS_QUERY_TIMEOUT_SECONDS}];
 way(around:{radius_m},{lat},{lon}){tag_filter};
 out geom;"""
 
