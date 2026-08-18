@@ -43,16 +43,24 @@ loaded public instance's response times out.
 distance_to_highway_km/nearest_highway_name (nearest_highway_line) is a
 second, more precise take on the same underlying question: instead of the
 nearest motorway_junction *node*, it measures the true minimum distance to
-the nearest motorway/trunk/primary road *geometry* (point-to-polyline, not
-point-to-node), and names the specific road (its ref, e.g. "A10") rather
-than the junction. It's kept as its own pair of fields rather than
-replacing `highway` — the two can legitimately disagree (the nearest point
-on a nearby A-road's shoulder is rarely at a junction) and existing
-callers of `highway`/`accessibility_note` shouldn't change meaning under
-them. Overpass-only by design — there's no Places/Google equivalent for
-"nearest point on a road of a given class" the way there is for a named
-place. No response caching: none of the rest of this module caches
-Overpass responses either, so there's no existing strategy to mirror here.
+the nearest motorway (highway=motorway/motorway_link) road *geometry*
+(point-to-polyline, not point-to-node), and names the specific road (its
+ref, e.g. "A10") rather than the junction. Motorway-only, deliberately:
+highway=primary is an ordinary arterial city road in OSM tagging (e.g.
+Amsterdam's Stadhouderskade), not a "snelweg", and an earlier version of
+this filter that also matched primary (and trunk) routinely reported a
+nearby city street as the "nearest highway" for an inner-city address
+instead of the real, farther-away motorway. trunk/trunk_link can still be
+opted into via nearest_highway_line(include_trunk_roads=True) when that's
+genuinely wanted, but it's never the default. It's kept as its own pair of
+fields rather than replacing `highway` — the two can legitimately disagree
+(the nearest point on a nearby motorway's shoulder is rarely at a
+junction) and existing callers of `highway`/`accessibility_note` shouldn't
+change meaning under them. Overpass-only by design — there's no
+Places/Google equivalent for "nearest point on a road of a given class"
+the way there is for a named place. No response caching: none of the rest
+of this module caches Overpass responses either, so there's no existing
+strategy to mirror here.
 
 Distances are straight-line ("as the crow flies"); a driving time would
 need a routing service and a key, and would still be a different number
@@ -124,13 +132,34 @@ MOTORWAY_RADIUS_M = 30_000
 # (that one bounds the existing motorway_junction *node* search, a
 # different query with different cost characteristics). Starts tight and
 # only widens once, to HIGHWAY_LINE_MAX_RADIUS_M, if nothing was found —
-# most addresses within any Dutch town are well within 2km of a motorway,
-# trunk, or primary road, so the wide radius is the exception path, not
-# the common one.
+# for an inner-city address the nearest actual motorway is often 3-5km out
+# (Amsterdam's ring road A10 from a central canal-ring address, for
+# instance), so the widen-to-max_radius_m hop is the common case for this
+# specific field, not the exception the way it is for STATION_RADIUS_M.
 HIGHWAY_LINE_RADIUS_M = 2_000
 HIGHWAY_LINE_MAX_RADIUS_M = 10_000
-_HIGHWAY_LINE_TAG_FILTER = '["highway"~"^(motorway|trunk|primary)$"]'
+
+# highway=motorway/motorway_link is the only OSM tagging that actually
+# means "snelweg" (a grade-separated, no-at-grade-junctions motorway) —
+# highway=primary is an ordinary arterial city road (Amsterdam's
+# Stadhouderskade and Nassaukade are both tagged primary) that happens to
+# carry a lot of traffic, not a motorway, and including it here previously
+# meant an inner-city address routinely got told its "nearest highway" was
+# a ~1.5km-away city street instead of the actual ~4-5km-away A10.
+# trunk/trunk_link (major N-roads that function like a motorway in
+# practice but aren't legally one) sit closer to motorway in character
+# than primary does, but including them changes what the number means —
+# hence _HIGHWAY_TRUNK_TAGS staying a separate, explicitly opt-in constant
+# rather than folded into the default filter (see include_trunk_roads on
+# nearest_highway_line).
+_HIGHWAY_MOTORWAY_TAGS = ("motorway", "motorway_link")
+_HIGHWAY_TRUNK_TAGS = ("trunk", "trunk_link")
 _METERS_PER_DEGREE_LAT = 111_320.0
+
+
+def _highway_line_tag_filter(*, include_trunk_roads: bool) -> str:
+    tags = _HIGHWAY_MOTORWAY_TAGS + (_HIGHWAY_TRUNK_TAGS if include_trunk_roads else ())
+    return f'["highway"~"^({"|".join(tags)})$"]'
 
 # The Netherlands' commercial airports (scheduled passenger service) — see
 # the module docstring for why this is a short hardcoded list rather than a
@@ -195,9 +224,9 @@ class Distances:
     public_transport: str | None = None
     highway: str | None = None
     airport: str | None = None
-    # Point-to-polyline distance to the nearest motorway/trunk/primary road
-    # geometry — see nearest_highway_line() and the module docstring for how
-    # this differs from `highway` above.
+    # Point-to-polyline distance to the nearest motorway (motorway/
+    # motorway_link) road geometry — see nearest_highway_line() and the
+    # module docstring for how this differs from `highway` above.
     distance_to_highway_km: float | None = None
     nearest_highway_name: str | None = None
 
@@ -552,18 +581,19 @@ def _overpass_nearby(
     return best
 
 
-def _highway_line_query(lat: float, lon: float, radius_m: int) -> str:
+def _highway_line_query(lat: float, lon: float, radius_m: int, *, include_trunk_roads: bool) -> str:
+    tag_filter = _highway_line_tag_filter(include_trunk_roads=include_trunk_roads)
     return f"""[out:json][timeout:25];
-way(around:{radius_m},{lat},{lon}){_HIGHWAY_LINE_TAG_FILTER};
+way(around:{radius_m},{lat},{lon}){tag_filter};
 out geom;"""
 
 
 def _highway_label(tags: dict) -> str:
     # Opposite priority from _label() above: ref (e.g. "A10") is how people
-    # actually refer to a motorway/trunk/primary road, whereas name is
-    # often blank or a generic street name — the reverse of what's true for
-    # _label()'s named places (stations, airports), where name is the
-    # useful one.
+    # actually refer to a motorway (or trunk, when opted in) road, whereas
+    # name is often blank or a generic street name — the reverse of what's
+    # true for _label()'s named places (stations, airports), where name is
+    # the useful one.
     ref = tags.get("ref")
     if ref:
         return str(ref)
@@ -589,9 +619,9 @@ _OVERPASS_UNREACHABLE = _Unreachable()
 
 
 def _nearest_highway_line_at_radius(
-    lat: float, lon: float, radius_m: int, *, fetch: Fetcher
+    lat: float, lon: float, radius_m: int, *, include_trunk_roads: bool, fetch: Fetcher
 ) -> tuple[float, str] | None | _Unreachable:
-    payload = _highway_line_query(lat, lon, radius_m).encode("utf-8")
+    payload = _highway_line_query(lat, lon, radius_m, include_trunk_roads=include_trunk_roads).encode("utf-8")
     try:
         data = json.loads(fetch(OVERPASS_MIRRORS[0], payload))
     except Exception:
@@ -608,9 +638,21 @@ def _nearest_highway_line_at_radius(
         )
         return _OVERPASS_UNREACHABLE
 
+    allowed_tags = _HIGHWAY_MOTORWAY_TAGS + (_HIGHWAY_TRUNK_TAGS if include_trunk_roads else ())
+
     best: tuple[float, str] | None = None
     for el in data.get("elements", []):
         if el.get("type") != "way":
+            continue
+        tags = el.get("tags") or {}
+        if tags.get("highway") not in allowed_tags:
+            # Overpass already applies the equivalent filter server-side,
+            # but re-checking it locally — the same defensive pattern
+            # _matches_transport_mode() uses for the station search above —
+            # means a response that shouldn't have matched (a query-filter
+            # bug like the one this function used to have, an unexpected
+            # tag combination, a stray element) can't silently pass through
+            # as a real candidate.
             continue
         geometry = el.get("geometry")
         if not geometry:
@@ -619,7 +661,7 @@ def _nearest_highway_line_at_radius(
         if distance is None:
             continue
         if best is None or distance < best[0]:
-            best = (distance, _highway_label(el.get("tags") or {}))
+            best = (distance, _highway_label(tags))
     return best
 
 
@@ -629,30 +671,45 @@ def nearest_highway_line(
     *,
     radius_m: int = HIGHWAY_LINE_RADIUS_M,
     max_radius_m: int = HIGHWAY_LINE_MAX_RADIUS_M,
+    include_trunk_roads: bool = False,
     fetch: Fetcher = _http,
 ) -> tuple[float, str] | None:
-    """The true nearest point on any motorway/trunk/primary road's actual
-    geometry — not the nearest node, and not the same search `highway`
-    above runs — returned as (distance_metres, road_label). See the module
-    docstring for why this is Overpass-only (no Google fallback) and why it
-    exists as its own pair of Distances fields rather than replacing
-    `highway`.
+    """The true nearest point on any motorway (or motorway_link) road's
+    actual geometry — not the nearest node, and not the same search
+    `highway` above runs — returned as (distance_metres, road_label). See
+    the module docstring for why this is Overpass-only (no Google fallback)
+    and why it exists as its own pair of Distances fields rather than
+    replacing `highway`.
+
+    Motorway-only by default: highway=primary is an ordinary arterial city
+    road in OSM tagging, not a motorway, and including it here used to mean
+    an inner-city address' "nearest highway" was routinely a nearby city
+    street instead of the actual, much farther, motorway. Pass
+    include_trunk_roads=True to also match trunk/trunk_link (major N-roads
+    that function like a motorway in practice) — deliberately opt-in
+    rather than a silent default, since it changes what the returned
+    number means.
 
     Starts at `radius_m`; if that attempt genuinely came back empty (a real
     response, just no matching road within it), retries exactly once at
-    `max_radius_m` before giving up. If the request itself failed instead —
-    timeout, connection error, malformed body — the radius was never the
-    limiting factor, so it does NOT retry at the wider radius: that would
-    just be a second full timeout spent on a connection already known not
-    to work, for the one field with no fallback source at all. Every
-    failure mode still returns None rather than raising, same as every
-    other lookup in this module: a missing distance is a blank field, not
-    a broken save.
+    `max_radius_m` before giving up — expect this to be the common path,
+    not the exception, now that primary roads (which were almost always
+    found within radius_m and so almost never let this fallback trigger)
+    are excluded: a real motorway is often several km from a dense
+    inner-city address. If the request itself failed instead — timeout,
+    connection error, malformed body — the radius was never the limiting
+    factor, so it does NOT retry at the wider radius: that would just be a
+    second full timeout spent on a connection already known not to work,
+    for the one field with no fallback source at all. Every failure mode
+    still returns None rather than raising, same as every other lookup in
+    this module: a missing distance is a blank field, not a broken save.
     """
     overpass_fetch = functools.partial(_http, timeout=OVERPASS_MIRROR_TIMEOUT_SECONDS) if fetch is _http else fetch
     radii = [radius_m] if radius_m >= max_radius_m else [radius_m, max_radius_m]
     for r in radii:
-        result = _nearest_highway_line_at_radius(lat, lon, r, fetch=overpass_fetch)
+        result = _nearest_highway_line_at_radius(
+            lat, lon, r, include_trunk_roads=include_trunk_roads, fetch=overpass_fetch
+        )
         if result is _OVERPASS_UNREACHABLE:
             return None
         if result is not None:

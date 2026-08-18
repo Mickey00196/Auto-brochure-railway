@@ -1,6 +1,8 @@
-"""Point-to-polyline distance to the nearest motorway/trunk/primary road
-(nearest_highway_line), a separate, more precise measurement from the
-existing nearest-motorway_junction-node `highway` field.
+"""Point-to-polyline distance to the nearest motorway (nearest_highway_line),
+a separate, more precise measurement from the existing
+nearest-motorway_junction-node `highway` field. Motorway-only by default —
+highway=primary is an ordinary arterial city road in OSM tagging, not a
+motorway; trunk/trunk_link are opt-in via include_trunk_roads.
 
 Heaviest coverage is on point_to_segment_distance_m — the function most
 likely to have edge-case bugs, per its own docstring: a point whose
@@ -162,15 +164,31 @@ def test_highway_label_falls_back_to_a_generic_label():
 
 
 # ---------------------------------------------------------------------------
-# _highway_line_query — sanity on the Overpass QL it builds.
+# _highway_line_query / _highway_line_tag_filter — sanity on the Overpass QL
+# built, and specifically that it does NOT match highway=primary: an
+# ordinary arterial city road in OSM tagging (e.g. Amsterdam's
+# Stadhouderskade), not a motorway, whose earlier inclusion here is the bug
+# this file's regression test below is named for.
 # ---------------------------------------------------------------------------
 
 
 def test_highway_line_query_requests_full_geometry_not_just_a_point():
-    query = _highway_line_query(52.3376, 4.8721, 2000)
+    query = _highway_line_query(52.3376, 4.8721, 2000, include_trunk_roads=False)
     assert "out geom;" in query
     assert "around:2000,52.3376,4.8721" in query
-    assert '"highway"~"^(motorway|trunk|primary)$"' in query
+
+
+def test_highway_line_query_matches_motorway_only_by_default():
+    query = _highway_line_query(52.3376, 4.8721, 2000, include_trunk_roads=False)
+    assert '"highway"~"^(motorway|motorway_link)$"' in query
+    assert "primary" not in query
+    assert "trunk" not in query
+
+
+def test_highway_line_query_opts_into_trunk_roads_when_asked():
+    query = _highway_line_query(52.3376, 4.8721, 2000, include_trunk_roads=True)
+    assert '"highway"~"^(motorway|motorway_link|trunk|trunk_link)$"' in query
+    assert "primary" not in query
 
 
 # ---------------------------------------------------------------------------
@@ -317,7 +335,7 @@ def test_ignores_non_way_elements_and_ways_without_geometry():
 def test_picks_the_nearest_of_several_roads():
     farther = {
         "type": "way",
-        "tags": {"ref": "A9"},
+        "tags": {"highway": "motorway", "ref": "A9"},
         "geometry": [{"lat": 52.4000, "lon": 4.8600}, {"lat": 52.4000, "lon": 4.8850}],
     }
 
@@ -364,3 +382,114 @@ def test_nearby_distances_leaves_highway_line_fields_none_when_nothing_found(mon
     d = nearby_distances(52.3376, 4.8721, fetch=fetch)
     assert d.distance_to_highway_km is None
     assert d.nearest_highway_name is None
+
+
+# ---------------------------------------------------------------------------
+# Regression: highway=primary is an ordinary city arterial road in OSM
+# tagging, not a motorway — the reported bug. Herengracht 206, Amsterdam is
+# a real inner-city canal-ring address; before this fix, a ~1.5km-away
+# primary-tagged street (Stadhouderskade/Nassaukade territory) was reported
+# as the "nearest highway" instead of the real A10 ring road, ~3.5-4km out.
+# ---------------------------------------------------------------------------
+
+_HERENGRACHT_206_LAT, _HERENGRACHT_206_LON = 52.3717, 4.8865
+
+# A plausible stand-in for Stadhouderskade/Nassaukade: a real Amsterdam
+# arterial, correctly tagged highway=primary (not motorway), a short
+# distance from the property.
+_NEARBY_PRIMARY_WAY = {
+    "type": "way",
+    "tags": {"highway": "primary", "ref": "S109", "name": "Stadhouderskade"},
+    "geometry": [{"lat": 52.3582, "lon": 4.8850}, {"lat": 52.3580, "lon": 4.8900}],
+}
+
+
+def test_regression_herengracht_206_finds_the_real_motorway_not_the_nearby_primary_road():
+    """The exact bug reported: an inner-city address' "nearest highway"
+    came back as a nearby primary-tagged street instead of the real,
+    farther-away motorway. The stub below deliberately still includes the
+    primary way in both responses — a correctly-scoped Overpass server
+    would never return it once the query excludes highway=primary, but
+    this proves the client-side re-check added alongside the query fix is
+    what actually keeps it out, not just an assumption that the request
+    URL was built correctly."""
+    calls: list[str] = []
+
+    def fetch(url: str, body: bytes | None) -> str:
+        text = body.decode()
+        calls.append(text)
+        if "around:2000" in text:
+            # Nothing motorway-tagged this close — matches reality: the
+            # A10 is several km from a canal-ring address.
+            return _overpass_response([_NEARBY_PRIMARY_WAY])
+        return _overpass_response([_NEARBY_PRIMARY_WAY, _A10_WAY])
+
+    result = nearest_highway_line(_HERENGRACHT_206_LAT, _HERENGRACHT_206_LON, fetch=fetch)
+
+    assert result is not None
+    distance_m, label = result
+    assert label == "A10"
+    assert label != "S109"
+    # Real motorways from a dense Amsterdam canal-ring address are
+    # typically several km out — this pins the fix to the right ballpark
+    # (not ~1.5km, the nearby arterial street's distance), not just "some
+    # positive number".
+    assert 3_000 < distance_m < 6_000
+    # The 2km attempt must have actually run and found nothing motorway-
+    # tagged (proving the widen-to-10km fallback is what supplied the real
+    # answer), not skipped straight to the wide radius.
+    assert len(calls) == 2
+    assert "around:2000" in calls[0]
+    assert "around:10000" in calls[1]
+
+
+def test_client_side_filter_ignores_a_primary_tagged_way_even_when_closer():
+    """A narrower, single-radius version of the regression test above: a
+    primary-tagged way must never win over a genuinely farther
+    motorway-tagged one, regardless of which Overpass lists first or which
+    one is physically closer to the property."""
+    close_but_wrong_type = {
+        "type": "way",
+        "tags": {"highway": "primary", "ref": "N200"},
+        "geometry": [{"lat": 52.3390, "lon": 4.8730}, {"lat": 52.3391, "lon": 4.8735}],  # metres away
+    }
+
+    def fetch(url: str, body: bytes | None) -> str:
+        return _overpass_response([close_but_wrong_type, _A10_WAY])
+
+    result = nearest_highway_line(52.3376, 4.8721, fetch=fetch)
+    assert result is not None
+    assert result[1] == "A10"
+
+
+def test_trunk_roads_only_match_when_explicitly_opted_in():
+    trunk_way = {
+        "type": "way",
+        "tags": {"highway": "trunk", "ref": "N201"},
+        "geometry": [{"lat": 52.3390, "lon": 4.8730}, {"lat": 52.3391, "lon": 4.8735}],
+    }
+
+    def fetch(url: str, body: bytes | None) -> str:
+        return _overpass_response([trunk_way])
+
+    # Default (motorway-only): a trunk-tagged way must not match at all —
+    # not even as a worse-than-nothing fallback.
+    assert nearest_highway_line(52.3376, 4.8721, fetch=fetch) is None
+
+    result = nearest_highway_line(52.3376, 4.8721, include_trunk_roads=True, fetch=fetch)
+    assert result is not None
+    assert result[1] == "N201"
+
+
+def test_trunk_and_motorway_can_both_match_when_opted_in():
+    trunk_way = {
+        "type": "way",
+        "tags": {"highway": "trunk_link", "ref": "N201"},
+        "geometry": [{"lat": 52.3390, "lon": 4.8730}, {"lat": 52.3391, "lon": 4.8735}],
+    }
+
+    def fetch(url: str, body: bytes | None) -> str:
+        return _overpass_response([trunk_way, _A10_WAY])
+
+    result = nearest_highway_line(52.3376, 4.8721, include_trunk_roads=True, fetch=fetch)
+    assert result is not None  # picks whichever is genuinely nearer, not just "any match"
