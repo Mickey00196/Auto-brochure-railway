@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 
 import pytest
 
@@ -493,3 +494,40 @@ def test_trunk_and_motorway_can_both_match_when_opted_in():
 
     result = nearest_highway_line(52.3376, 4.8721, include_trunk_roads=True, fetch=fetch)
     assert result is not None  # picks whichever is genuinely nearer, not just "any match"
+
+
+# ---------------------------------------------------------------------------
+# nearby_distances runs its independent network lookups concurrently.
+# ---------------------------------------------------------------------------
+
+
+def test_nearby_distances_runs_lookups_concurrently_not_sequentially(monkeypatch):
+    """The whole point of parallelizing: three independent network calls
+    (Google Places, the station/motorway_junction Overpass query, and
+    nearest_highway_line) must overlap, not queue up one after another.
+    Each fetch below sleeps briefly; sequential execution would take
+    roughly the sum of every sleep, concurrent execution roughly the
+    longest single branch's own total.
+
+    That longest branch is nearest_highway_line, not either of the other
+    two: an empty Overpass response (as below) makes it retry once at the
+    wider radius — two sequential sleeps by design, even while its whole
+    branch runs in parallel with the other two. So "concurrent" here means
+    ~2 sleeps (the true floor), not ~1 — the assertion checks for that,
+    comfortably below the ~4-sleep total a fully sequential implementation
+    (Google + station-Overpass + highway-line's own two hops) would take.
+    """
+    monkeypatch.setenv("GOOGLE_MAPS_GEOCODING_API_KEY", "test-key")
+    sleep_seconds = 0.2
+
+    def fetch(url: str, body: bytes | None) -> str:
+        time.sleep(sleep_seconds)
+        if "place/nearbysearch" in url:
+            return json.dumps({"status": "ZERO_RESULTS", "results": []})
+        return _overpass_response([])  # both Overpass paths: genuinely nothing found
+
+    start = time.monotonic()
+    nearby_distances(52.3376, 4.8721, fetch=fetch)
+    elapsed = time.monotonic() - start
+
+    assert elapsed < sleep_seconds * 3
