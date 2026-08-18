@@ -13,25 +13,25 @@ Railway deployment. OSM/Nominatim is still the geocoding fallback so the
 feature still works on a deployment with no API key configured.
 
 The nearest-station search prefers Google's Places API (same key) for the
-same reason, falling back to Overpass — tried across several public
-mirrors in turn — only when no key is configured or Google found nothing.
-Overpass itself has been confirmed entirely unreachable from Railway's
-network (every mirror times out with zero bytes, not merely slow — checked
-directly from a Railway-side sandbox, not just inferred from an app-level
-symptom), so it is no longer relied on for anything else here.
+same reason, falling back to Overpass — tried across the mirrors in
+OVERPASS_MIRRORS in turn — only when no key is configured or Google found
+nothing. Most public Overpass mirrors are unreachable from Railway's
+network (confirmed directly, not just inferred from an app-level symptom)
+— see OVERPASS_MIRRORS' own comment for exactly which were checked and
+which one turned out to work.
 
 Airport distance is looked up against NL_MAJOR_AIRPORTS, a short hardcoded
 list of the Netherlands' actual commercial airports, instead of a live
 "nearest place of type=airport" search: Google Places' airport type also
 matches nearby airport-adjacent businesses (a transfer/shuttle company
 physically closer to the search point than the terminal itself easily
-outranks the airport in a plain nearest-match), and Overpass — besides
-being unreachable — has the same false-match risk via any POI tagged
-aeroway=aerodrome without actually being a scheduled-service airport.
-There are only a handful of real candidates in this market, so naming them
-is both more accurate and cheaper than searching for one. This does mean
-the feature is Netherlands-specific for airport distance specifically (see
-the module's other Dutch-specific defaults, e.g. country="Netherlands").
+outranks the airport in a plain nearest-match), and Overpass has the same
+false-match risk via any POI tagged aeroway=aerodrome without actually
+being a scheduled-service airport. There are only a handful of real
+candidates in this market, so naming them is both more accurate and
+cheaper than searching for one. This does mean the feature is
+Netherlands-specific for airport distance specifically (see the module's
+other Dutch-specific defaults, e.g. country="Netherlands").
 
 Highway access has no clean Places equivalent (no "nearest motorway
 junction" place type) and no small enumerable list the way airports do, so
@@ -51,10 +51,7 @@ on a nearby A-road's shoulder is rarely at a junction) and existing
 callers of `highway`/`accessibility_note` shouldn't change meaning under
 them. Overpass-only by design — there's no Places/Google equivalent for
 "nearest point on a road of a given class" the way there is for a named
-place — so on this deployment specifically (see above: every Overpass
-mirror is currently unreachable from Railway's network) this will
-typically come back None until Overpass recovers, exactly like `highway`
-does today. No response caching: none of the rest of this module caches
+place. No response caching: none of the rest of this module caches
 Overpass responses either, so there's no existing strategy to mirror here.
 
 Distances are straight-line ("as the crow flies"); a driving time would
@@ -83,29 +80,41 @@ logger = logging.getLogger(__name__)
 GOOGLE_GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 GOOGLE_PLACES_NEARBY_URL = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
-# Tried in order; the first to answer with a well-formed body wins. Public
-# mirrors of the same dataset — overpass-api.de is the default and
-# best-maintained, but a dead/rate-limiting instance must not take the
-# whole feature down with it.
+# Tried in order; the first to answer with a well-formed body wins.
+#
+# The three previously listed here — overpass-api.de, overpass.kumi.systems,
+# overpass.openstreetmap.ru — were all confirmed completely unreachable from
+# Railway's network (connections hang with zero bytes back, both from a
+# Railway-side sandbox and in this app's own production logs). Checked six
+# more public mirrors the same way before landing on these two:
+# overpass.private.coffee, maps.mail.ru's instance, and overpass.nchc.org.tw
+# were unreachable (timeout or DNS failure) or too flaky (z.overpass-api.de:
+# TCP connects, but the server itself answers 504) to rely on.
+#
+# lz4.overpass-api.de is confirmed reachable AND returns genuine, complete
+# OSM data — verified with a live motorway query near Amsterdam that came
+# back with real A10 way geometry (tags, node IDs, everything). It's a
+# real overpass-api.de endpoint (their compressed-transport subdomain), not
+# a different, less-maintained project, so it should carry the same
+# database and update cadence as the "default" host that isn't reachable
+# from here. overpass.osm.ch is reachable and returns validly-formed
+# responses too, kept second — it returned zero results for that same
+# Amsterdam query, so its dataset's coverage/freshness is unconfirmed but
+# it's a legitimate fallback if the primary ever degrades.
 OVERPASS_MIRRORS = [
-    "https://overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-    "https://overpass.openstreetmap.ru/api/interpreter",
+    "https://lz4.overpass-api.de/api/interpreter",
+    "https://overpass.osm.ch/api/interpreter",
 ]
 # Nominatim's usage policy requires a genuine identifying User-Agent.
 USER_AGENT = "ProposalEngine/1.0 (office availability tool; contact via deployment owner)"
 TIMEOUT_SECONDS = 20
-# Much shorter than TIMEOUT_SECONDS deliberately, and shorter than it might
-# look like it needs to be: confirmed directly (both from a Railway-side
-# sandbox and in this app's own production logs) that every mirror in
-# OVERPASS_MIRRORS is currently completely unreachable from Railway's
-# network — connections either hang with zero bytes back or fail outright,
-# never "answers, just slowly". Waiting the old 10s per mirror for a
-# doorbell nobody answers only made the one field with no fallback (highway
-# access) the slowest part of every lookup for no benefit. 5s still gives a
-# mirror that recovers, or a non-Railway deployment where these aren't
-# blocked at all, a real chance to answer.
-OVERPASS_MIRROR_TIMEOUT_SECONDS = 5
+# Shorter than TIMEOUT_SECONDS, but no longer slashed to the bone the way it
+# was while every mirror above was confirmed dead (waiting on a doorbell
+# nobody answers was pure waste, however short) — lz4.overpass-api.de is a
+# real, working public instance now, and a real query against it can
+# legitimately take a few seconds under load. 10s balances "still bounded"
+# against "don't false-negative a genuinely slow-but-working response."
+OVERPASS_MIRROR_TIMEOUT_SECONDS = 10
 
 # How far out it is still worth looking for each kind of thing.
 STATION_RADIUS_M = 20_000
