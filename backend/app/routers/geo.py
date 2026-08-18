@@ -36,9 +36,10 @@ class DistanceResponse(BaseModel):
     public_transport: str | None = None
     highway: str | None = None
     airport: str | None = None
-    # Point-to-polyline distance to the nearest motorway/trunk/primary road
-    # — a separate, more precise measurement from `highway` above (nearest
-    # motorway_junction node); see services/geo.py's module docstring.
+    # Point-to-polyline distance to the nearest motorway (motorway/
+    # motorway_link) road — a separate, more precise measurement from
+    # `highway` above (nearest motorway_junction node); see services/geo.py's
+    # module docstring.
     distance_to_highway_km: float | None = None
     nearest_highway_name: str | None = None
     found: bool = False
