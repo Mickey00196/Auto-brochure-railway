@@ -15,6 +15,7 @@ from app.services.geo import (
     Distances,
     _geocode_query_candidates,
     _nearest_known_airport,
+    _overpass_nearby,
     distances_for_address,
     format_distance,
     geocode,
@@ -129,6 +130,11 @@ def test_falls_back_to_overpass_when_google_places_finds_nothing(monkeypatch):
 
 
 def test_overpass_retries_the_next_mirror_when_the_first_fails():
+    """Exercises _overpass_nearby directly rather than through
+    nearby_distances: nearby_distances now also calls nearest_highway_line
+    (its own, separate Overpass query) with the same injected fetch, which
+    would otherwise inflate/confuse this call count for an unrelated
+    reason."""
     calls: list[str] = []
     elements = [{"lat": 52.3390, "lon": 4.8730, "tags": {"railway": "station", "name": "Amsterdam Zuid"}}]
 
@@ -138,8 +144,8 @@ def test_overpass_retries_the_next_mirror_when_the_first_fails():
             raise TimeoutError("mirror 1 is dead")
         return _overpass(elements)
 
-    d = nearby_distances(LAT, LON, fetch=fetch)
-    assert d.public_transport.startswith("Amsterdam Zuid ")
+    best = _overpass_nearby(LAT, LON, "nearest_any", fetch=fetch)
+    assert best["public_transport"][1] == "Amsterdam Zuid"
     assert len(calls) == 2
 
 
@@ -379,3 +385,20 @@ def test_endpoint_returns_the_three_distances(client, monkeypatch):
     assert body["public_transport"] == "Amsterdam Zuid 850 m"
     assert body["highway"] == "S109 1.2 km"
     assert body["airport"] == "Schiphol 11 km"
+
+
+def test_endpoint_returns_the_highway_line_fields(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.routers.geo.distances_for_address",
+        lambda *a, **k: Distances(
+            LAT, LON, distance_to_highway_km=1.85, nearest_highway_name="A10"
+        ),
+    )
+    r = client.post("/geo/distances", json={"address": "Hildegard von Bingenstraat 8", "city": "Amsterdam"})
+    body = r.json()
+    # Even with every other field blank, a highway-line match alone counts
+    # as "found" — geocoding placed the address, this just found nothing
+    # nearby in the OTHER categories.
+    assert body["found"] is True
+    assert body["distance_to_highway_km"] == 1.85
+    assert body["nearest_highway_name"] == "A10"

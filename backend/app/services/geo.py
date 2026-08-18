@@ -40,6 +40,23 @@ it no longer bundles the airport search that used to ride along with it,
 since a lighter, single-purpose query is more likely to complete before a
 loaded public instance's response times out.
 
+distance_to_highway_km/nearest_highway_name (nearest_highway_line) is a
+second, more precise take on the same underlying question: instead of the
+nearest motorway_junction *node*, it measures the true minimum distance to
+the nearest motorway/trunk/primary road *geometry* (point-to-polyline, not
+point-to-node), and names the specific road (its ref, e.g. "A10") rather
+than the junction. It's kept as its own pair of fields rather than
+replacing `highway` — the two can legitimately disagree (the nearest point
+on a nearby A-road's shoulder is rarely at a junction) and existing
+callers of `highway`/`accessibility_note` shouldn't change meaning under
+them. Overpass-only by design — there's no Places/Google equivalent for
+"nearest point on a road of a given class" the way there is for a named
+place — so on this deployment specifically (see above: every Overpass
+mirror is currently unreachable from Railway's network) this will
+typically come back None until Overpass recovers, exactly like `highway`
+does today. No response caching: none of the rest of this module caches
+Overpass responses either, so there's no existing strategy to mirror here.
+
 Distances are straight-line ("as the crow flies"); a driving time would
 need a routing service and a key, and would still be a different number
 from the one agents quote. The UI labels them as approximate for that
@@ -93,6 +110,18 @@ OVERPASS_MIRROR_TIMEOUT_SECONDS = 5
 # How far out it is still worth looking for each kind of thing.
 STATION_RADIUS_M = 20_000
 MOTORWAY_RADIUS_M = 30_000
+
+# nearest_highway_line's own radius, independent of MOTORWAY_RADIUS_M above
+# (that one bounds the existing motorway_junction *node* search, a
+# different query with different cost characteristics). Starts tight and
+# only widens once, to HIGHWAY_LINE_MAX_RADIUS_M, if nothing was found —
+# most addresses within any Dutch town are well within 2km of a motorway,
+# trunk, or primary road, so the wide radius is the exception path, not
+# the common one.
+HIGHWAY_LINE_RADIUS_M = 2_000
+HIGHWAY_LINE_MAX_RADIUS_M = 10_000
+_HIGHWAY_LINE_TAG_FILTER = '["highway"~"^(motorway|trunk|primary)$"]'
+_METERS_PER_DEGREE_LAT = 111_320.0
 
 # The Netherlands' commercial airports (scheduled passenger service) — see
 # the module docstring for why this is a short hardcoded list rather than a
@@ -157,6 +186,11 @@ class Distances:
     public_transport: str | None = None
     highway: str | None = None
     airport: str | None = None
+    # Point-to-polyline distance to the nearest motorway/trunk/primary road
+    # geometry — see nearest_highway_line() and the module docstring for how
+    # this differs from `highway` above.
+    distance_to_highway_km: float | None = None
+    nearest_highway_name: str | None = None
 
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -166,6 +200,79 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     dl = math.radians(lon2 - lon1)
     a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
     return 2 * r * math.asin(math.sqrt(a))
+
+
+def _planar_project(lat: float, lon: float, ref_lat: float) -> tuple[float, float]:
+    """A local flat-earth approximation (equirectangular projection) good to
+    well under a metre of error at the ~10km scale this module ever
+    measures at — nearest_highway_line() only cares about the minimum
+    distance to a road, not an exact geodesic, so this is deliberately
+    simpler (and much cheaper, called for every node of every candidate
+    way) than a proper geodesic point-to-line calculation.
+
+    `ref_lat` is the one latitude used for the longitude scale factor
+    (metres per degree of longitude shrinks with cos(latitude)) — every
+    point passed into one comparison (the property, and every node of every
+    candidate road) must share the same ref_lat, or distances between them
+    stop being comparable. Only *differences* between projected points are
+    ever used, so which latitude serves as the reference doesn't matter as
+    long as it's shared and reasonably close to every point being compared
+    — the property's own latitude, used by every caller here, satisfies
+    both."""
+    x = lon * _METERS_PER_DEGREE_LAT * math.cos(math.radians(ref_lat))
+    y = lat * _METERS_PER_DEGREE_LAT
+    return x, y
+
+
+def point_to_segment_distance_m(px: float, py: float, ax: float, ay: float, bx: float, by: float) -> float:
+    """Minimum Euclidean distance from point P to segment AB — the segment
+    itself, not the infinite line through A and B — in whatever planar unit
+    the six inputs already share (metres, via _planar_project below).
+
+    Projects P onto the line through A and B, then clamps the projection's
+    position along that line (t) to [0, 1] so a point that would project
+    *before* A or *past* B measures to the nearest endpoint instead of to a
+    point that isn't actually on the segment. A and B coinciding (a
+    zero-length "segment", e.g. two consecutive identical nodes in a way's
+    geometry) is handled as a plain point-to-point distance rather than
+    dividing by zero.
+    """
+    abx, aby = bx - ax, by - ay
+    length_sq = abx * abx + aby * aby
+    if length_sq == 0:
+        return math.hypot(px - ax, py - ay)
+    t = ((px - ax) * abx + (py - ay) * aby) / length_sq
+    t = max(0.0, min(1.0, t))
+    closest_x = ax + t * abx
+    closest_y = ay + t * aby
+    return math.hypot(px - closest_x, py - closest_y)
+
+
+def _nearest_distance_on_way_m(prop_lat: float, prop_lon: float, geometry: list[dict]) -> float | None:
+    """The minimum of point_to_segment_distance_m() across every consecutive
+    pair of nodes in `geometry` (an Overpass `out geom;` way's node list, in
+    order) — the true distance to the road's shape, not to whichever node
+    happens to be nearest. None for a way with fewer than two usable nodes:
+    that isn't a line, and no earlier caller should be treating it as a
+    match either. A malformed node (missing/unparseable lat or lon) is
+    skipped on its own — `prev` is left pointing at the last valid node, so
+    its two flanking valid nodes still form a segment across the gap,
+    rather than losing both segments that would otherwise touch it."""
+    px, py = _planar_project(prop_lat, prop_lon, prop_lat)
+    best: float | None = None
+    prev: tuple[float, float] | None = None
+    for node in geometry:
+        try:
+            lat, lon = float(node["lat"]), float(node["lon"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        point = _planar_project(lat, lon, prop_lat)
+        if prev is not None:
+            distance = point_to_segment_distance_m(px, py, prev[0], prev[1], point[0], point[1])
+            if best is None or distance < best:
+                best = distance
+        prev = point
+    return best
 
 
 def _nearest_known_airport(lat: float, lon: float) -> tuple[float, str]:
@@ -436,6 +543,93 @@ def _overpass_nearby(
     return best
 
 
+def _highway_line_query(lat: float, lon: float, radius_m: int) -> str:
+    return f"""[out:json][timeout:25];
+way(around:{radius_m},{lat},{lon}){_HIGHWAY_LINE_TAG_FILTER};
+out geom;"""
+
+
+def _highway_label(tags: dict) -> str:
+    # Opposite priority from _label() above: ref (e.g. "A10") is how people
+    # actually refer to a motorway/trunk/primary road, whereas name is
+    # often blank or a generic street name — the reverse of what's true for
+    # _label()'s named places (stations, airports), where name is the
+    # useful one.
+    ref = tags.get("ref")
+    if ref:
+        return str(ref)
+    name = tags.get("name")
+    if name:
+        return str(name)
+    return "Highway"
+
+
+def _nearest_highway_line_at_radius(
+    lat: float, lon: float, radius_m: int, *, fetch: Fetcher
+) -> tuple[float, str] | None:
+    payload = _highway_line_query(lat, lon, radius_m).encode("utf-8")
+    try:
+        data = json.loads(fetch(OVERPASS_MIRRORS[0], payload))
+    except Exception:
+        logger.warning(
+            "Overpass highway-line request failed for (%s, %s) radius=%s", lat, lon, radius_m, exc_info=True
+        )
+        return None
+    if "elements" not in data:
+        # Same rejected/rate-limited-but-200 case _overpass_nearby guards
+        # against — a malformed response must not read as "no roads found".
+        logger.warning(
+            "Overpass highway-line query returned no 'elements' for (%s, %s) radius=%s: %r",
+            lat, lon, radius_m, data,
+        )
+        return None
+
+    best: tuple[float, str] | None = None
+    for el in data.get("elements", []):
+        if el.get("type") != "way":
+            continue
+        geometry = el.get("geometry")
+        if not geometry:
+            continue
+        distance = _nearest_distance_on_way_m(lat, lon, geometry)
+        if distance is None:
+            continue
+        if best is None or distance < best[0]:
+            best = (distance, _highway_label(el.get("tags") or {}))
+    return best
+
+
+def nearest_highway_line(
+    lat: float,
+    lon: float,
+    *,
+    radius_m: int = HIGHWAY_LINE_RADIUS_M,
+    max_radius_m: int = HIGHWAY_LINE_MAX_RADIUS_M,
+    fetch: Fetcher = _http,
+) -> tuple[float, str] | None:
+    """The true nearest point on any motorway/trunk/primary road's actual
+    geometry — not the nearest node, and not the same search `highway`
+    above runs — returned as (distance_metres, road_label). See the module
+    docstring for why this is Overpass-only (no Google fallback) and why it
+    exists as its own pair of Distances fields rather than replacing
+    `highway`.
+
+    Starts at `radius_m`; if nothing at all is found there, retries exactly
+    once at `max_radius_m` before giving up. Every failure mode — no
+    matching road in either radius, a request that errors, a malformed
+    response — returns None rather than raising, same as every other
+    lookup in this module: a missing distance is a blank field, not a
+    broken save.
+    """
+    overpass_fetch = functools.partial(_http, timeout=OVERPASS_MIRROR_TIMEOUT_SECONDS) if fetch is _http else fetch
+    radii = [radius_m] if radius_m >= max_radius_m else [radius_m, max_radius_m]
+    for r in radii:
+        result = _nearest_highway_line_at_radius(lat, lon, r, fetch=overpass_fetch)
+        if result is not None:
+            return result
+    return None
+
+
 def nearby_distances(
     lat: float, lon: float, transport_mode: str = "nearest_any", *, fetch: Fetcher = _http
 ) -> Distances:
@@ -457,6 +651,8 @@ def nearby_distances(
     for kind, value in _overpass_nearby(lat, lon, transport_mode, fetch=fetch).items():
         best.setdefault(kind, value)
 
+    highway_line = nearest_highway_line(lat, lon, fetch=fetch)
+
     return Distances(
         latitude=lat,
         longitude=lon,
@@ -464,6 +660,8 @@ def nearby_distances(
         if "public_transport" in best else None,
         highway=f"{best['highway'][1]} {format_distance(best['highway'][0])}" if "highway" in best else None,
         airport=f"{best['airport'][1]} {format_distance(best['airport'][0])}" if "airport" in best else None,
+        distance_to_highway_km=round(highway_line[0] / 1000, 2) if highway_line else None,
+        nearest_highway_name=highway_line[1] if highway_line else None,
     )
 
 
