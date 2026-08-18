@@ -80,6 +80,7 @@ import math
 import os
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Callable
 
@@ -725,20 +726,38 @@ def nearby_distances(
     # search at all.
     best: dict[str, tuple[float, str]] = {"airport": _nearest_known_airport(lat, lon)}
 
+    # The three network lookups below are independent of one another — each
+    # only needs (lat, lon), not any other one's result — so they run
+    # concurrently rather than one after another. Sequentially, a caller
+    # paid the sum of every call's latency (worst case: Google Places +
+    # the station/motorway_junction Overpass query + nearest_highway_line's
+    # own up-to-two-radius sequence, each a real network round trip); done
+    # at once, a caller pays roughly whichever one is slowest. This does
+    # not make any single call faster — there's no way to make a real
+    # network request to Google or Overpass "instant" — it only stops
+    # paying for all of them back to back.
     api_key = _google_maps_api_key()
-    if api_key:
-        place_type = _GOOGLE_PLACE_TYPES.get(transport_mode, _GOOGLE_TRANSIT_FALLBACK_TYPE)
-        transit = _google_nearby(lat, lon, place_type, api_key, fetch=fetch, kind="public_transport")
-        if transit:
-            best["public_transport"] = transit
+    place_type = _GOOGLE_PLACE_TYPES.get(transport_mode, _GOOGLE_TRANSIT_FALLBACK_TYPE) if api_key else None
 
-    # Overpass always runs: it's the only source for highway access, and the
-    # fallback for public_transport whenever Google found nothing (no key
-    # configured, the call failed, or it genuinely had no results).
-    for kind, value in _overpass_nearby(lat, lon, transport_mode, fetch=fetch).items():
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        google_future = (
+            pool.submit(_google_nearby, lat, lon, place_type, api_key, fetch=fetch, kind="public_transport")
+            if api_key else None
+        )
+        overpass_future = pool.submit(_overpass_nearby, lat, lon, transport_mode, fetch=fetch)
+        highway_line_future = pool.submit(nearest_highway_line, lat, lon, fetch=fetch)
+
+        transit = google_future.result() if google_future else None
+        overpass_best = overpass_future.result()
+        highway_line = highway_line_future.result()
+
+    if transit:
+        best["public_transport"] = transit
+    # Fallback for public_transport whenever Google found nothing (no key
+    # configured, the call failed, or it genuinely had no results) — and
+    # the only source for highway access.
+    for kind, value in overpass_best.items():
         best.setdefault(kind, value)
-
-    highway_line = nearest_highway_line(lat, lon, fetch=fetch)
 
     return Distances(
         latitude=lat,
