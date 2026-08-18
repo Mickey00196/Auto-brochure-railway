@@ -252,6 +252,53 @@ def test_degrades_to_none_on_a_malformed_response():
     assert nearest_highway_line(52.3376, 4.8721, fetch=fetch) is None
 
 
+def test_does_not_retry_the_wider_radius_after_a_request_failure():
+    """The bug this guards against: when Overpass is genuinely unreachable
+    (every request times out, not just this one radius), retrying at the
+    wider radius spends a second full timeout for zero chance of a
+    different outcome — the request never got far enough to depend on the
+    radius. Only a genuine empty *result* (a real response with no
+    matching road) is worth retrying wider; a failed *request* is not."""
+    calls: list[str] = []
+
+    def fetch(url: str, body: bytes | None) -> str:
+        calls.append(url)
+        raise TimeoutError("Overpass unreachable")
+
+    assert nearest_highway_line(52.3376, 4.8721, fetch=fetch) is None
+    assert len(calls) == 1
+
+
+def test_does_not_retry_the_wider_radius_after_a_malformed_response():
+    calls: list[str] = []
+
+    def fetch(url: str, body: bytes | None) -> str:
+        calls.append(url)
+        return json.dumps({"remark": "runtime error: rate limited"})
+
+    assert nearest_highway_line(52.3376, 4.8721, fetch=fetch) is None
+    assert len(calls) == 1
+
+
+def test_still_retries_the_wider_radius_after_a_genuine_empty_result():
+    """The counterpart to the two tests above: a well-formed response that
+    simply has no matching road in it IS worth retrying at the wider
+    radius — this must keep working after the fix above, not regress into
+    never retrying at all."""
+    calls: list[str] = []
+
+    def fetch(url: str, body: bytes | None) -> str:
+        calls.append(url)
+        if len(calls) == 1:
+            return _overpass_response([])  # a real, empty response
+        return _overpass_response([_A10_WAY])
+
+    result = nearest_highway_line(52.3376, 4.8721, fetch=fetch)
+    assert result is not None
+    assert result[1] == "A10"
+    assert len(calls) == 2
+
+
 def test_ignores_non_way_elements_and_ways_without_geometry():
     elements = [
         {"type": "node", "tags": {"highway": "motorway"}, "lat": 52.34, "lon": 4.87},

@@ -564,9 +564,24 @@ def _highway_label(tags: dict) -> str:
     return "Highway"
 
 
+class _Unreachable:
+    """Sentinel type distinguishing "Overpass answered, this radius
+    genuinely has no matching road" (a plain None — worth retrying wider)
+    from "the request itself failed" (a dead/unreachable endpoint, where
+    retrying at a bigger radius wastes another full timeout for no chance
+    of a different outcome, since the request never got far enough to
+    depend on the radius at all). A tri-state return here — rather than
+    raising a custom exception — keeps every call site's shape a plain
+    value to branch on, consistent with how the rest of this module
+    signals "nothing" throughout."""
+
+
+_OVERPASS_UNREACHABLE = _Unreachable()
+
+
 def _nearest_highway_line_at_radius(
     lat: float, lon: float, radius_m: int, *, fetch: Fetcher
-) -> tuple[float, str] | None:
+) -> tuple[float, str] | None | _Unreachable:
     payload = _highway_line_query(lat, lon, radius_m).encode("utf-8")
     try:
         data = json.loads(fetch(OVERPASS_MIRRORS[0], payload))
@@ -574,7 +589,7 @@ def _nearest_highway_line_at_radius(
         logger.warning(
             "Overpass highway-line request failed for (%s, %s) radius=%s", lat, lon, radius_m, exc_info=True
         )
-        return None
+        return _OVERPASS_UNREACHABLE
     if "elements" not in data:
         # Same rejected/rate-limited-but-200 case _overpass_nearby guards
         # against — a malformed response must not read as "no roads found".
@@ -582,7 +597,7 @@ def _nearest_highway_line_at_radius(
             "Overpass highway-line query returned no 'elements' for (%s, %s) radius=%s: %r",
             lat, lon, radius_m, data,
         )
-        return None
+        return _OVERPASS_UNREACHABLE
 
     best: tuple[float, str] | None = None
     for el in data.get("elements", []):
@@ -614,17 +629,23 @@ def nearest_highway_line(
     exists as its own pair of Distances fields rather than replacing
     `highway`.
 
-    Starts at `radius_m`; if nothing at all is found there, retries exactly
-    once at `max_radius_m` before giving up. Every failure mode — no
-    matching road in either radius, a request that errors, a malformed
-    response — returns None rather than raising, same as every other
-    lookup in this module: a missing distance is a blank field, not a
-    broken save.
+    Starts at `radius_m`; if that attempt genuinely came back empty (a real
+    response, just no matching road within it), retries exactly once at
+    `max_radius_m` before giving up. If the request itself failed instead —
+    timeout, connection error, malformed body — the radius was never the
+    limiting factor, so it does NOT retry at the wider radius: that would
+    just be a second full timeout spent on a connection already known not
+    to work, for the one field with no fallback source at all. Every
+    failure mode still returns None rather than raising, same as every
+    other lookup in this module: a missing distance is a blank field, not
+    a broken save.
     """
     overpass_fetch = functools.partial(_http, timeout=OVERPASS_MIRROR_TIMEOUT_SECONDS) if fetch is _http else fetch
     radii = [radius_m] if radius_m >= max_radius_m else [radius_m, max_radius_m]
     for r in radii:
         result = _nearest_highway_line_at_radius(lat, lon, r, fetch=overpass_fetch)
+        if result is _OVERPASS_UNREACHABLE:
+            return None
         if result is not None:
             return result
     return None
