@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import type { DuplicateCandidate, Neighbourhood } from "@/lib/types";
+import type { Client, DuplicateCandidate, Neighbourhood } from "@/lib/types";
 import { api } from "@/lib/api";
 import { Badge, Button, Card, fieldInputClass, fieldLabelClass } from "@/components/ui";
 import { PhotoPicker } from "@/components/PhotoPicker";
@@ -85,10 +85,15 @@ export type BuildingFormInitial = Partial<typeof EMPTY_FORM>;
 
 export function BuildingForm({
   neighbourhoods,
+  clients = [],
   initial,
   buildingId,
 }: {
   neighbourhoods: Neighbourhood[];
+  /** Only offered when creating a new building (see the "Add to a client"
+   * control near the submit row) — editing never creates a second row, so
+   * there's nothing to assign. */
+  clients?: Client[];
   initial?: BuildingFormInitial;
   /** Set when editing a saved building: updates in place instead of adding a
    * new one, and hides the capture/lease-terms sections (capture belongs to
@@ -108,6 +113,11 @@ export function BuildingForm({
   // by capture" badge stays accurate even after the broker edits a field,
   // but is never shown for a building typed by hand from a blank form.
   const [wasCaptured] = useState(() => Boolean(initial?.name || initial?.address));
+  // "" = library only (the default — never assigned to a client without a
+  // deliberate choice). Set only from the "Add to a client" control near the
+  // submit row, and only meaningful for a new building (see isEdit guard on
+  // where that control renders).
+  const [selectedClientId, setSelectedClientId] = useState("");
   const [locating, setLocating] = useState(false);
   const [locateNote, setLocateNote] = useState<string | null>(null);
   const [transportMode, setTransportMode] = useState<TransportMode>("nearest_any");
@@ -345,6 +355,17 @@ export function BuildingForm({
             building_id: building.building_id,
           });
         }
+      }
+
+      // Closing the gap between "captured" and "in front of a client": if
+      // the broker picked one at save time, deep-copy the just-created
+      // master straight into that client's folder — the same operation
+      // "Add from library" performs, just skipping the separate trip back
+      // through the library to do it by hand.
+      if (selectedClientId) {
+        await api.copyBuildingToClient(building.building_id, selectedClientId);
+        router.push(`/clients/${selectedClientId}`);
+        return;
       }
 
       // Land back in the library with the new building already ticked,
@@ -651,6 +672,32 @@ export function BuildingForm({
           {locateNote && <span className="text-xs text-accent">{locateNote}</span>}
         </div>
       </Card>
+
+      {!isEdit && clients.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
+          <label className={labelClass}>
+            <span className="mb-1.5 block">Also add to a client</span>
+            <select
+              value={selectedClientId}
+              onChange={(e) => setSelectedClientId(e.target.value)}
+              className={`${inputClass} sm:w-72`}
+            >
+              <option value="">Library only</option>
+              {[...clients]
+                .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+                .map((c) => (
+                  <option key={c.client_id} value={c.client_id}>
+                    {c.display_name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <p className="max-w-sm text-xs text-muted">
+            Copies this building straight into their folder on save — the library still keeps the
+            original, reusable for any other client.
+          </p>
+        </div>
+      )}
 
       {error && <p className="text-sm text-red-500">{error}</p>}
       <div className="flex flex-wrap items-center gap-3">

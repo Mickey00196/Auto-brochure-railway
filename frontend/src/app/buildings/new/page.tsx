@@ -41,13 +41,20 @@ export default async function NewBuildingPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   // This is the page the Chrome extension opens, so it must paint fast. The
-  // neighbourhood dropdown is optional metadata, but awaiting it blocked the
-  // whole form behind a backend round-trip — up to the 10s serverApi timeout
-  // when the backend is cold, which reads as "the extension is slow". Cap it:
-  // a slow backend costs an empty dropdown, not a blank tab.
-  const neighbourhoods = await Promise.race([
-    api.neighbourhoods().catch(() => []),
-    new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 1500)),
+  // neighbourhood dropdown and the client list are both optional metadata,
+  // but awaiting either blocked the whole form behind a backend round-trip —
+  // up to the 10s serverApi timeout when the backend is cold, which reads as
+  // "the extension is slow". Cap both: a slow backend costs an empty
+  // dropdown, not a blank tab.
+  const [neighbourhoods, clients] = await Promise.all([
+    Promise.race([
+      api.neighbourhoods().catch(() => []),
+      new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 1500)),
+    ]),
+    Promise.race([
+      api.clients().catch(() => []),
+      new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 1500)),
+    ]),
   ]);
   const params = await searchParams;
 
@@ -73,7 +80,7 @@ export default async function NewBuildingPage({
         title="Add Building"
         description="Captured by the Chrome extension — saved once, reusable across any client mandate."
       />
-      <BuildingForm neighbourhoods={neighbourhoods} initial={initial} />
+      <BuildingForm neighbourhoods={neighbourhoods} clients={clients} initial={initial} />
     </div>
   );
 }
