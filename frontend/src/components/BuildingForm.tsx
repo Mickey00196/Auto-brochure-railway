@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { Badge, Button, Card, fieldInputClass, fieldLabelClass } from "@/components/ui";
 import { PhotoPicker } from "@/components/PhotoPicker";
 import { AmenityMultiSelect } from "@/components/AmenityMultiSelect";
+import { FormSectionNav, type FormSection } from "@/components/FormSectionNav";
 import { PROXY_BASE_URL } from "@/lib/api";
 import { useUnsavedChangesWarning } from "@/lib/useUnsavedChangesWarning";
 
@@ -102,6 +103,11 @@ export function BuildingForm({
 
   const [form, setForm] = useState({ ...EMPTY_FORM, ...initial });
   useUnsavedChangesWarning(JSON.stringify(form) !== JSON.stringify({ ...EMPTY_FORM, ...initial }));
+  // Whether this form opened with capture data already in it (extension or
+  // bookmarklet query params) — captured once at mount, so the "Pre-filled
+  // by capture" badge stays accurate even after the broker edits a field,
+  // but is never shown for a building typed by hand from a blank form.
+  const [wasCaptured] = useState(() => Boolean(initial?.name || initial?.address));
   const [locating, setLocating] = useState(false);
   const [locateNote, setLocateNote] = useState<string | null>(null);
   const [transportMode, setTransportMode] = useState<TransportMode>("nearest_any");
@@ -364,9 +370,25 @@ export function BuildingForm({
   );
   const draftMatch = duplicates.find((d) => d.is_draft);
 
+  const sections: FormSection[] = [
+    { id: "photos", label: "Photos", meta: photoCount > 0 ? `${photoCount} captured` : undefined },
+    ...(!isEdit
+      ? [{ id: "lease-terms", label: "Lease terms", meta: "7 fields" } satisfies FormSection]
+      : []),
+    {
+      id: "building",
+      label: "Building",
+      meta: duplicates.length > 0 && !duplicatesDismissed ? `${duplicates.length} similar` : undefined,
+    },
+    { id: "accessibility", label: "Accessibility", meta: "3 rows" },
+  ];
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <Card>
+    <form onSubmit={handleSubmit}>
+      <div className="grid gap-8 lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-12">
+        <FormSectionNav sections={sections} />
+        <div className="min-w-0 space-y-6">
+      <Card id="photos">
         <div className="mb-1 flex items-center gap-2">
           <h2 className="text-lg font-semibold">Photos</h2>
           {photoCount > 0 && <Badge tone="accent">{photoCount}</Badge>}
@@ -379,16 +401,17 @@ export function BuildingForm({
       </Card>
 
       {!isEdit && (
-      <Card>
-        {hasIdentity ? (
-          <>
-            <h2 className="mb-0.5 text-[22px] font-bold tracking-tight">{form.name || form.address}</h2>
-            {form.address && form.name && form.address !== form.name && (
-              <p className="mb-4 text-sm text-muted">{form.address}</p>
-            )}
-          </>
-        ) : (
-          <h2 className="mb-1 text-lg font-semibold">Executive summary — lease terms</h2>
+      <Card id="lease-terms">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+          {hasIdentity ? (
+            <h2 className="text-[22px] font-bold tracking-tight">{form.name || form.address}</h2>
+          ) : (
+            <h2 className="text-lg font-semibold">Executive summary — lease terms</h2>
+          )}
+          {wasCaptured && <Badge tone="success">Pre-filled by capture</Badge>}
+        </div>
+        {hasIdentity && form.address && form.name && form.address !== form.name && (
+          <p className="mb-4 text-sm text-muted">{form.address}</p>
         )}
         <p className="mb-4 text-sm text-muted">
           Filled in by the Chrome extension where the listing states them. Saving creates the
@@ -439,7 +462,7 @@ export function BuildingForm({
       </Card>
       )}
 
-      <Card>
+      <Card id="building">
         <h2 className="mb-4 text-lg font-semibold">Building</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className={labelClass}>
@@ -502,41 +525,61 @@ export function BuildingForm({
         </div>
 
         {duplicates.length > 0 && !duplicatesDismissed && (
-          <div className="mt-4 rounded-xl bg-warn-bg p-4 text-sm text-warn-foreground">
-            {draftMatch && hasLeaseTerms ? (
-              <p className="font-semibold">
-                There&apos;s an incomplete draft of this building — consider completing that one instead of
-                creating a new entry.
-              </p>
-            ) : (
-              <p className="font-semibold">
-                This looks similar to {duplicates.length} building{duplicates.length === 1 ? "" : "s"} already
-                in the library:
-              </p>
-            )}
-            <ul className="mt-2 space-y-2">
+          <div className="mt-4 rounded-xl border border-amber-300/50 bg-warn-bg p-4 sm:p-5">
+            <div className="flex items-start gap-2.5">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden="true"
+                className="mt-0.5 shrink-0 text-warn-foreground"
+              >
+                <path
+                  d="M8 1.5 15 14H1L8 1.5Z"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinejoin="round"
+                />
+                <path d="M8 6v3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                <circle cx="8" cy="11.6" r="0.8" fill="currentColor" />
+              </svg>
+              {draftMatch && hasLeaseTerms ? (
+                <p className="text-sm font-semibold text-warn-foreground">
+                  There&apos;s an incomplete draft of this building — consider completing that one instead of
+                  creating a new entry.
+                </p>
+              ) : (
+                <p className="text-sm font-semibold text-warn-foreground">
+                  This looks similar to {duplicates.length} building{duplicates.length === 1 ? "" : "s"} already
+                  in the library:
+                </p>
+              )}
+            </div>
+            <ul className="mt-3 space-y-2 pl-0 sm:pl-[26px]">
               {duplicates.map((d) => (
-                <li key={d.building_id} className="flex items-center justify-between gap-3 rounded-lg bg-white/40 px-3 py-2">
-                  <div className="flex items-center gap-2.5 overflow-hidden">
-                    {d.thumbnail_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- arbitrary captured URLs, no fixed domain to allowlist
-                      <img src={d.thumbnail_url} alt="" className="h-9 w-9 shrink-0 rounded-md object-cover" />
-                    ) : (
-                      <div className="h-9 w-9 shrink-0 rounded-md bg-warn-foreground/15" />
-                    )}
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">{d.name || d.address}</div>
-                      <div className="truncate text-xs opacity-80">
-                        {d.address}
-                        {d.is_draft
-                          ? " — draft, no spaces yet"
-                          : ` — ${d.space_count} space${d.space_count === 1 ? "" : "s"}`}
-                      </div>
+                <li
+                  key={d.building_id}
+                  className="flex items-center gap-3 rounded-lg border border-amber-300/40 bg-surface p-2.5"
+                >
+                  {d.thumbnail_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- arbitrary captured URLs, no fixed domain to allowlist
+                    <img src={d.thumbnail_url} alt="" className="h-9 w-9 shrink-0 rounded-md object-cover" />
+                  ) : (
+                    <div className="h-9 w-9 shrink-0 rounded-md bg-warn-foreground/15" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-foreground">{d.name || d.address}</div>
+                    <div className="truncate text-xs text-muted">
+                      {d.address}
+                      {d.is_draft
+                        ? " — draft, no spaces yet"
+                        : ` — ${d.space_count} space${d.space_count === 1 ? "" : "s"}`}
                     </div>
                   </div>
                   <Link
                     href={`/buildings/${d.building_id}`}
-                    className="shrink-0 whitespace-nowrap text-xs font-semibold underline hover:no-underline"
+                    className="shrink-0 whitespace-nowrap text-xs font-semibold text-accent hover:underline"
                   >
                     View / Edit instead →
                   </Link>
@@ -546,7 +589,7 @@ export function BuildingForm({
             <button
               type="button"
               onClick={() => setDuplicatesDismissed(true)}
-              className="mt-2.5 text-xs font-semibold underline hover:no-underline"
+              className="mt-3 pl-0 text-xs font-medium text-warn-foreground/80 underline hover:text-warn-foreground sm:pl-[26px]"
             >
               Not a duplicate — this is a different building
             </button>
@@ -554,7 +597,7 @@ export function BuildingForm({
         )}
       </Card>
 
-      <Card>
+      <Card id="accessibility">
         <h2 className="mb-1 text-lg font-semibold">Accessibility</h2>
         <p className="mb-4 text-sm text-muted">Auto-filled once the address is confirmed — edit any field to override.</p>
 
@@ -628,6 +671,8 @@ export function BuildingForm({
           ? "Saves the building's own details. Its available spaces and add-ons are edited separately, below."
           : "Saved permanently in your library — reusable for any client, and never overwritten by a later capture."}
       </p>
+        </div>
+      </div>
     </form>
   );
 }
