@@ -161,7 +161,7 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
   }
 
   return (
-    <div className="pb-64 sm:pb-40">
+    <div className="pb-72 sm:pb-40">
       {justAdded && (
         <Card className="mb-4 border-accent/40 bg-accent/5">
           <p className="text-sm">
@@ -334,9 +334,12 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
 
       {/* Step 4 — always reachable, so the path from selection to PDF is one click.
           max-h + overflow-y-auto is a backstop: on a narrow phone this bar can wrap
-          onto several rows (fixed-width inputs go w-full below sm), so it needs a
-          hard ceiling instead of being able to grow tall enough to cover the list
-          above it — the pb-64 on the page container is sized for this ceiling. */}
+          onto several rows, so it needs a hard ceiling instead of being able to grow
+          tall enough to cover the list above it — the pb-72 on the page container is
+          sized for this ceiling. The Client/Prepared-by pair sits in its own flex row
+          (sm:contents un-wraps it back to normal at sm+) so the two fields sit side by
+          side on a phone instead of stacking into a bar tall enough to cover the next
+          card in the list. */}
       <div className="fixed inset-x-0 bottom-0 z-20 max-h-[70vh] overflow-y-auto border-t border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-end gap-3 px-6 py-4">
           <div className="text-sm">
@@ -352,25 +355,27 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
               </button>
             )}
           </div>
-          <label className="w-full text-xs sm:w-44">
-            <span className="mb-1 block font-medium text-muted">Client</span>
-            <input
-              ref={clientInputRef}
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              placeholder="Client name"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="w-full text-xs sm:w-44">
-            <span className="mb-1 block font-medium text-muted">Prepared by (optional)</span>
-            <input
-              value={preparedBy}
-              onChange={(e) => setPreparedBy(e.target.value)}
-              placeholder="Your name"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            />
-          </label>
+          <div className="flex w-full gap-3 sm:contents">
+            <label className="min-w-0 flex-1 text-xs sm:w-44 sm:flex-none">
+              <span className="mb-1 block font-medium text-muted">Client</span>
+              <input
+                ref={clientInputRef}
+                value={clientName}
+                onChange={(e) => setClientName(e.target.value)}
+                placeholder="Client name"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="min-w-0 flex-1 text-xs sm:w-44 sm:flex-none">
+              <span className="mb-1 block font-medium text-muted">Prepared by (optional)</span>
+              <input
+                value={preparedBy}
+                onChange={(e) => setPreparedBy(e.target.value)}
+                placeholder="Your name"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
           <Button
             onClick={generate}
             disabled={generating || selected.length === 0 || !clientName.trim()}

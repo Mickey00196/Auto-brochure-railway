@@ -83,7 +83,7 @@ export function ClientFolder({ client: initialClient, buildings: initial }: { cl
   }
 
   return (
-    <div className="pb-64 sm:pb-40">
+    <div className="pb-72 sm:pb-40">
       <div className="mb-6">
         <LiveLinkPanel client={client} onUpdated={setClient} />
       </div>

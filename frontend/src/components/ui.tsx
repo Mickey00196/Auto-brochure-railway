@@ -56,6 +56,8 @@ export function PageHeader({
   description,
   actions,
   showHomeLink = true,
+  backHref = "/buildings",
+  backLabel = "Back to building library",
 }: {
   eyebrow?: string;
   title: string;
@@ -65,21 +67,30 @@ export function PageHeader({
    * `false` on the dashboard page, since "back to Dashboard" makes no
    * sense from the Dashboard. */
   showHomeLink?: boolean;
+  /** Where the back link points — defaults to the building library, but a
+   * client-scoped page (new/edit client) should point back to /clients. */
+  backHref?: string;
+  backLabel?: string;
 }) {
   return (
-    <div className="mb-8">
-      {showHomeLink && (
-        <Link href="/buildings" className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-accent hover:underline">
-          ← Back to library
-        </Link>
-      )}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          {eyebrow && <div className="text-xs font-bold uppercase tracking-wide text-accent">{eyebrow}</div>}
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">{title}</h1>
-          {description && <p className="mt-2 max-w-2xl text-muted">{description}</p>}
-        </div>
-        {actions && <div className="flex gap-2">{actions}</div>}
+    <div className="mb-8 flex flex-col justify-between gap-5 border-b border-border pb-7 sm:flex-row sm:items-end">
+      <div>
+        {eyebrow && (
+          <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-accent">
+            <span className="h-2 w-2 shrink-0 rounded-sm bg-accent" />
+            {eyebrow}
+          </div>
+        )}
+        <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+        {description && <p className="mt-2 max-w-2xl text-muted">{description}</p>}
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-3">
+        {actions}
+        {showHomeLink && (
+          <Link href={backHref} className="text-xs font-semibold text-accent hover:underline">
+            {backLabel} →
+          </Link>
+        )}
       </div>
     </div>
   );

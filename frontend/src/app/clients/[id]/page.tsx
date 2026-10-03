@@ -21,6 +21,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         title={client.display_name}
         description="Buildings copied in from your shared library for this client. Editing a copy here never changes the library, and editing the library never changes what's copied here."
         actions={<DeleteClientButton client={client} />}
+        backHref="/clients"
+        backLabel="Back to clients"
       />
       <ClientFolder client={client} buildings={buildings} />
     </div>
