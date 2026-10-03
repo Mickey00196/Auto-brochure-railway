@@ -76,6 +76,11 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
+    # Also allow any Lovable preview/published origin to call this API
+    # directly from the browser — e.g. a Lovable project wired to this
+    # backend via its own fetch calls, outside the normal Next.js
+    # server-to-server path above.
+    allow_origin_regex=r"https://.*\.(lovable\.app|lovableproject\.com)",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
