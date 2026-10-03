@@ -160,13 +160,29 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
         </Card>
       )}
 
-      <div className="mb-4">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by address, city or area…"
-          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm sm:max-w-sm"
-        />
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="relative min-w-0 flex-1 sm:w-80 sm:flex-none">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+          >
+            <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.4" />
+            <path d="M11 11 14.5 14.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          </svg>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by address, city or area…"
+            className="h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/15"
+          />
+        </div>
+        <span className="text-xs text-muted">
+          {visible.length} of {buildings.length} building{buildings.length === 1 ? "" : "s"}
+        </span>
       </div>
 
       <div className="space-y-3">

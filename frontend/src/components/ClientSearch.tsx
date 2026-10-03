@@ -78,7 +78,7 @@ export function ClientSearch({ clients }: { clients: Client[] }) {
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search or add a client…"
+            placeholder="Find a client…"
             className="h-16 w-full rounded-2xl border border-border bg-surface pl-14 pr-5 text-lg shadow-sm outline-none transition placeholder:text-placeholder focus:border-accent focus:ring-2 focus:ring-accent/15"
           />
         </div>

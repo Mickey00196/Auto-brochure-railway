@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { serverApi as api } from "@/lib/serverApi";
-import { Button } from "@/components/ui";
 import { ClientSearch } from "@/components/ClientSearch";
 
 export default async function HomePage() {
@@ -26,12 +25,9 @@ export default async function HomePage() {
             />
           </svg>
         </span>
-        <p className="mt-5 text-xs font-bold uppercase tracking-wide text-accent">Office Shortlist</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-          A better way to share your buildings.
-        </h1>
+        <h1 className="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl">Find a client</h1>
         <p className="mt-3 max-w-md text-sm text-muted">
-          Capture buildings, collect them for a client, and send one clean brochure.
+          Search the clients you share buildings with, or start a new one.
         </p>
 
         <div className="mt-9 w-full max-w-xl text-left">
@@ -40,19 +36,12 @@ export default async function HomePage() {
       </div>
 
       {/* Library stats — secondary, quiet strip. */}
-      <section className="mt-6 flex flex-col justify-between gap-4 border-t border-border pt-7 sm:flex-row sm:items-center">
-        <div>
-          <p className="text-sm font-semibold">
-            {buildings.length} building{buildings.length === 1 ? "" : "s"} in your library
-          </p>
-          <Link href="/buildings" className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline">
-            Browse library →
-          </Link>
-        </div>
-        <Link href="/buildings/new">
-          <Button variant="ghost" className="h-9">
-            + Capture new
-          </Button>
+      <section className="mt-16 flex flex-col items-center justify-center gap-4 border-t border-border pb-2 pt-8 sm:flex-row sm:gap-10">
+        <Link href="/buildings" className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-foreground">
+          {buildings.length} building{buildings.length === 1 ? "" : "s"} in your library
+        </Link>
+        <Link href="/buildings/new" className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-foreground">
+          Capture building
         </Link>
       </section>
     </div>

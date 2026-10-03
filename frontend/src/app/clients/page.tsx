@@ -1,6 +1,16 @@
 import Link from "next/link";
 import { serverApi as api } from "@/lib/serverApi";
-import { Badge, Button, Card, PageHeader } from "@/components/ui";
+import { Button, Card, PageHeader } from "@/components/ui";
+
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
 
 /** Every client's folder: their own copy of whichever buildings a broker has
  * added from the shared library — never the library itself. See
@@ -32,35 +42,38 @@ export default async function ClientsPage() {
         </Card>
       )}
 
-      <div className="grid gap-6 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {clients.map((c) => (
-          <Link key={c.client_id} href={`/clients/${c.client_id}`}>
-            <Card className="h-full transition hover:border-accent">
+          <Link key={c.client_id} href={`/clients/${c.client_id}`} className="group">
+            <Card className="flex h-full min-h-[200px] flex-col transition hover:border-accent hover:shadow-md">
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  <h2 className="text-lg font-semibold">{c.display_name}</h2>
-                  {c.company_name && c.name && <p className="text-sm text-muted">{c.company_name}</p>}
-                  {c.industry && <p className="text-sm text-muted">{c.industry}</p>}
-                </div>
-                <Badge tone={c.building_count > 0 ? "accent" : "default"}>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-input-bg text-xs font-bold text-dark">
+                  {initials(c.display_name)}
+                </span>
+                <span className="rounded-full bg-input-bg px-2.5 py-1 text-[11px] font-medium text-muted">
                   {c.building_count} building{c.building_count === 1 ? "" : "s"}
-                </Badge>
+                </span>
               </div>
 
-              {c.contacts.length > 0 && (
-                <div className="mt-4 space-y-1 text-sm">
-                  {c.contacts.map((contact, i) => (
-                    <div key={i}>
-                      <span className="font-medium">{contact.name}</span>
-                      {contact.role && <span className="text-muted"> — {contact.role}</span>}
-                    </div>
-                  ))}
-                </div>
+              <h2 className="mt-4 text-base font-semibold group-hover:text-accent">{c.display_name}</h2>
+              {c.company_name && c.name && <p className="mt-0.5 text-xs text-muted">{c.company_name}</p>}
+              {c.industry && <p className="text-xs text-muted">{c.industry}</p>}
+
+              {c.contacts.length > 0 ? (
+                <p className="mt-2 text-xs text-muted">
+                  Contact · {c.contacts[0]!.name}
+                  {c.contacts[0]!.role && ` — ${c.contacts[0]!.role}`}
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-muted">No contact set</p>
               )}
 
-              <p className="mt-4 text-xs text-muted">
-                Updated {new Date(c.updated_at).toLocaleDateString()}
-              </p>
+              <div className="mt-auto flex items-center justify-between gap-3 border-t border-border pt-3.5 text-xs">
+                <span className="text-muted">Updated {new Date(c.updated_at).toLocaleDateString()}</span>
+                <span className="inline-flex items-center gap-1 font-semibold text-accent">
+                  Open client →
+                </span>
+              </div>
             </Card>
           </Link>
         ))}

@@ -48,7 +48,7 @@ export function BuildingCard({
       } ${locked ? "opacity-60" : ""}`}
     >
       {cornerAction}
-      <div className="flex items-start gap-4">
+      <div className="flex items-start gap-5">
         {leading}
         <Link href={`/buildings/${building.building_id}`} className="shrink-0">
           {building.photos.length > 0 ? (
@@ -56,22 +56,23 @@ export function BuildingCard({
             <img
               src={building.photos[0]}
               alt=""
-              className="h-16 w-16 rounded-lg border border-border object-cover"
+              className="h-20 w-20 rounded-xl border border-border object-cover sm:h-24 sm:w-24"
             />
           ) : (
-            <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-border text-[10px] text-muted">
+            <div className="flex h-20 w-20 items-center justify-center rounded-xl border border-dashed border-border text-[10px] text-muted sm:h-24 sm:w-24">
               No photo
             </div>
           )}
         </Link>
 
-        <Link href={`/buildings/${building.building_id}`} className="group flex-1">
-          <p className="font-semibold group-hover:text-accent group-hover:underline">{building.address}</p>
-          <p className="text-sm text-muted">{[building.submarket, building.city].filter(Boolean).join(" · ")}</p>
-          <p className="mt-1 text-sm">
-            <span className="font-medium">{totalAvailable > 0 ? formatArea(totalAvailable) : "Area TBD"}</span>
-            <span className="text-muted"> · {rentLabel}</span>
-            {building.energy_label && <span className="text-muted"> · Energy {building.energy_label}</span>}
+        <Link href={`/buildings/${building.building_id}`} className="group min-w-0 flex-1">
+          <p className="truncate text-[15px] font-semibold text-accent group-hover:underline">{building.address}</p>
+          <p className="mt-0.5 text-sm text-muted">{[building.submarket, building.city].filter(Boolean).join(" · ")}</p>
+          <p className="mt-2 text-sm font-medium">
+            {totalAvailable > 0 ? formatArea(totalAvailable) : "Area TBD"}
+            <span className="mx-1.5 font-normal text-border">|</span>
+            <span className="font-normal text-muted">{rentLabel}</span>
+            {building.energy_label && <span className="font-normal text-muted"> · Energy {building.energy_label}</span>}
           </p>
           {(building.public_transport_note || building.accessibility_note || building.airport_note) && (
             <p className="mt-1 flex flex-wrap gap-x-3 text-xs text-muted">
@@ -81,14 +82,14 @@ export function BuildingCard({
             </p>
           )}
           {building.building_amenities.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
               {building.building_amenities.slice(0, 6).map((a) => (
-                <span key={a} className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent">
+                <span key={a} className="rounded-md bg-input-bg px-2 py-1 text-[11px] font-medium text-foreground">
                   {a}
                 </span>
               ))}
               {building.building_amenities.length > 6 && (
-                <span className="px-1 py-0.5 text-[11px] text-muted">
+                <span className="px-1 py-1 text-[11px] text-muted">
                   +{building.building_amenities.length - 6} more
                 </span>
               )}

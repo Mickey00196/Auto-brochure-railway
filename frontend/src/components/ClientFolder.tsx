@@ -79,8 +79,16 @@ export function ClientFolder({ client, buildings: initial }: { client: Client; b
 
   return (
     <div className="pb-64 sm:pb-40">
-      <div className="mb-4 flex justify-end">
-        <Button onClick={() => setModalOpen(true)}>+ Add from library</Button>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-semibold">Buildings for this client</h2>
+          <span className="rounded-full bg-input-bg px-2.5 py-1 text-[11px] font-medium text-muted">
+            {buildings.length} building{buildings.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <Button variant="ghost" onClick={() => setModalOpen(true)} className="h-9">
+          + Add from library
+        </Button>
       </div>
 
       <div className="space-y-3">
