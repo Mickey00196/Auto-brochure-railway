@@ -1,0 +1,14 @@
+- [x] Build three static interactive popup design directions at /popup, covering all listed states and settings.
+- [x] Build a static three-building scrolling brochure at /brochure/demo.
+- [x] Verify both pages and provide the preview URL.
+- [x] Build the redesigned "Add Building" intake form at /add-building (four stacked cards, sticky section rail, mock duplicate warning).
+- [x] Verify the form page and share the route URL.
+- [x] Build a coherent mock home, building library, clients list, and client folder at their requested routes.
+- [x] Verify navigation, search, folder link controls, and mobile layouts; share all four URLs.
+- [x] Align the headers and page navigation across every sandbox screen, retaining the brochure's building contents links.
+- [x] Verify the navigation works across desktop and mobile.
+- [x] Refine navigation to three destinations and standardize client terminology.
+- [x] Confirm before enabling a live link; hide sharing actions when off and document the mock brochure target.
+- [x] Add photo-first library grid and list toggle; verify interactions and 375px navigation.
+- [x] Redesign /home around a central client search: soft gradient hero, live results dropdown, minimal recent-clients list, quiet library/capture links.
+- [x] Push the design into the user's GitHub repo (Mickey00196/office-shortlist, private) with Railway deploy files (Dockerfile, railway.json, .dockerignore, README section).
