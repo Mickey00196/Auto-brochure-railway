@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Images, ListOrdered, Trash2 } from "lucide-react";
 import { PROXY_BASE_URL } from "@/lib/api";
 import { ConfirmDialog, fieldInputClass } from "@/components/ui";
 import { PhotoLightbox } from "@/components/PhotoLightbox";
@@ -345,14 +346,17 @@ export function PhotoPicker({
               />
               <div className={scrimTopClass} />
               <div className={scrimBottomClass} />
-              <div className={`pointer-events-none absolute bottom-2.5 left-2.5 ${pillDarkClass}`}>
+              <div className={`pointer-events-none absolute bottom-2.5 left-2.5 inline-flex items-center gap-1.5 ${pillDarkClass}`}>
+                <Images size={12} aria-hidden="true" />
                 {photos.length} photo{photos.length === 1 ? "" : "s"}
               </div>
               <div className="absolute right-2.5 top-2.5 flex gap-1.5">
-                <button type="button" onClick={() => setReorderOpen(true)} className={pillDarkClass}>
+                <button type="button" onClick={() => setReorderOpen(true)} className={`inline-flex items-center gap-1.5 ${pillDarkClass}`}>
+                  <ListOrdered size={12} aria-hidden="true" />
                   Reorder
                 </button>
-                <button type="button" onClick={() => setRemoveAllConfirming(true)} className={pillDarkClass}>
+                <button type="button" onClick={() => setRemoveAllConfirming(true)} className={`inline-flex items-center gap-1.5 ${pillDarkClass}`}>
+                  <Trash2 size={12} aria-hidden="true" />
                   Remove all
                 </button>
               </div>
@@ -412,10 +416,10 @@ export function PhotoPicker({
         {main && photos.length > 1 && (
           <div className="flex items-center justify-center gap-3">
             <button type="button" onClick={() => stepHero(-1)} aria-label="Show previous photo as the hero" className={navCircleClass}>
-              ‹
+              <ChevronLeft size={17} aria-hidden="true" />
             </button>
             <button type="button" onClick={() => stepHero(1)} aria-label="Show next photo as the hero" className={navCircleClass}>
-              ›
+              <ChevronRight size={17} aria-hidden="true" />
             </button>
           </div>
         )}

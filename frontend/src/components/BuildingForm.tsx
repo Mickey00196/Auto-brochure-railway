@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { Check, TriangleAlert, X } from "lucide-react";
 import type { Client, DuplicateCandidate, Neighbourhood } from "@/lib/types";
 import { api } from "@/lib/api";
 import { Badge, Button, Card, fieldInputClass, fieldLabelClass } from "@/components/ui";
@@ -548,23 +549,7 @@ export function BuildingForm({
         {duplicates.length > 0 && !duplicatesDismissed && (
           <div className="mt-4 rounded-xl border border-amber-300/50 bg-warn-bg p-4 sm:p-5">
             <div className="flex items-start gap-2.5">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                aria-hidden="true"
-                className="mt-0.5 shrink-0 text-warn-foreground"
-              >
-                <path
-                  d="M8 1.5 15 14H1L8 1.5Z"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                  strokeLinejoin="round"
-                />
-                <path d="M8 6v3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                <circle cx="8" cy="11.6" r="0.8" fill="currentColor" />
-              </svg>
+              <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warn-foreground" aria-hidden="true" />
               {draftMatch && hasLeaseTerms ? (
                 <p className="text-sm font-semibold text-warn-foreground">
                   There&apos;s an incomplete draft of this building — consider completing that one instead of
@@ -610,8 +595,9 @@ export function BuildingForm({
             <button
               type="button"
               onClick={() => setDuplicatesDismissed(true)}
-              className="mt-3 pl-0 text-xs font-medium text-warn-foreground/80 underline hover:text-warn-foreground sm:pl-[26px]"
+              className="mt-3 inline-flex items-center gap-1.5 pl-0 text-xs font-medium text-warn-foreground/80 underline hover:text-warn-foreground sm:pl-[26px]"
             >
+              <X size={12} aria-hidden="true" />
               Not a duplicate — this is a different building
             </button>
           </div>
@@ -701,7 +687,8 @@ export function BuildingForm({
 
       {error && <p className="text-sm text-red-500">{error}</p>}
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={submitting}>
+        <Button type="submit" disabled={submitting} className="inline-flex items-center gap-2">
+          {!submitting && <Check size={16} aria-hidden="true" />}
           {submitting ? "Saving…" : isEdit ? "Save changes" : "Save to library"}
         </Button>
         <Button

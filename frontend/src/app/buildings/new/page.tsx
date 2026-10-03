@@ -1,5 +1,5 @@
+import Link from "next/link";
 import { serverApi as api } from "@/lib/serverApi";
-import { PageHeader } from "@/components/ui";
 import { BuildingForm, type BuildingFormInitial } from "@/components/BuildingForm";
 
 // Fields the bookmarklet (see /import) can pre-fill via query params — it
@@ -75,11 +75,21 @@ export default async function NewBuildingPage({
 
   return (
     <div>
-      <PageHeader
-        eyebrow="Building library"
-        title="Add Building"
-        description="Captured by the Chrome extension — saved once, reusable across any client mandate."
-      />
+      <header className="mb-8 flex flex-col justify-between gap-5 border-b border-border pb-8 sm:flex-row sm:items-end">
+        <div>
+          <div className="mb-4 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.13em] text-accent">
+            <span className="size-2 rounded-sm bg-accent" />
+            Building library <span className="normal-case tracking-normal text-muted">/ New building</span>
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Add Building</h1>
+          <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted">
+            Captured by the Chrome extension — saved once, reusable across any client mandate.
+          </p>
+        </div>
+        <Link href="/buildings" className="shrink-0 text-xs font-semibold text-accent hover:underline">
+          Back to building library →
+        </Link>
+      </header>
       <BuildingForm neighbourhoods={neighbourhoods} clients={clients} initial={initial} />
     </div>
   );
