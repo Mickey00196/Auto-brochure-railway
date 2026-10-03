@@ -13,8 +13,18 @@ export default async function HomePage() {
       {/* Centered hero — the search bar below is the one thing this page
           wants you to do. Confidence here comes from restraint and
           whitespace, not a wall of competing calls to action. */}
-      <div className="flex flex-col items-center py-10 text-center sm:py-16">
-        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-dark text-white">
+      <div className="relative flex flex-col items-center py-10 text-center sm:py-16">
+        {/* Soft radial glow behind the heading — matches Lovable's home-glow utility
+            (radial-gradient at 50% 0%, var(--link) at 14% fading to transparent). */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 top-[-80px] h-[400px] w-[min(48rem,100vw)] -translate-x-1/2"
+          style={{
+            background:
+              "radial-gradient(ellipse 68% 70% at 50% 0%, color-mix(in oklab, var(--accent) 14%, transparent) 0%, transparent 72%)",
+          }}
+        />
+        <span className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-dark text-white">
           <svg width="22" height="22" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path
               d="M2 13.5V5l5-3 5 3v8.5M4.5 13.5v-4h2.5v4M9 13.5v-4h2.5v4M2 13.5h10.5"
