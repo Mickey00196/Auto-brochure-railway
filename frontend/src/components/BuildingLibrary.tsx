@@ -3,11 +3,21 @@
 import Link from "next/link";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { LayoutGrid, List } from "lucide-react";
 import type { Building } from "@/lib/types";
 import { downloadLibraryPdf } from "@/lib/generateLibraryPdf";
-import { Button, Card } from "@/components/ui";
+import { formatArea } from "@/lib/format";
+import { Badge, Button, Card } from "@/components/ui";
 import { DeleteBuildingButton } from "@/components/DeleteBuildingButton";
 import { BuildingCard } from "@/components/BuildingCard";
+
+function buildingRentLabel(building: Building): string {
+  const rents = building.units.map((u) => u.rent_eur_per_m2_year).filter((r): r is number => typeof r === "number");
+  if (!rents.length) return "Rent TBD";
+  return rents.length === 1 || Math.min(...rents) === Math.max(...rents)
+    ? `€${Math.min(...rents).toLocaleString("en-US")}/m²/yr`
+    : `€${Math.min(...rents).toLocaleString("en-US")}–€${Math.max(...rents).toLocaleString("en-US")}/m²/yr`;
+}
 
 // A ticked selection used to be plain component state, so navigating away
 // mid-shortlist — to capture one more listing, say — silently threw it away.
@@ -53,6 +63,7 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [view, setView] = useState<"grid" | "list">("grid");
   const clientInputRef = useRef<HTMLInputElement>(null);
 
   // Restore the persisted selection on load, reconciled against buildings
@@ -161,68 +172,165 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
       )}
 
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="relative min-w-0 flex-1 sm:w-80 sm:flex-none">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            aria-hidden="true"
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
-          >
-            <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.4" />
-            <path d="M11 11 14.5 14.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          </svg>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by address, city or area…"
-            className="h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/15"
-          />
+        <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+          <div className="relative min-w-0 flex-1 sm:w-80">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+            >
+              <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M11 11 14.5 14.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by address, city or area…"
+              className="h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/15"
+            />
+          </div>
+          <div role="group" aria-label="Library view" className="flex shrink-0 rounded-lg border border-border bg-surface p-0.5">
+            <button
+              type="button"
+              title="Grid view"
+              aria-label="Grid view"
+              aria-pressed={view === "grid"}
+              onClick={() => setView("grid")}
+              className={`flex h-8 w-8 items-center justify-center rounded-md transition ${
+                view === "grid" ? "bg-input-bg text-accent" : "text-muted hover:text-foreground"
+              }`}
+            >
+              <LayoutGrid size={16} />
+            </button>
+            <button
+              type="button"
+              title="List view"
+              aria-label="List view"
+              aria-pressed={view === "list"}
+              onClick={() => setView("list")}
+              className={`flex h-8 w-8 items-center justify-center rounded-md transition ${
+                view === "list" ? "bg-input-bg text-accent" : "text-muted hover:text-foreground"
+              }`}
+            >
+              <List size={16} />
+            </button>
+          </div>
         </div>
         <span className="text-xs text-muted">
           {visible.length} of {buildings.length} building{buildings.length === 1 ? "" : "s"}
         </span>
       </div>
 
-      <div className="space-y-3">
-        {visible.map((building) => {
-          const isSelected = selected.includes(building.building_id);
-          return (
-            <BuildingCard
-              key={building.building_id}
-              building={building}
-              selected={isSelected}
-              highlighted={building.building_id === justAdded}
-              cornerAction={
-                <DeleteBuildingButton building={building} onDeleted={() => handleBuildingDeleted(building.building_id)} />
-              }
-              leading={
-                // Selecting and opening are different intents, so they get
-                // different targets: this padded hit area ticks the box,
-                // the row itself opens the building for editing.
+      {visible.length === 0 ? (
+        <Card>
+          <p className="text-sm text-muted">No buildings match “{query}”.</p>
+        </Card>
+      ) : view === "grid" ? (
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {visible.map((building) => {
+            const isSelected = selected.includes(building.building_id);
+            return (
+              <div
+                key={building.building_id}
+                className={`relative flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-surface shadow-sm transition ${
+                  isSelected ? "border-accent ring-1 ring-accent" : "border-border"
+                } ${building.building_id === justAdded ? "ring-2 ring-accent" : ""}`}
+              >
                 <label
-                  className="-m-2 shrink-0 cursor-pointer p-2"
+                  className="absolute left-3 top-3 z-10 cursor-pointer"
                   aria-label={`Select ${building.address}`}
-                  onClick={(e) => e.stopPropagation()}
                 >
                   <input
                     type="checkbox"
                     checked={isSelected}
                     onChange={() => toggle(building.building_id)}
-                    className="mt-1 h-5 w-5 cursor-pointer accent-accent"
+                    className="h-5 w-5 cursor-pointer accent-accent"
                   />
                 </label>
-              }
-            />
-          );
-        })}
-        {visible.length === 0 && (
-          <Card>
-            <p className="text-sm text-muted">No buildings match “{query}”.</p>
-          </Card>
-        )}
-      </div>
+                <div className="absolute right-3 top-3 z-10">
+                  <DeleteBuildingButton building={building} onDeleted={() => handleBuildingDeleted(building.building_id)} />
+                </div>
+                <Link href={`/buildings/${building.building_id}`}>
+                  {building.photos.length > 0 ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- arbitrary captured URLs, no fixed domain to allowlist
+                    <img src={building.photos[0]} alt="" className="aspect-[1.45] w-full object-cover" />
+                  ) : (
+                    <div className="flex aspect-[1.45] w-full items-center justify-center bg-input-bg text-xs text-muted">
+                      No photo
+                    </div>
+                  )}
+                </Link>
+                <div className="flex flex-1 flex-col p-5">
+                  <Link href={`/buildings/${building.building_id}`} className="group">
+                    <h2 className="text-base font-semibold text-accent group-hover:underline">{building.address}</h2>
+                    <p className="mt-1 text-xs text-muted">{[building.submarket, building.city].filter(Boolean).join(" · ")}</p>
+                  </Link>
+                  <p className="mt-4 text-sm font-medium">
+                    {building.units.reduce((sum, u) => sum + (u.available_area_m2 ?? 0), 0) > 0
+                      ? formatArea(building.units.reduce((sum, u) => sum + (u.available_area_m2 ?? 0), 0))
+                      : "Area TBD"}
+                    <span className="mx-1 font-normal text-border">|</span>
+                    <span className="font-normal text-muted">{buildingRentLabel(building)}</span>
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-1.5">
+                    {building.building_amenities.slice(0, 4).map((a) => (
+                      <span key={a} className="rounded-md bg-input-bg px-2 py-1 text-[11px] text-foreground">
+                        {a}
+                      </span>
+                    ))}
+                    <Badge>
+                      {building.units.length} space{building.units.length === 1 ? "" : "s"}
+                    </Badge>
+                  </div>
+                  <Link
+                    href={`/buildings/${building.building_id}`}
+                    className="mt-auto inline-flex w-fit items-center gap-1 pt-5 text-xs font-semibold text-accent hover:underline"
+                  >
+                    Edit →
+                  </Link>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {visible.map((building) => {
+            const isSelected = selected.includes(building.building_id);
+            return (
+              <BuildingCard
+                key={building.building_id}
+                building={building}
+                selected={isSelected}
+                highlighted={building.building_id === justAdded}
+                cornerAction={
+                  <DeleteBuildingButton building={building} onDeleted={() => handleBuildingDeleted(building.building_id)} />
+                }
+                leading={
+                  // Selecting and opening are different intents, so they get
+                  // different targets: this padded hit area ticks the box,
+                  // the row itself opens the building for editing.
+                  <label
+                    className="-m-2 shrink-0 cursor-pointer p-2"
+                    aria-label={`Select ${building.address}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggle(building.building_id)}
+                      className="mt-1 h-5 w-5 cursor-pointer accent-accent"
+                    />
+                  </label>
+                }
+              />
+            );
+          })}
+        </div>
+      )}
 
       {/* Step 4 — always reachable, so the path from selection to PDF is one click.
           max-h + overflow-y-auto is a backstop: on a narrow phone this bar can wrap

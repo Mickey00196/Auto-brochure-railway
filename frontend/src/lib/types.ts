@@ -117,8 +117,14 @@ export interface PublicBuilding {
   building_id: string;
   name: string;
   address: string;
+  postal_code: string | null;
   city: string;
   submarket: string | null;
+  energy_label: string | null;
+  description: string | null;
+  accessibility_note: string | null;
+  airport_note: string | null;
+  public_transport_note: string | null;
   building_amenities: string[];
   photos: string[];
   units: Unit[];

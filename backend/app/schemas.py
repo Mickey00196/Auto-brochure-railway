@@ -216,8 +216,14 @@ class PublicBuildingOut(BaseModel):
     building_id: str
     name: str
     address: str
+    postal_code: str | None = None
     city: str
     submarket: str | None = None
+    energy_label: str | None = None
+    description: str | None = None
+    accessibility_note: str | None = None
+    airport_note: str | None = None
+    public_transport_note: str | None = None
     building_amenities: list[str] = Field(default_factory=list)
     photos: list[str] = Field(default_factory=list)
     units: list["UnitOut"] = Field(default_factory=list)
