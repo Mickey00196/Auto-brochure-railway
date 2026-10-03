@@ -83,6 +83,7 @@ export interface Unit {
   availability: string | null;
   unit_amenities: string[];
   photos: string[];
+  floorplan_url: string | null;
   building?: Building;
 }
 
@@ -119,6 +120,8 @@ export interface PublicBuilding {
   address: string;
   postal_code: string | null;
   city: string;
+  latitude: number | null;
+  longitude: number | null;
   submarket: string | null;
   energy_label: string | null;
   description: string | null;

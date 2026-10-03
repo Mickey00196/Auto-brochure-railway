@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Check, TriangleAlert, X } from "lucide-react";
+import { Car, Check, Plane, Train, TriangleAlert, X } from "lucide-react";
 import type { Client, DuplicateCandidate, Neighbourhood } from "@/lib/types";
 import { api } from "@/lib/api";
 import { Badge, Button, Card, fieldInputClass, fieldLabelClass } from "@/components/ui";
@@ -62,6 +62,11 @@ const EMPTY_FORM = {
   accessibilityNote: "",
   airportNote: "",
   publicTransportNote: "",
+  // Filled from the /geo/distances lookup below, alongside the three notes
+  // — never user-typed. Only used to place the map embed on the building
+  // page and the pin on a client's public shortlist map.
+  latitude: "",
+  longitude: "",
   // The API (backend/app/schemas.py) has always taken building_amenities as
   // a JSON array, not a comma-joined string — the old comma-separated text
   // field was a frontend-only simplification. AmenityMultiSelect operates on
@@ -183,6 +188,8 @@ export function BuildingForm({
         public_transport: string | null;
         highway: string | null;
         airport: string | null;
+        latitude: number | null;
+        longitude: number | null;
       };
       if (!d.found) {
         setLocateNote("Couldn't place that address on the map — fill the distances in by hand.");
@@ -206,7 +213,12 @@ export function BuildingForm({
         patch.airportNote = d.airport;
         filled.push("airport");
       }
+      if (d.latitude != null && d.longitude != null) {
+        patch.latitude = String(d.latitude);
+        patch.longitude = String(d.longitude);
+      }
       if (filled.length) setForm((prev) => ({ ...prev, ...patch }));
+      else if (d.latitude != null && d.longitude != null) setForm((prev) => ({ ...prev, ...patch }));
       setLocateNote(
         filled.length
           ? `Filled in ${filled.join(", ")} — straight-line distances, check them over.`
@@ -302,6 +314,8 @@ export function BuildingForm({
         address: form.address,
         postal_code: form.postalCode || null,
         city: form.city,
+        latitude: form.latitude ? Number(form.latitude) : null,
+        longitude: form.longitude ? Number(form.longitude) : null,
         neighbourhood_id: form.neighbourhoodId || null,
         submarket: form.submarket || null,
         building_type: form.buildingType || null,
@@ -609,7 +623,9 @@ export function BuildingForm({
         <p className="mb-4 text-sm text-muted">Auto-filled once the address is confirmed — edit any field to override.</p>
 
         <div className="mb-4">
-          <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-accent">Highway access</div>
+          <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-accent">
+            <Car size={13} /> Highway access
+          </div>
           <input
             value={form.accessibilityNote}
             onChange={(e) => update("accessibilityNote", e.target.value)}
@@ -618,7 +634,9 @@ export function BuildingForm({
           />
         </div>
         <div className="mb-4">
-          <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-accent">Airport access</div>
+          <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-accent">
+            <Plane size={13} /> Airport access
+          </div>
           <input
             value={form.airportNote}
             onChange={(e) => update("airportNote", e.target.value)}
@@ -627,7 +645,9 @@ export function BuildingForm({
           />
         </div>
         <div className="mb-1">
-          <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-accent">Public transport</div>
+          <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-accent">
+            <Train size={13} /> Public transport
+          </div>
           <div className="flex gap-2">
             <input
               value={form.publicTransportNote}
@@ -657,6 +677,22 @@ export function BuildingForm({
           </Button>
           {locateNote && <span className="text-xs text-accent">{locateNote}</span>}
         </div>
+
+        {(form.address.trim() || (form.latitude && form.longitude)) && (
+          <div className="mt-5 overflow-hidden rounded-xl border border-border">
+            <iframe
+              title="Building location"
+              className="h-64 w-full"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              src={`https://www.google.com/maps?q=${
+                form.latitude && form.longitude
+                  ? `${form.latitude},${form.longitude}`
+                  : encodeURIComponent([form.address, form.postalCode, form.city].filter(Boolean).join(", "))
+              }&z=16&output=embed`}
+            />
+          </div>
+        )}
       </Card>
 
       {!isEdit && clients.length > 0 && (

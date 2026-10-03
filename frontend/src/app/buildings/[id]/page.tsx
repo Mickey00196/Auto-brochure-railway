@@ -27,6 +27,8 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
     address: building.address ?? "",
     postalCode: building.postal_code ?? "",
     city: building.city ?? "",
+    latitude: building.latitude != null ? String(building.latitude) : "",
+    longitude: building.longitude != null ? String(building.longitude) : "",
     neighbourhoodId: building.neighbourhood_id ?? "",
     submarket: building.submarket ?? "",
     buildingType: building.building_type ?? "",

@@ -218,6 +218,8 @@ class PublicBuildingOut(BaseModel):
     address: str
     postal_code: str | None = None
     city: str
+    latitude: float | None = None
+    longitude: float | None = None
     submarket: str | None = None
     energy_label: str | None = None
     description: str | None = None

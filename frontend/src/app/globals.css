@@ -62,3 +62,108 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
+
+/* Numbered brand pins for the public shortlist's locations map — see
+   ShortlistMap.tsx, which sets these classes on Leaflet divIcons/popups. */
+.shortlist-pin {
+  background: transparent;
+  border: none;
+}
+.shortlist-pin span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font-size: 12px;
+  font-weight: 700;
+  border: 2px solid var(--surface);
+  box-shadow: 0 6px 16px -6px rgb(15 30 61 / 0.45);
+  transition: transform 150ms ease;
+}
+.shortlist-pin--active span {
+  transform: scale(1.25);
+}
+.shortlist-popup {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--foreground);
+}
+.shortlist-popup a {
+  color: var(--accent);
+  font-weight: 600;
+}
+.leaflet-container {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Placeholder art for a brochure building with no captured photo yet. */
+.brochure-image {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: color-mix(in oklab, var(--accent) 22%, var(--surface));
+}
+.brochure-image::before {
+  content: "";
+  position: absolute;
+  width: 55%;
+  height: 85%;
+  right: 9%;
+  bottom: -12%;
+  background: color-mix(in oklab, var(--accent) 10%, var(--surface));
+  transform: skewY(-5deg);
+  box-shadow: -34px 0 0 color-mix(in oklab, var(--accent) 38%, var(--surface));
+}
+.brochure-image--two {
+  background: color-mix(in oklab, #1e7a3b 24%, var(--surface));
+}
+.brochure-image--two::before {
+  box-shadow: -34px 0 0 color-mix(in oklab, #1e7a3b 40%, var(--surface));
+}
+.brochure-image--three {
+  background: color-mix(in oklab, #8a5a16 24%, var(--surface));
+}
+.brochure-image--three::before {
+  box-shadow: -34px 0 0 color-mix(in oklab, #8a5a16 40%, var(--surface));
+}
+
+/* Print support for the public shortlist page (window.print()). */
+@media print {
+  .print-hidden {
+    display: none !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+  body,
+  main {
+    background: #fff !important;
+  }
+  .print-hero {
+    background: #fff !important;
+    color: var(--foreground) !important;
+    min-height: auto !important;
+  }
+  .print-hero * {
+    color: var(--foreground) !important;
+    border-color: var(--border) !important;
+  }
+  .print-hero .grid {
+    min-height: auto !important;
+  }
+  .print-page {
+    break-before: page;
+  }
+  .leaflet-control-zoom,
+  .leaflet-control-attribution {
+    display: none !important;
+  }
+  a {
+    text-decoration: none;
+  }
+}
