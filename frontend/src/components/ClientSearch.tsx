@@ -21,6 +21,19 @@ function norm(s: string): string {
   return s.trim().toLowerCase();
 }
 
+function LivePill({ live }: { live: boolean }) {
+  return live ? (
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-success-bg px-2.5 py-1 text-[11px] font-medium text-success-foreground">
+      <span className="h-1.5 w-1.5 rounded-full bg-success-foreground" />
+      Live
+    </span>
+  ) : (
+    <span className="shrink-0 rounded-full bg-input-bg px-2.5 py-1 text-[11px] font-medium text-muted">
+      Not shared yet
+    </span>
+  );
+}
+
 /** The home page's single primary interaction: type a client's name to jump
  * straight to their folder, or — if nothing matches — create them on the
  * spot. Replaces a separate "browse recent clients" list and a separate
@@ -84,6 +97,15 @@ export function ClientSearch({ clients }: { clients: Client[] }) {
         </div>
       </form>
 
+      <div className="mt-4 flex justify-center">
+        <Link
+          href="/clients/new"
+          className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-5 py-2.5 text-sm font-semibold text-dark shadow-sm transition hover:border-accent"
+        >
+          + New client
+        </Link>
+      </div>
+
       {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
 
       {query.trim() && !exactMatch && (
@@ -104,12 +126,12 @@ export function ClientSearch({ clients }: { clients: Client[] }) {
 
       <div className="mt-8">
         <div className="flex items-center justify-between gap-3 border-b border-border pb-3">
-          <h2 className="text-sm font-semibold text-muted">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
             {q ? `${matches.length} match${matches.length === 1 ? "" : "es"}` : "Recent clients"}
           </h2>
-          {clients.length > 4 && !q && (
-            <Link href="/clients" className="text-xs font-semibold text-accent hover:underline">
-              View all →
+          {!q && (
+            <Link href="/clients/new" className="text-xs font-semibold text-accent hover:underline">
+              + New client
             </Link>
           )}
         </div>
@@ -138,9 +160,7 @@ export function ClientSearch({ clients }: { clients: Client[] }) {
                         </p>
                       </div>
                     </div>
-                    <span className="shrink-0 text-muted transition group-hover:text-accent" aria-hidden="true">
-                      →
-                    </span>
+                    <LivePill live={c.is_live} />
                   </div>
                   <p className="mt-5 text-[11px] text-muted">
                     Updated {new Date(c.updated_at).toLocaleDateString()}

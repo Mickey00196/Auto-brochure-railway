@@ -68,11 +68,25 @@ export default async function ClientsPage() {
                 <p className="mt-2 text-xs text-muted">No contact set</p>
               )}
 
-              <div className="mt-auto flex items-center justify-between gap-3 border-t border-border pt-3.5 text-xs">
-                <span className="text-muted">Updated {new Date(c.updated_at).toLocaleDateString()}</span>
-                <span className="inline-flex items-center gap-1 font-semibold text-accent">
-                  Open client →
-                </span>
+              <div className="mt-auto pt-3.5">
+                <div
+                  className={`flex min-h-[20px] items-center gap-1.5 border-t border-border pt-3 text-[11px] ${
+                    c.is_live ? "text-success-foreground" : "text-muted"
+                  }`}
+                >
+                  {c.is_live ? (
+                    <>
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success-foreground" />
+                      <span className="truncate">Live — anyone with the link can view</span>
+                    </>
+                  ) : (
+                    <span>Not shared yet</span>
+                  )}
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3 text-xs">
+                  <span className="text-muted">Updated {new Date(c.updated_at).toLocaleDateString()}</span>
+                  <span className="inline-flex items-center gap-1 font-semibold text-accent">Open client →</span>
+                </div>
               </div>
             </Card>
           </Link>
