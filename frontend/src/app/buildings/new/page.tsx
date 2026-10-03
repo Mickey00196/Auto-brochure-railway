@@ -73,6 +73,12 @@ export default async function NewBuildingPage({
       .filter(Boolean);
   }
 
+  // Nothing came in via query params — a blank form, not a capture handoff.
+  // This is exactly the moment someone's about to type a whole listing in by
+  // hand, so it's the right place to point at the faster, no-install way to
+  // grab it straight off the page instead.
+  const isBlankForm = !initial.name && !initial.address;
+
   return (
     <div>
       <header className="mb-8 flex flex-col justify-between gap-5 border-b border-border pb-8 sm:flex-row sm:items-end">
@@ -90,6 +96,22 @@ export default async function NewBuildingPage({
           Back to building library →
         </Link>
       </header>
+
+      {isBlankForm && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent/25 bg-accent/5 px-4 py-3 sm:px-5">
+          <p className="text-sm">
+            <strong>Looking at a listing right now?</strong> Skip typing it in — the bookmarklet reads it straight
+            off the page and pre-fills this form, no extension install needed.
+          </p>
+          <Link
+            href="/import#bookmarklet"
+            className="shrink-0 text-xs font-semibold text-accent hover:underline"
+          >
+            Set up the bookmarklet →
+          </Link>
+        </div>
+      )}
+
       <BuildingForm neighbourhoods={neighbourhoods} clients={clients} initial={initial} />
     </div>
   );

@@ -13,13 +13,15 @@ export default function ImportPage() {
       />
       <IngestionPanel />
 
-      <PageHeader
-        eyebrow="One-click capture (no install)"
-        title="Bookmarklet"
-        description="For a listing you're viewing in your own browser — a no-install alternative to the Chrome extension, useful when developer mode is disabled by IT."
-        showHomeLink={false}
-      />
-      <ListingBookmarklet />
+      <div id="bookmarklet" className="scroll-mt-10">
+        <PageHeader
+          eyebrow="One-click capture (no install)"
+          title="Bookmarklet"
+          description="For a listing you're viewing in your own browser — a no-install alternative to the Chrome extension, useful when developer mode is disabled by IT."
+          showHomeLink={false}
+        />
+        <ListingBookmarklet />
+      </div>
 
       <PageHeader
         eyebrow="Manual (single URLs)"
