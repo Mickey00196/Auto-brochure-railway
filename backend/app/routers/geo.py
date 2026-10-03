@@ -1,0 +1,68 @@
+"""Derive a building's transport distances from its address (§ services/geo).
+
+Kept stateless: it returns suggestions for the form to fill in, so the broker
+sees and can correct them before anything is saved. Nothing here writes to a
+Building.
+"""
+from __future__ import annotations
+
+from typing import Literal
+
+from fastapi import APIRouter
+from pydantic import BaseModel
+
+from app.services.geo import distances_for_address
+
+router = APIRouter(prefix="/geo", tags=["geo"])
+
+TransportMode = Literal["nearest_any", "train", "subway", "tram", "bus"]
+
+
+class DistanceRequest(BaseModel):
+    address: str = ""
+    city: str | None = None
+    postal_code: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    country: str | None = "Netherlands"
+    # Which kind of public-transport stop to look for — "nearest_any" (the
+    # default) preserves the original, untyped-nearest-station behaviour.
+    transport_mode: TransportMode = "nearest_any"
+
+
+class DistanceResponse(BaseModel):
+    latitude: float | None = None
+    longitude: float | None = None
+    public_transport: str | None = None
+    highway: str | None = None
+    airport: str | None = None
+    # Point-to-polyline distance to the nearest motorway (motorway/
+    # motorway_link) road — a separate, more precise measurement from
+    # `highway` above (nearest motorway_junction node); see services/geo.py's
+    # module docstring.
+    distance_to_highway_km: float | None = None
+    nearest_highway_name: str | None = None
+    found: bool = False
+
+
+@router.post("/distances", response_model=DistanceResponse)
+def distances(payload: DistanceRequest) -> DistanceResponse:
+    d = distances_for_address(
+        payload.address,
+        payload.city,
+        payload.postal_code,
+        payload.latitude,
+        payload.longitude,
+        payload.country,
+        payload.transport_mode,
+    )
+    return DistanceResponse(
+        latitude=d.latitude,
+        longitude=d.longitude,
+        public_transport=d.public_transport,
+        highway=d.highway,
+        airport=d.airport,
+        distance_to_highway_km=d.distance_to_highway_km,
+        nearest_highway_name=d.nearest_highway_name,
+        found=any([d.public_transport, d.highway, d.airport, d.nearest_highway_name]),
+    )

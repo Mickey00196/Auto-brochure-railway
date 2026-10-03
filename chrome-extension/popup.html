@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --navy: #0f2557;
+        --blue: #1d4ed8;
+        --ink: #0f1e3d;
+        --muted: #64748b;
+        --border: #e2e8f4;
+        --page: #f4f6fb;
+        --input-bg: #eef2fa;
+        --success-bg: #e7f5ec;
+        --success-ink: #1e7a3b;
+        --warn-bg: #fbefe3;
+        --warn-ink: #8a5a16;
+        --err-bg: #fbe9e9;
+        --err-ink: #b91c1c;
+      }
+      * { box-sizing: border-box; }
+      body {
+        width: 340px;
+        margin: 0;
+        padding: 0;
+        font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: var(--page);
+      }
+
+      /* ---- header ------------------------------------------------------- */
+      header {
+        display: flex; align-items: center; gap: 10px;
+        padding: 14px 16px; background: var(--navy); color: #fff;
+      }
+      .icon-box {
+        display: flex; align-items: center; justify-content: center;
+        width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
+        background: rgba(255, 255, 255, 0.12);
+      }
+      .icon-box img { display: block; border-radius: 5px; }
+      .eyebrow {
+        font-size: 9.5px; font-weight: 650; letter-spacing: 0.09em; text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.6); margin: 0 0 1px;
+      }
+      h1 { font-size: 14px; margin: 0; font-weight: 650; letter-spacing: 0.1px; line-height: 1.2; }
+
+      /* ---- body ----------------------------------------------------------*/
+      main { padding: 16px; }
+      p.sub { margin: 0 0 14px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+
+      button {
+        width: 100%; padding: 10px; border: 0; border-radius: 999px;
+        background: var(--navy); color: #fff; font-weight: 650; font-size: 12.5px;
+        cursor: pointer; transition: opacity .15s;
+        display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      }
+      button:hover:not(:disabled) { opacity: .9; }
+      button:disabled { opacity: .5; cursor: default; }
+      button.secondary {
+        background: #fff; color: var(--ink); border: 1px solid var(--border);
+        font-weight: 600; padding: 8px; width: auto;
+      }
+
+      /* ---- status banner --------------------------------------------------
+         popup.js sets #status.className to "", "warn", "err" or "ok" and
+         writes plain textContent — the dot + banner chrome below are pure
+         CSS, no markup changes needed on the JS side. */
+      #status {
+        margin-top: 12px; padding: 10px 12px; border-radius: 10px;
+        font-size: 11.5px; font-weight: 500; line-height: 1.55;
+        overflow-wrap: anywhere;
+        background: var(--input-bg); color: var(--muted);
+        display: flex; align-items: flex-start; gap: 8px;
+      }
+      #status:empty { display: none; margin-top: 0; padding: 0; }
+      #status::before {
+        content: ""; width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0;
+        margin-top: 4px; background: currentColor;
+      }
+      #status.ok { background: var(--success-bg); color: var(--success-ink); }
+      #status.warn { background: var(--warn-bg); color: var(--warn-ink); }
+      #status.err { background: var(--err-bg); color: var(--err-ink); }
+
+      /* ---- extracted-fields preview ------------------------------------ */
+      #preview {
+        margin-top: 12px; font-size: 11px; background: #fff;
+        border: 1px solid var(--border); border-radius: 10px; padding: 2px 11px;
+      }
+      #preview:empty { display: none; }
+      #preview div {
+        display: grid; grid-template-columns: 43% 1fr; gap: 8px;
+        padding: 6px 0; border-bottom: 1px solid var(--border);
+      }
+      #preview div:last-child { border-bottom: 0; }
+      #preview .k { color: var(--muted); }
+      #preview .v { font-weight: 600; text-align: right; }
+
+      /* ---- settings disclosure ------------------------------------------
+         Native <details>/<summary> — no JS, just CSS for the chevron flip
+         and to hide the default marker in favor of our own. */
+      details { margin-top: 14px; border-top: 1px solid var(--border); }
+      summary {
+        cursor: pointer; color: var(--ink); font-size: 12px; font-weight: 650;
+        list-style: none; padding: 11px 0;
+        display: flex; align-items: center; justify-content: space-between;
+      }
+      summary::-webkit-details-marker { display: none; }
+      summary .label { display: inline-flex; align-items: center; gap: 7px; }
+      summary .chevron { color: var(--muted); transition: transform .15s; }
+      details[open] summary .chevron { transform: rotate(180deg); }
+      details[open] summary { padding-bottom: 6px; }
+
+      label { display: block; font-weight: 600; margin: 10px 0 4px; font-size: 11.5px; }
+      input {
+        width: 100%; padding: 8px 9px; border: 1px solid transparent;
+        border-radius: 9px; font-size: 12px; margin-bottom: 8px;
+        background: var(--input-bg); color: var(--ink); outline: none;
+      }
+      input:focus { border-color: var(--blue); background: #fff; }
+      .hint { color: var(--muted); font-size: 11px; margin: 6px 0 12px; line-height: 1.5; }
+      a { color: var(--blue); font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="icon-box">
+        <img src="icons/icon32.png" alt="" width="20" height="20" />
+      </div>
+      <div>
+        <p class="eyebrow">Office Shortlist</p>
+        <h1>Listing Capture</h1>
+      </div>
+    </header>
+
+    <main>
+      <p class="sub">Open a listing you're viewing, then capture it. Reads the open page only.</p>
+
+      <button id="capture">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M8 1.5 9.4 5.9 13.7 7.3 9.4 8.7 8 13.1 6.6 8.7 2.3 7.3 6.6 5.9 8 1.5Z" fill="currentColor" />
+        </svg>
+        Capture this listing
+      </button>
+
+      <div id="status"></div>
+      <div id="preview"></div>
+
+      <details id="settings">
+        <summary>
+          <span class="label">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="color: var(--muted)">
+              <circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.3" />
+              <path d="M8 1.8v1.6M8 12.6v1.6M14.2 8h-1.6M3.4 8H1.8M12.3 3.7l-1.1 1.1M4.8 11.1l-1.1 1.1M12.3 12.3l-1.1-1.1M4.8 4.9 3.7 3.8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+            </svg>
+            Settings
+          </span>
+          <svg class="chevron" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </summary>
+        <label for="app-url">Your Proposal Engine address</label>
+        <input id="app-url" type="url" spellcheck="false" placeholder="https://your-app.up.railway.app" />
+        <button id="save" class="secondary">Save address</button>
+        <p class="hint">
+          Where the capture is sent. Change this only if your app moved — if captures open a
+          &ldquo;site can&rsquo;t be reached&rdquo; page, this address is wrong.
+        </p>
+      </details>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
