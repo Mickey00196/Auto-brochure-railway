@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import (
     DeliveryCondition,
@@ -186,12 +186,47 @@ class ClientOut(ClientBase):
     client_id: str
     display_name: str
     building_count: int
+    # Raw is_live can be NULL on a row added before this feature existed
+    # (see models/client.py) — coerce to a plain bool so the frontend never
+    # has to special-case None.
+    is_live: bool
+    public_slug: str | None = None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("is_live", mode="before")
+    @classmethod
+    def _coerce_is_live(cls, v: object) -> bool:
+        return bool(v)
 
 
 class CopyToClientRequest(BaseModel):
     client_id: str
+
+
+class SetClientLiveRequest(BaseModel):
+    enable: bool
+
+
+# ─────────────────────────────────────── Public share link ───────────────────────────────────────
+
+
+class PublicBuildingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    building_id: str
+    name: str
+    address: str
+    city: str
+    submarket: str | None = None
+    building_amenities: list[str] = Field(default_factory=list)
+    photos: list[str] = Field(default_factory=list)
+    units: list["UnitOut"] = Field(default_factory=list)
+
+
+class PublicClientOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    display_name: str
+    buildings: list[PublicBuildingOut] = Field(default_factory=list)
 
 
 # ─────────────────────────────────────────── Selection ───────────────────────────────────────────
@@ -267,6 +302,7 @@ class ProposalWithUnits(ProposalOut):
 BuildingWithUnits.model_rebuild()
 UnitWithBuilding.model_rebuild()
 ProposalWithUnits.model_rebuild()
+PublicBuildingOut.model_rebuild()
 
 
 class LoginRequest(BaseModel):

@@ -81,6 +81,8 @@ export function makeApi(request: DoRequest) {
     updateClient: (id: string, payload: Partial<Client>) =>
       request<Client>(`/clients/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
     deleteClient: (id: string) => request<void>(`/clients/${id}`, { method: "DELETE" }),
+    setClientLive: (id: string, enable: boolean) =>
+      request<Client>(`/clients/${id}/live`, { method: "POST", body: JSON.stringify({ enable }) }),
 
     match: (criteria: Record<string, unknown>) =>
       request<MatchResult[]>("/match", { method: "POST", body: JSON.stringify(criteria) }),

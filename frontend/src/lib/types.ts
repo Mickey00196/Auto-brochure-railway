@@ -107,8 +107,26 @@ export interface Client {
   search_brief: Record<string, unknown> | null;
   display_name: string;
   building_count: number;
+  is_live: boolean;
+  public_slug: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface PublicBuilding {
+  building_id: string;
+  name: string;
+  address: string;
+  city: string;
+  submarket: string | null;
+  building_amenities: string[];
+  photos: string[];
+  units: Unit[];
+}
+
+export interface PublicClient {
+  display_name: string;
+  buildings: PublicBuilding[];
 }
 
 export interface DashboardData {

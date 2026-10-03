@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -34,6 +34,14 @@ class Client(Base):
     # feeds §12 Property Matching: location, budget, size, must-haves
     search_brief: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
+    # The client's shareable read-only link (POST /clients/{id}/live). Both
+    # columns must be nullable — see database._add_missing_columns, which can
+    # only ALTER ADD a nullable column onto a database that already has this
+    # table. A row added before this feature existed reads as "not live" via
+    # the `live` property below, not as broken.
+    is_live: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    public_slug: Mapped[str | None] = mapped_column(String, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)
@@ -55,3 +63,7 @@ class Client(Base):
     @property
     def building_count(self) -> int:
         return len(self.buildings)
+
+    @property
+    def live(self) -> bool:
+        return bool(self.is_live)

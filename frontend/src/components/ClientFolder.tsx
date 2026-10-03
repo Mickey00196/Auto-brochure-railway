@@ -8,12 +8,14 @@ import { Button, Card } from "@/components/ui";
 import { BuildingCard } from "@/components/BuildingCard";
 import { RemoveFromFolderButton } from "@/components/RemoveFromFolderButton";
 import { AddFromLibraryModal } from "@/components/AddFromLibraryModal";
+import { LiveLinkPanel } from "@/components/LiveLinkPanel";
 
 /** A client's folder: only buildings explicitly copied in from the shared
  * library, never the library itself. Reuses the same BuildingCard as the
  * library page, swapping its checkbox for a "Remove from folder" action. */
-export function ClientFolder({ client, buildings: initial }: { client: Client; buildings: Building[] }) {
+export function ClientFolder({ client: initialClient, buildings: initial }: { client: Client; buildings: Building[] }) {
   const router = useRouter();
+  const [client, setClient] = useState(initialClient);
   const [buildings, setBuildings] = useState<Building[]>(initial);
   const [modalOpen, setModalOpen] = useState(false);
   const [preparedBy, setPreparedBy] = useState("");
@@ -55,6 +57,9 @@ export function ClientFolder({ client, buildings: initial }: { client: Client; b
   if (buildings.length === 0) {
     return (
       <>
+        <div className="mb-6">
+          <LiveLinkPanel client={client} onUpdated={setClient} />
+        </div>
         <Card>
           <h2 className="text-lg font-semibold">No buildings added yet</h2>
           <p className="mt-1 text-sm text-muted">
@@ -79,6 +84,10 @@ export function ClientFolder({ client, buildings: initial }: { client: Client; b
 
   return (
     <div className="pb-64 sm:pb-40">
+      <div className="mb-6">
+        <LiveLinkPanel client={client} onUpdated={setClient} />
+      </div>
+
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <div className="flex items-center gap-3">
           <h2 className="text-xl font-semibold">Buildings for this client</h2>

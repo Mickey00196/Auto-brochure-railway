@@ -20,12 +20,15 @@ function isTokenLikelyValid(token: string | undefined): boolean {
 }
 
 const PUBLIC_PATHS = new Set(["/login", "/api/login", "/signup", "/api/signup"]);
+// A client's shareable live link — the one page a visitor with no account
+// at all is meant to open. See /s/[slug]/page.tsx and POST /clients/{id}/live.
+const PUBLIC_PATH_PREFIXES = ["/s/"];
 
 export function proxy(request: NextRequest) {
   const token = request.cookies.get("session")?.value;
   const isLoggedIn = isTokenLikelyValid(token);
   const pathname = request.nextUrl.pathname;
-  const isPublicPath = PUBLIC_PATHS.has(pathname);
+  const isPublicPath = PUBLIC_PATHS.has(pathname) || PUBLIC_PATH_PREFIXES.some((p) => pathname.startsWith(p));
 
   if (!isLoggedIn && !isPublicPath) {
     const loginUrl = new URL("/login", request.url);

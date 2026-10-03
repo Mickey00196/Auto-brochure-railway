@@ -17,6 +17,7 @@ from app.models.enums import UserRole
 from app.models.user import User
 from app.routers import all_routers
 from app.routers import auth as auth_router
+from app.routers import public as public_router
 
 # Comma-separated list of allowed browser origins. The frontend normally talks
 # to this API server-to-server (see internalApiBaseUrl.ts), so this only
@@ -83,6 +84,10 @@ app.add_middleware(
 # /auth/login is the one endpoint that must work with no token yet; everything
 # else requires a logged-in user (no per-route scoping — see app/auth.py).
 app.include_router(auth_router.router)
+# A client's shareable live link (GET /public/clients/{slug}) is the one
+# other deliberately-public surface: whoever has the link has no account and
+# never logs in — see app/routers/public.py.
+app.include_router(public_router.router)
 
 for router in all_routers:
     app.include_router(router, dependencies=[Depends(get_current_user)])
