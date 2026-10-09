@@ -224,6 +224,15 @@ class SetClientLiveRequest(BaseModel):
 # ─────────────────────────────────────── Public share link ───────────────────────────────────────
 
 
+class PublicAddOnOut(BaseModel):
+    """An add-on as a link recipient sees it — just what it is and costs."""
+
+    model_config = ConfigDict(from_attributes=True)
+    name: str
+    price: float
+    price_unit: str
+
+
 class PublicBuildingOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     building_id: str
@@ -235,6 +244,9 @@ class PublicBuildingOut(BaseModel):
     longitude: float | None = None
     submarket: str | None = None
     energy_label: str | None = None
+    year_built: int | None = None
+    total_building_area_m2: float | None = None
+    breeam_rating: str | None = None
     description: str | None = None
     accessibility_note: str | None = None
     airport_note: str | None = None
@@ -242,6 +254,9 @@ class PublicBuildingOut(BaseModel):
     building_amenities: list[str] = Field(default_factory=list)
     photos: list[str] = Field(default_factory=list)
     units: list["UnitOut"] = Field(default_factory=list)
+    # Parking and other priced extras, so the client sees the parking price
+    # next to the rent.
+    addons: list[PublicAddOnOut] = Field(default_factory=list)
 
 
 class PublicClientOut(BaseModel):

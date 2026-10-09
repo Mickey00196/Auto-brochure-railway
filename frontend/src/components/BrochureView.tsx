@@ -5,6 +5,9 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PublicBuilding, PublicClient, Unit } from "@/lib/types";
 import { formatArea, formatPriceParts, isFlexOnly, rentParts, serviceChargeParts, type PricePart } from "@/lib/format";
+import { floorRank } from "@/lib/floors";
+import { energyColor } from "@/lib/energy";
+import { splitDistance } from "@/lib/distance";
 import type { MapBuilding } from "./ShortlistMap";
 
 const ShortlistMap = dynamic(() => import("./ShortlistMap"), {
@@ -22,6 +25,9 @@ type Brochure = {
   area: string;
   city: string;
   available: string;
+  /** { amount: "581", per: "m²" } for the key-figure strip. */
+  availableParts: PricePart[];
+  totalAvailable: number;
   divisibleFrom: string;
   rent: PricePart[];
   rentText: string;
@@ -31,6 +37,13 @@ type Brochure = {
   energy: string;
   availability: string;
   parking: string;
+  parkingPrice: PricePart[];
+  parkingPriceText: string;
+  yearBuilt: string;
+  buildingArea: string;
+  breeam: string;
+  /** The spaces as a building section, top floor first. */
+  floors: { key: string; label: string; area: string; note: string }[];
   amenities: string[];
   description: string;
   highway: string;
@@ -63,6 +76,33 @@ function toBrochure(b: PublicBuilding, i: number): Brochure {
   const delivery = units.find((u) => u.delivery_condition)?.delivery_condition ?? null;
   const rent = rentParts(units);
   const service = serviceChargeParts(units);
+  const parkingAddOn = (b.addons ?? []).find((a) => /parking|parkeer/i.test(a.name));
+  const parkingPrice: PricePart[] = parkingAddOn
+    ? [
+        {
+          amount: `€${fmt(parkingAddOn.price)}`,
+          per: /month|maand/i.test(parkingAddOn.price_unit)
+            ? "/space/mo"
+            : /year|jaar/i.test(parkingAddOn.price_unit)
+              ? "/space/yr"
+              : `/${parkingAddOn.price_unit.replace(/^EUR\s*\/\s*/i, "").replace(/\s+/g, "")}`,
+        },
+      ]
+    : [];
+  const floors = [...units]
+    .map((u, n) => ({ u, n }))
+    .sort((x, y) => floorRank(y.u.floor ?? "") - floorRank(x.u.floor ?? ""))
+    .map(({ u, n }) => ({
+      key: u.unit_id,
+      label: u.floor || `Space ${n + 1}`,
+      area: fmt(u.available_area_m2 ?? 0),
+      note: [
+        u.availability && !/^(tbd|n\/?a)$/i.test(u.availability.trim()) ? u.availability : null,
+        deliveryLabels[u.delivery_condition] ?? null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    }));
   return {
     id: `b-${b.building_id}`,
     number: pad(i + 1),
@@ -71,6 +111,8 @@ function toBrochure(b: PublicBuilding, i: number): Brochure {
     area: [b.submarket, b.city].filter(Boolean).join(", "),
     city: b.city || "",
     available: totalAvailable > 0 ? formatArea(totalAvailable) : "On request",
+    availableParts: totalAvailable > 0 ? [{ amount: fmt(totalAvailable), per: "m²" }] : [],
+    totalAvailable,
     divisibleFrom: divisible.length ? `${fmt(Math.min(...divisible))} m²` : "—",
     rent,
     rentText: rent.length ? formatPriceParts(rent) : "On request",
@@ -82,6 +124,12 @@ function toBrochure(b: PublicBuilding, i: number): Brochure {
     energy: b.energy_label || "—",
     availability: units.find((u) => u.availability)?.availability || "—",
     parking: units.find((u) => u.parking_ratio)?.parking_ratio || "—",
+    parkingPrice,
+    parkingPriceText: parkingAddOn ? formatPriceParts(parkingPrice) : "On request",
+    yearBuilt: b.year_built ? String(b.year_built) : "—",
+    buildingArea: b.total_building_area_m2 ? `${fmt(b.total_building_area_m2)} m²` : "—",
+    breeam: b.breeam_rating || "—",
+    floors,
     amenities: b.building_amenities ?? [],
     description: b.description || "",
     highway: b.accessibility_note || "—",
@@ -345,14 +393,15 @@ export function BrochureView({ client }: { client: PublicClient }) {
                 <tbody>
                   {(
                     [
-                      ["Available area", (b: Brochure) => b.available],
-                      ["Divisible from", (b: Brochure) => b.divisibleFrom],
                       ["Rent", (b: Brochure) => <PriceStack parts={b.rent} fallback={b.rentText} />],
-                      ["Service charge", (b: Brochure) => <PriceStack parts={b.service} fallback={b.serviceText} />],
-                      ["Delivery condition", (b: Brochure) => b.delivery],
+                      ["Service charges", (b: Brochure) => <PriceStack parts={b.service} fallback={b.serviceText} />],
+                      ["Available", (b: Brochure) => b.available],
+                      ["Parking ratio", (b: Brochure) => b.parking],
+                      ["Parking", (b: Brochure) => <PriceStack parts={b.parkingPrice} fallback={b.parkingPriceText} />],
+                      ["Rentable from", (b: Brochure) => b.divisibleFrom],
+                      ["Delivery", (b: Brochure) => b.delivery],
                       ["Energy label", (b: Brochure) => b.energy],
-                      ["Availability", (b: Brochure) => b.availability],
-                      ["Parking", (b: Brochure) => b.parking],
+                      ["Available from", (b: Brochure) => b.availability],
                     ] as [string, (b: Brochure) => React.ReactNode][]
                   ).map(([label, get]) => (
                     <tr key={label} className="border-b border-border">
@@ -481,7 +530,10 @@ function PriceStack({ parts, fallback, large = false }: { parts: PricePart[]; fa
     <span className="flex flex-col gap-0.5">
       {parts.map((p) => (
         <span key={p.per} className="whitespace-nowrap print:whitespace-normal">
-          {p.amount}
+          {p.amount.startsWith("from ") && (
+            <span className={`mr-1 font-normal text-muted ${large ? "text-sm" : "text-xs"}`}>from</span>
+          )}
+          {p.amount.replace(/^from /, "")}
           <span className={`ml-0.5 font-normal text-muted ${large ? "text-sm sm:text-base" : "text-xs"}`}>{p.per}</span>
         </span>
       ))}
@@ -640,20 +692,60 @@ function BuildingSection({
   onOpenLightbox: (index: number) => void;
 }) {
   const leadRef = useReveal<HTMLDivElement>();
-  const connections = [
-    ["Highway", b.highway],
-    ["Airport", b.airport],
-    ["Public transport", b.transit],
-  ].filter((pair): pair is [string, string] => pair[1] !== "—");
+  const connections = (
+    [
+      ["Highway", b.highway],
+      ["Airport", b.airport],
+      ["Public transport", b.transit],
+    ] as [string, string][]
+  )
+    .filter(([, note]) => note !== "—")
+    .map(([label, note]) => ({ label, ...splitDistance(note) }));
   const morePhotos = b.photos.slice(1, 3);
 
-  const stats: [string, React.ReactNode][] = [
-    ["Available area", b.available],
-    ["Rent", <PriceStack key="rent" parts={b.rent} fallback={b.rentText} large />],
-    ["Service charge", <PriceStack key="service" parts={b.service} fallback={b.serviceText} large />],
-    ["Availability", b.availability],
-    ["Energy label", b.energy],
+  // The same five figures the broker compares on, in the same order.
+  // A missing figure ("On request", "—") is set smaller and muted, so it
+  // never outweighs the numbers next to it.
+  const quiet = (text: string) => <span className="text-lg font-normal text-muted sm:text-xl print:text-sm">{text}</span>;
+  const priced = (parts: PricePart[], fallback: string) =>
+    parts.length ? <PriceStack parts={parts} fallback={fallback} large /> : quiet(fallback);
+  const figures: [string, React.ReactNode][] = [
+    ["Rent", priced(b.rent, b.rentText)],
+    ["Service charges", priced(b.service, b.serviceText)],
+    ["Available", priced(b.availableParts, "On request")],
+    ["Parking ratio", b.parking === "—" ? quiet("—") : b.parking],
+    ["Parking", priced(b.parkingPrice, b.parkingPriceText)],
   ];
+  // Details a client asks about; anything not known is left out rather than
+  // shown as a dash.
+  const energy = energyColor(b.energy === "—" ? null : b.energy);
+  const details = (
+    [
+      ["Rentable from", b.divisibleFrom],
+      ["Delivery", b.delivery],
+      ["Available from", b.availability],
+      [
+        "Energy label",
+        b.energy === "—" ? "—" : (
+          <span className="inline-flex items-center gap-2">
+            <span
+              className="inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-md px-1 text-[11px] font-bold"
+              style={{ background: energy?.bg ?? "var(--input-bg)", color: energy?.fg ?? "var(--foreground)" }}
+            >
+              {b.energy}
+            </span>
+            {b.energy}
+          </span>
+        ),
+      ],
+      ["Year built", b.yearBuilt],
+      ["Total building area", b.buildingArea],
+      ["BREEAM", b.breeam],
+    ] as [string, React.ReactNode][]
+  ).filter(([, v]) => v !== "—");
+  const hasLeft = b.floors.length > 0 || details.length > 0;
+  const hasRight = Boolean(b.description) || b.amenities.length > 0 || connections.length > 0;
+  const capsLabel = "text-[11px] font-semibold uppercase tracking-[0.08em] text-muted print:text-[8px]";
 
   return (
     <section id={b.id} aria-labelledby={`${b.id}-name`} className="print-break scroll-mt-14 border-t border-border bg-surface">
@@ -693,60 +785,99 @@ function BuildingSection({
       )}
 
       <div className="brochure-pad mx-auto max-w-[1280px] px-5 pb-20 sm:px-8 sm:pb-28">
-        <dl className="print-keep grid grid-cols-2 gap-x-6 gap-y-8 border-b border-border py-10 sm:grid-cols-3 lg:grid-cols-5 print:grid-cols-5 print:gap-y-3 print:py-4">
-          {stats.map(([label, value]) => (
-            <div key={label}>
-              <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted print:text-[8px]">{label}</dt>
-              <dd
-                className={`mt-2 font-medium tabular-nums leading-tight print:mt-1 print:text-base ${
-                  // Free-text values ("Per direct / in overleg") would wrap
-                  // badly at the size that suits a figure like "581 m²".
-                  typeof value === "string" && value.length > 14 ? "text-lg sm:text-xl" : "text-2xl sm:text-[28px]"
-                }`}
-              >
+        <dl className="print-keep grid grid-cols-2 gap-y-8 border-b border-border py-8 sm:grid-cols-3 sm:py-10 lg:grid-cols-5 print:grid-cols-5 print:gap-y-3 print:py-4">
+          {figures.map(([label, value], i) => (
+            <div key={label} className={`min-w-0 pr-4 ${i > 0 ? "lg:border-l lg:border-border lg:pl-7 print:border-l print:border-border print:pl-3" : ""}`}>
+              <dt className={capsLabel}>{label}</dt>
+              <dd className="mt-2.5 text-2xl font-medium leading-tight tracking-[-0.02em] tabular-nums sm:text-[32px] print:mt-1 print:text-base">
                 {value}
               </dd>
             </div>
           ))}
         </dl>
 
-        {(b.description || b.amenities.length > 0 || connections.length > 0) && (
-          <div className="print-keep mt-12 grid gap-12 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:gap-20 print:mt-5 print:grid-cols-[1.4fr_1fr] print:gap-8">
-            <div>
-              {b.description && (
-                <p className="max-w-[62ch] text-lg leading-[1.7] text-foreground/90 sm:text-xl print:text-[12px]">
-                  {b.description}
-                </p>
+        {(hasLeft || hasRight) && (
+          <div className="print-keep mt-12 grid gap-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-[72px] print:mt-5 print:grid-cols-[1.15fr_1fr] print:gap-8">
+            <div className="min-w-0">
+              {b.floors.length > 0 && (
+                <div>
+                  <h3 className={capsLabel}>
+                    Available per floor
+                    {b.totalAvailable > 0 && (
+                      <span className="ml-2.5 font-medium normal-case tracking-normal">{fmt(b.totalAvailable)} m² in total</span>
+                    )}
+                  </h3>
+                  <div className="mt-3.5 flex flex-col gap-[5px] print:mt-2 print:gap-[3px]">
+                    {b.floors.map((f, pos) => {
+                      // Darkest at street level, a touch lighter for each floor up.
+                      const shade = Math.max(60, 100 - (b.floors.length - 1 - pos) * 14);
+                      return (
+                        <div
+                          key={f.key}
+                          className="flex min-h-[58px] items-center gap-3 rounded-lg px-5 py-2 text-white print:min-h-0 print:px-3 print:py-1.5"
+                          style={{ background: `color-mix(in srgb, var(--dark) ${shade}%, #5b6b8c)` }}
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[15px] font-semibold print:text-[11px]">{f.label}</span>
+                            {f.note && <span className="mt-px block truncate text-xs text-white/70 print:text-[9px]">{f.note}</span>}
+                          </span>
+                          <span className="text-2xl font-semibold tracking-[-0.02em] tabular-nums print:text-sm">{f.area}</span>
+                          <span className="text-[13px] text-white/75 print:text-[9px]">m²</span>
+                        </div>
+                      );
+                    })}
+                    <span className="mt-0.5 h-[3px] rounded-sm bg-foreground" aria-hidden="true" />
+                  </div>
+                </div>
               )}
-              {b.amenities.length > 0 && (
-                <ul
-                  aria-label="Amenities"
-                  className={`flex flex-wrap gap-2 print:gap-1 ${b.description ? "mt-8 print:mt-3" : ""}`}
-                >
-                  {b.amenities.map((a) => (
-                    <li key={a} className="rounded-full border border-border px-3.5 py-1.5 text-sm print:px-2 print:py-0.5 print:text-[10px]">
-                      {a}
-                    </li>
-                  ))}
-                </ul>
+              {details.length > 0 && (
+                <div className={b.floors.length > 0 ? "mt-10 print:mt-4" : ""}>
+                  <h3 className={capsLabel}>Details</h3>
+                  <dl className="mt-3.5 grid grid-cols-2 gap-x-8 print:mt-1.5">
+                    {details.map(([label, value]) => (
+                      <div key={label} className="border-t border-border py-3 print:py-1.5">
+                        <dt className="text-[13px] text-muted print:text-[9px]">{label}</dt>
+                        <dd className="mt-1 text-base font-medium print:text-[11px]">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
               )}
             </div>
-            {connections.length > 0 && (
-              <div>
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted print:text-[8px]">
-                  Getting there
-                </h3>
-                <dl className="mt-3 divide-y divide-border border-y border-border print:mt-1">
-                  {connections.map(([label, value]) => (
-                    <div
-                      key={label}
-                      className="flex items-baseline justify-between gap-4 py-3.5 text-[15px] print:py-1.5 print:text-[11px]"
-                    >
-                      <dt className="text-muted">{label}</dt>
-                      <dd className="text-right font-medium">{value}</dd>
-                    </div>
-                  ))}
-                </dl>
+            {hasRight && (
+              <div className="min-w-0">
+                {b.description && (
+                  <p className="max-w-[62ch] text-lg leading-[1.65] text-foreground/90 sm:text-xl print:text-[12px]">{b.description}</p>
+                )}
+                {b.amenities.length > 0 && (
+                  <div className={b.description ? "mt-9 print:mt-3" : ""}>
+                    <h3 className={capsLabel}>Amenities</h3>
+                    <ul aria-label="Amenities" className="mt-3.5 flex flex-wrap gap-2 print:mt-1.5 print:gap-1">
+                      {b.amenities.map((a) => (
+                        <li key={a} className="rounded-full border border-border px-3.5 py-1.5 text-sm print:px-2 print:py-0.5 print:text-[10px]">
+                          {a}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {connections.length > 0 && (
+                  <div className={b.description || b.amenities.length > 0 ? "mt-9 print:mt-3" : ""}>
+                    <h3 className={capsLabel}>Getting there</h3>
+                    <dl className="mt-3.5 border-b border-border print:mt-1.5">
+                      {connections.map((c) => (
+                        <div
+                          key={c.label}
+                          className="grid grid-cols-[120px_minmax(0,1fr)_auto] items-baseline gap-3 border-t border-border py-3.5 text-[15px] sm:grid-cols-[130px_minmax(0,1fr)_auto] print:grid-cols-[100px_1fr_auto] print:py-1.5 print:text-[11px]"
+                        >
+                          <dt className="text-muted">{c.label}</dt>
+                          <dd className="m-0 min-w-0">{c.place}</dd>
+                          <dd className="m-0 text-right font-semibold tabular-nums">{c.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                )}
               </div>
             )}
           </div>

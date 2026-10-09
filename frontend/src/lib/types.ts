@@ -136,6 +136,9 @@ export interface PublicBuilding {
   longitude: number | null;
   submarket: string | null;
   energy_label: string | null;
+  year_built?: number | null;
+  total_building_area_m2?: number | null;
+  breeam_rating?: string | null;
   description: string | null;
   accessibility_note: string | null;
   airport_note: string | null;
@@ -143,6 +146,8 @@ export interface PublicBuilding {
   building_amenities: string[];
   photos: string[];
   units: Unit[];
+  /** Priced extras (parking first of all) as the client sees them. */
+  addons?: { name: string; price: number; price_unit: string }[];
 }
 
 export interface PublicClient {
