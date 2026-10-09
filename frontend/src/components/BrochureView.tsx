@@ -253,15 +253,21 @@ export function BrochureView({ client }: { client: PublicClient }) {
   const countLabel = `${buildings.length} building${buildings.length === 1 ? "" : "s"}${
     allCities.length ? ` in ${listFormat.format(allCities)}` : ""
   }`;
-  const firstAnchor = buildings.length > 1 ? "glance" : buildings[0]?.id;
 
   const mapBuildings: MapBuilding[] = buildings.flatMap((b) => {
     const lat = b.lat ?? geo[b.id]?.lat ?? null;
     const lng = b.lng ?? geo[b.id]?.lng ?? null;
     return lat != null && lng != null
-      ? [{ id: b.id, number: b.number, name: b.name, address: b.address, available: b.available, city: b.city, lat, lng }]
+      ? [{ id: b.id, number: b.number, name: b.name, address: b.address, available: b.available, label: b.available, city: b.city, lat, lng }]
       : [];
   });
+  // The overview: where the offices are on the city map, then the side-by-
+  // side table. Shown whenever there is a map to draw or something to compare.
+  const hasOverview = buildings.length > 1 || mapBuildings.length > 0;
+  const firstAnchor = hasOverview ? "glance" : buildings[0]?.id;
+  const overviewLine = `Where the ${buildings.length === 1 ? "office is" : `${buildings.length} offices are`}${
+    allCities.length ? ` in ${listFormat.format(allCities)}` : ""
+  }`;
   const mapCities = [...new Set(mapBuildings.map((b) => b.city).filter(Boolean))];
   const lightboxBuilding = lightbox ? buildings.find((b) => b.id === lightbox.building) : undefined;
 
@@ -359,77 +365,14 @@ export function BrochureView({ client }: { client: PublicClient }) {
         </section>
       )}
 
-      {buildings.length > 1 && (
-        <section id="glance" aria-label="Side by side comparison" className="print-break scroll-mt-14 bg-surface">
-          <div className="brochure-pad mx-auto max-w-[1280px] px-5 py-16 sm:px-8 sm:py-24">
-            <h2 className="font-display text-[clamp(2.25rem,4.5vw,3.5rem)] leading-none">At a glance</h2>
-            <div className="mt-10 overflow-x-auto print:mt-6 print:overflow-visible">
-              <table className="w-full min-w-[640px] border-collapse text-[15px] print:min-w-0 print:text-[11px]">
-                <thead>
-                  <tr className="border-b border-foreground/80">
-                    <th
-                      scope="col"
-                      className="sticky left-0 z-10 w-28 bg-surface pb-4 pr-4 text-left align-top sm:w-44 sm:pr-6 print:w-24"
-                    >
-                      <span className="sr-only">Building</span>
-                    </th>
-                    {buildings.map((b) => (
-                      <th
-                        key={b.id}
-                        scope="col"
-                        className="min-w-44 pb-4 pr-6 text-left align-top font-normal print:min-w-0 print:pr-3"
-                      >
-                        <a href={`#${b.id}`} className="group block">
-                          <span className="block text-xs font-semibold tabular-nums text-accent">{b.number}</span>
-                          <span className="mt-1 block font-display text-2xl leading-tight group-hover:text-accent print:text-base">
-                            {b.name}
-                          </span>
-                          <span className="mt-1 block text-xs text-muted print:text-[9px]">{b.area}</span>
-                        </a>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(
-                    [
-                      ["Rent", (b: Brochure) => <PriceStack parts={b.rent} fallback={b.rentText} />],
-                      ["Service charges", (b: Brochure) => <PriceStack parts={b.service} fallback={b.serviceText} />],
-                      ["Available", (b: Brochure) => b.available],
-                      ["Parking ratio", (b: Brochure) => b.parking],
-                      ["Parking", (b: Brochure) => <PriceStack parts={b.parkingPrice} fallback={b.parkingPriceText} />],
-                      ["Rentable from", (b: Brochure) => b.divisibleFrom],
-                      ["Delivery", (b: Brochure) => b.delivery],
-                      ["Energy label", (b: Brochure) => b.energy],
-                      ["Available from", (b: Brochure) => b.availability],
-                    ] as [string, (b: Brochure) => React.ReactNode][]
-                  ).map(([label, get]) => (
-                    <tr key={label} className="border-b border-border">
-                      <th
-                        scope="row"
-                        className="sticky left-0 z-10 bg-surface py-4 pr-4 text-left align-top text-[11px] font-semibold uppercase tracking-[0.08em] text-muted sm:pr-6 print:py-2 print:text-[8px]"
-                      >
-                        {label}
-                      </th>
-                      {buildings.map((b) => (
-                        <td key={b.id} className="py-4 pr-6 align-top font-medium tabular-nums print:py-2 print:pr-3">
-                          {get(b)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {mapBuildings.length > 0 && (
-        <section aria-label="Locations" className="print-keep border-t border-border bg-background">
+      {hasOverview && (
+        <section id="glance" aria-label="Overview" className="print-break scroll-mt-14 bg-surface">
           <div className="brochure-pad mx-auto max-w-[1280px] px-5 py-16 sm:px-8 sm:py-24">
             <div className="flex flex-wrap items-end justify-between gap-4">
-              <h2 className="font-display text-[clamp(2.25rem,4.5vw,3.5rem)] leading-none">Locations</h2>
+              <div>
+                <h2 className="font-display text-[clamp(2.25rem,4.5vw,3.5rem)] leading-none">At a glance</h2>
+                {mapBuildings.length > 0 && <p className="mt-3 text-[15px] text-muted print:text-[11px]">{overviewLine}</p>}
+              </div>
               {mapCities.length > 1 && (
                 <div className="print-hidden flex flex-wrap gap-2">
                   {[null, ...mapCities].map((c) => (
@@ -448,35 +391,116 @@ export function BrochureView({ client }: { client: PublicClient }) {
                 </div>
               )}
             </div>
-            <div className="mt-10 grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] print:mt-5 print:grid-cols-1 print:gap-3">
-              <div className="h-[360px] overflow-hidden rounded-xl border border-border sm:h-[500px] print:h-[80mm]">
-                <ShortlistMap buildings={mapBuildings} city={cityFilter} hoveredId={hoveredId} />
+
+            {mapBuildings.length > 0 && (
+              <div className="print-keep mt-10 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-7 print:mt-5 print:grid-cols-[1fr_62mm] print:gap-4">
+                <div className="h-[380px] overflow-hidden rounded-2xl border border-border sm:h-[560px] print:h-[95mm]">
+                  <ShortlistMap buildings={mapBuildings} city={cityFilter} hoveredId={hoveredId} fitMaxZoom={13} muted />
+                </div>
+                <ol className="flex flex-col gap-0.5 print:gap-0">
+                  {mapBuildings.map((m) => {
+                    const b = buildings.find((x) => x.id === m.id);
+                    const active = hoveredId === m.id;
+                    return (
+                      <li key={m.id}>
+                        <a
+                          href={`#${m.id}`}
+                          onMouseEnter={() => setHoveredId(m.id)}
+                          onMouseLeave={() => setHoveredId(null)}
+                          onFocus={() => setHoveredId(m.id)}
+                          onBlur={() => setHoveredId(null)}
+                          className={`flex items-center gap-3.5 rounded-xl px-3.5 py-3 transition-colors print:gap-2 print:px-0 print:py-1 ${
+                            active ? "bg-input-bg" : "hover:bg-input-bg"
+                          }`}
+                        >
+                          <span
+                            className={`flex size-[30px] shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-bold tabular-nums text-white transition-transform print:size-5 print:text-[8px] ${
+                              active ? "scale-110" : ""
+                            }`}
+                          >
+                            {m.number}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-display text-[22px] leading-tight print:text-sm">{m.name}</span>
+                            {b?.area && <span className="mt-0.5 block truncate text-[13px] text-muted print:text-[9px]">{b.area}</span>}
+                          </span>
+                          <span className="shrink-0 text-right">
+                            <span className="block text-[15px] font-semibold tabular-nums print:text-[10px]">{m.available}</span>
+                            {b && b.rent.length > 0 && (
+                              <span className="mt-0.5 block text-xs text-muted print:text-[8px]">{formatPriceParts(b.rent)}</span>
+                            )}
+                          </span>
+                        </a>
+                      </li>
+                    );
+                  })}
+                </ol>
               </div>
-              <ol className="divide-y divide-border border-y border-border print:grid print:grid-cols-3 print:gap-x-4 print:divide-y-0 print:border-0">
-                {mapBuildings.map((b) => (
-                  <li key={b.id}>
-                    <a
-                      href={`#${b.id}`}
-                      onMouseEnter={() => setHoveredId(b.id)}
-                      onMouseLeave={() => setHoveredId(null)}
-                      onFocus={() => setHoveredId(b.id)}
-                      onBlur={() => setHoveredId(null)}
-                      className={`flex items-center gap-4 px-1 py-4 transition-colors print:gap-2 print:py-1.5 ${
-                        hoveredId === b.id ? "text-accent" : "hover:text-accent"
-                      }`}
-                    >
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-bold tabular-nums text-accent-foreground">
-                        {b.number}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate font-display text-xl leading-tight print:text-sm">{b.name}</span>
-                        <span className="block truncate text-xs text-muted">{b.available} available</span>
-                      </span>
-                    </a>
-                  </li>
-                ))}
-              </ol>
-            </div>
+            )}
+
+            {buildings.length > 1 && (
+              <div className={mapBuildings.length > 0 ? "mt-16 print:mt-6" : "mt-10 print:mt-6"}>
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted print:text-[8px]">Side by side</h3>
+              <div className="mt-3.5 overflow-x-auto print:mt-2 print:overflow-visible">
+                <table className="w-full min-w-[640px] border-collapse text-[15px] print:min-w-0 print:text-[11px]">
+                  <thead>
+                    <tr className="border-b border-foreground/80">
+                      <th
+                        scope="col"
+                        className="sticky left-0 z-10 w-28 bg-surface pb-4 pr-4 text-left align-top sm:w-44 sm:pr-6 print:w-24"
+                      >
+                        <span className="sr-only">Building</span>
+                      </th>
+                      {buildings.map((b) => (
+                        <th
+                          key={b.id}
+                          scope="col"
+                          className="min-w-44 pb-4 pr-6 text-left align-top font-normal print:min-w-0 print:pr-3"
+                        >
+                          <a href={`#${b.id}`} className="group block">
+                            <span className="block text-xs font-semibold tabular-nums text-accent">{b.number}</span>
+                            <span className="mt-1 block font-display text-2xl leading-tight group-hover:text-accent print:text-base">
+                              {b.name}
+                            </span>
+                            <span className="mt-1 block text-xs text-muted print:text-[9px]">{b.area}</span>
+                          </a>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(
+                      [
+                        ["Rent", (b: Brochure) => <PriceStack parts={b.rent} fallback={b.rentText} />],
+                        ["Service charges", (b: Brochure) => <PriceStack parts={b.service} fallback={b.serviceText} />],
+                        ["Available", (b: Brochure) => b.available],
+                        ["Parking ratio", (b: Brochure) => b.parking],
+                        ["Parking", (b: Brochure) => <PriceStack parts={b.parkingPrice} fallback={b.parkingPriceText} />],
+                        ["Rentable from", (b: Brochure) => b.divisibleFrom],
+                        ["Delivery", (b: Brochure) => b.delivery],
+                        ["Energy label", (b: Brochure) => b.energy],
+                        ["Available from", (b: Brochure) => b.availability],
+                      ] as [string, (b: Brochure) => React.ReactNode][]
+                    ).map(([label, get]) => (
+                      <tr key={label} className="border-b border-border">
+                        <th
+                          scope="row"
+                          className="sticky left-0 z-10 bg-surface py-4 pr-4 text-left align-top text-[11px] font-semibold uppercase tracking-[0.08em] text-muted sm:pr-6 print:py-2 print:text-[8px]"
+                        >
+                          {label}
+                        </th>
+                        {buildings.map((b) => (
+                          <td key={b.id} className="py-4 pr-6 align-top font-medium tabular-nums print:py-2 print:pr-3">
+                            {get(b)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              </div>
+            )}
           </div>
         </section>
       )}
