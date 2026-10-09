@@ -10,6 +10,8 @@ import { PhotoPicker } from "@/components/PhotoPicker";
 import { SUGGESTED_AMENITIES } from "@/components/AmenityMultiSelect";
 import { useUnsavedChangesWarning } from "@/lib/useUnsavedChangesWarning";
 import { floorLabel, floorRank, type CaptureFloor } from "@/lib/floors";
+import { ENERGY_OPTIONS, energyColor } from "@/lib/energy";
+import { splitDistance } from "@/lib/distance";
 
 /** The page the Chrome extension opens (/buildings/new): the captured listing
  * laid out like a listing page you can edit in place — photos, the five
@@ -75,17 +77,6 @@ const KEY_FIGURES: KeyFigure[] = [
   { key: "parkingPriceEurYear", label: "Rent parking space", short: "parking price", prefix: "€", unit: "/space/yr", placeholder: "1,750", numeric: true },
 ];
 
-const ENERGY_OPTIONS = ["A++++", "A+++", "A++", "A+", "A", "B", "C", "D", "E", "F", "G"];
-const ENERGY_COLORS: Record<string, { bg: string; fg: string }> = {
-  A: { bg: "#1E7A3B", fg: "#FFFFFF" },
-  B: { bg: "#4C9A2A", fg: "#FFFFFF" },
-  C: { bg: "#A3B800", fg: "#0F1B33" },
-  D: { bg: "#F2C500", fg: "#0F1B33" },
-  E: { bg: "#F29100", fg: "#0F1B33" },
-  F: { bg: "#E5541B", fg: "#FFFFFF" },
-  G: { bg: "#D2232A", fg: "#FFFFFF" },
-};
-
 /** "1.750", "1,750", "€ 243,50" → a number. Dutch and English grouping, the
  * same rule the extension uses: a separator followed by exactly three digits
  * groups thousands, otherwise it's the decimal point. */
@@ -103,14 +94,6 @@ export function toNumber(raw: string): number | null {
   }
   const n = parseFloat(t);
   return Number.isFinite(n) ? n : null;
-}
-
-/** "Amsterdam Sloterdijk 450 m" → { place, value }. Notes come from the
- * listing or the /geo/distances lookup, both "<place> <distance>". */
-function splitDistance(note: string): { place: string; value: string } {
-  const m = note.trim().match(/^(.*?)[\s:,-]*(\d+(?:[.,]\d+)?\s*(?:km|m|min\.?|minutes?|minuten))$/i);
-  if (!m) return { place: note.trim(), value: "" };
-  return { place: m[1].trim(), value: m[2].replace(/\s+/g, " ") };
 }
 
 /** "1750" → "1,750" for the big figures; anything that isn't a plain
@@ -447,7 +430,7 @@ export function CaptureForm({
     sourceHost = null;
   }
   const draftMatch = duplicates.find((d) => d.is_draft);
-  const energy = ENERGY_COLORS[form.energyLabel.charAt(0)];
+  const energy = energyColor(form.energyLabel);
   const mapQuery =
     form.latitude && form.longitude
       ? `${form.latitude},${form.longitude}`

@@ -102,6 +102,31 @@ def update_building(building_id: str, payload: schemas.BuildingCreate, db: Sessi
     return obj
 
 
+@router.get("/{building_id}/client-copies", response_model=list[schemas.ClientCopyOut])
+def client_copies(building_id: str, db: Session = Depends(get_db)):
+    """Which client folders hold a copy of this library building, oldest
+    first. Provenance only — the copies are independent rows (see
+    copy_to_client below), so this never implies they're in sync."""
+    if not db.get(Building, building_id):
+        raise HTTPException(404, "Building not found")
+    copies = (
+        db.query(Building, Client)
+        .join(Client, Client.client_id == Building.client_id)
+        .filter(Building.source_building_id == building_id)
+        .order_by(Building.created_at)
+        .all()
+    )
+    return [
+        schemas.ClientCopyOut(
+            client_id=client.client_id,
+            display_name=client.display_name,
+            building_id=copy.building_id,
+            copied_at=copy.created_at,
+        )
+        for copy, client in copies
+    ]
+
+
 @router.post("/{building_id}/copy-to-client", response_model=schemas.BuildingWithUnits, status_code=201)
 def copy_to_client(building_id: str, payload: schemas.CopyToClientRequest, db: Session = Depends(get_db)):
     """"Add from library" in a client folder — deep-copies the library
