@@ -36,6 +36,9 @@
   --color-success-foreground: var(--success-foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  /* Client brochure only — @font-face comes from @fontsource/instrument-serif,
+     imported by /s/[slug]/page.tsx so the broker app never downloads it. */
+  --font-display: "Instrument Serif", ui-serif, Georgia, "Times New Roman", serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -101,69 +104,160 @@ body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Placeholder art for a brochure building with no captured photo yet. */
-.brochure-image {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-  background: color-mix(in oklab, var(--accent) 22%, var(--surface));
-}
-.brochure-image::before {
-  content: "";
-  position: absolute;
-  width: 55%;
-  height: 85%;
-  right: 9%;
-  bottom: -12%;
-  background: color-mix(in oklab, var(--accent) 10%, var(--surface));
-  transform: skewY(-5deg);
-  box-shadow: -34px 0 0 color-mix(in oklab, var(--accent) 38%, var(--surface));
-}
-.brochure-image--two {
-  background: color-mix(in oklab, #1e7a3b 24%, var(--surface));
-}
-.brochure-image--two::before {
-  box-shadow: -34px 0 0 color-mix(in oklab, #1e7a3b 40%, var(--surface));
-}
-.brochure-image--three {
-  background: color-mix(in oklab, #8a5a16 24%, var(--surface));
-}
-.brochure-image--three::before {
-  box-shadow: -34px 0 0 color-mix(in oklab, #8a5a16 40%, var(--surface));
+/* ── Public client brochure (/s/[slug], BrochureView.tsx) ─────────────────── */
+
+/* A document sent to a client always renders in the light palette, whatever
+   their OS setting — a navy brochure on a dark-mode laptop (and near-invisible
+   text when it's printed) isn't what the broker approved. :root:has() also
+   catches <body>, so overscroll areas match. */
+.brochure,
+:root:has(.brochure) {
+  color-scheme: light;
+  --background: #f4f6fb;
+  --foreground: #0f1e3d;
+  --muted: #5b6b85;
+  --border: #e2e8f4;
+  --surface: #ffffff;
+  --input-bg: #eef2fa;
+  --placeholder: #94a3b8;
+  --accent: #1d4ed8;
+  --accent-foreground: #ffffff;
+  --dark: #0f2557;
 }
 
-/* Print support for the public shortlist page (window.print()). */
+/* The one orchestrated entrance: the cover photo settles and the client's
+   name rises out of a mask. Screen + motion-allowed only, so print and
+   reduced-motion users get the finished state immediately. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  .brochure-hero-photo {
+    animation: brochure-settle 1.8s cubic-bezier(0.2, 0.7, 0.1, 1) both;
+  }
+  .brochure-hero-title > span {
+    animation: brochure-rise 1.1s 0.15s cubic-bezier(0.2, 0.7, 0.1, 1) both;
+  }
+  .brochure-hero-meta {
+    animation: brochure-fade 0.9s 0.55s ease both;
+  }
+
+  /* Lead photos below the fold: armed (hidden) by BrochureView only once it
+     knows they're off-screen, then wiped in from the bottom when reached. */
+  .brochure-reveal.is-armed {
+    clip-path: inset(18% 0 0 0);
+    opacity: 0.4;
+    transition:
+      clip-path 1.1s cubic-bezier(0.2, 0.7, 0.1, 1),
+      opacity 0.9s ease;
+  }
+  .brochure-reveal.is-armed.is-in {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+}
+
+@keyframes brochure-settle {
+  from {
+    transform: scale(1.06);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+@keyframes brochure-rise {
+  from {
+    transform: translateY(105%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes brochure-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* "Download PDF" = window.print(). Cover on page 1, the comparison + map
+   together after it, then one building per page with its photos. */
 @media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
   .print-hidden {
     display: none !important;
   }
   html {
     scroll-behavior: auto;
   }
-  body,
-  main {
+  body {
     background: #fff !important;
   }
-  .print-hero {
+  .brochure a {
+    text-decoration: none;
+  }
+  .brochure section,
+  .brochure footer {
     background: #fff !important;
+    border-color: var(--border) !important;
+  }
+  .brochure .print-break {
+    break-before: page;
+  }
+  .brochure .print-keep {
+    break-inside: avoid;
+  }
+
+  /* Cover: photo on top, name below it in ink — the dark scrim is a
+     background, which browsers drop by default when printing. */
+  .brochure .brochure-hero {
+    display: block;
+    min-height: 0 !important;
     color: var(--foreground) !important;
-    min-height: auto !important;
   }
-  .print-hero * {
+  .brochure .brochure-hero-photo {
+    position: static !important;
+    display: block;
+    width: 100%;
+    height: 125mm !important;
+  }
+  .brochure .brochure-hero-scrim {
+    display: none !important;
+  }
+  .brochure .brochure-hero-body {
+    padding: 10mm 0 0 !important;
+  }
+  .brochure .brochure-hero-body * {
     color: var(--foreground) !important;
     border-color: var(--border) !important;
   }
-  .print-hero .grid {
-    min-height: auto !important;
+
+  /* Print the map pins, number badges and chips as designed, without the
+     reader having to tick "Background graphics" in the print dialog. */
+  .brochure {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    background: #fff !important;
   }
-  .print-page {
-    break-before: page;
+  .brochure .brochure-lead-photo img {
+    height: 82mm !important;
+    max-height: none !important;
+  }
+  .brochure .brochure-more-photos img {
+    height: 38mm !important;
+    aspect-ratio: auto !important;
+  }
+  .brochure .brochure-pad {
+    padding-top: 0 !important;
+    padding-bottom: 6mm !important;
+  }
+  .brochure footer * {
+    color: var(--muted) !important;
   }
   .leaflet-control-zoom,
   .leaflet-control-attribution {
     display: none !important;
-  }
-  a {
-    text-decoration: none;
   }
 }

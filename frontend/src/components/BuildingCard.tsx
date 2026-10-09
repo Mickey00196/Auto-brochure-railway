@@ -2,7 +2,15 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import type { Building } from "@/lib/types";
 import { Badge, Card } from "@/components/ui";
-import { formatArea } from "@/lib/format";
+import { formatArea, formatPriceParts, rentParts } from "@/lib/format";
+
+/** The broker-facing one-liner: "€395–€410/m²/yr", "€525/desk/mo", or a
+ * plain status when nothing is priced yet. Shared with the library grid. */
+export function buildingRentLabel(units: Building["units"]): string {
+  const parts = rentParts(units);
+  if (parts.length) return formatPriceParts(parts);
+  return units.some((u) => u.rent_price_type === "on_request") ? "Rent on request" : "Rent TBD";
+}
 
 /** The building row shared by the Building Library, the client folder page,
  * and the "Add from library" picker inside it — one card, three contexts.
@@ -32,14 +40,7 @@ export function BuildingCard({
   cornerAction?: ReactNode;
 }) {
   const totalAvailable = building.units.reduce((sum, u) => sum + (u.available_area_m2 ?? 0), 0);
-  const rents = building.units
-    .map((u) => u.rent_eur_per_m2_year)
-    .filter((r): r is number => typeof r === "number");
-  const rentLabel = rents.length
-    ? rents.length === 1 || Math.min(...rents) === Math.max(...rents)
-      ? `€${Math.min(...rents).toLocaleString("en-US")}/m²/yr`
-      : `€${Math.min(...rents).toLocaleString("en-US")}–€${Math.max(...rents).toLocaleString("en-US")}/m²/yr`
-    : "Rent TBD";
+  const rentLabel = buildingRentLabel(building.units);
 
   return (
     <Card

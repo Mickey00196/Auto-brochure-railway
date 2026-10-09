@@ -74,6 +74,35 @@ export default function ShortlistMap({
       pts.push([b.lat, b.lng]);
     }
     if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.18));
+
+    // The print layout gives the map a different size than the screen did,
+    // and Leaflet only measures its container on load — without this the
+    // pins land in the wrong place (or off the edge) in the PDF. For print,
+    // keep the current zoom and just re-centre: those tiles are already
+    // loaded, whereas a new zoom level would still be downloading when the
+    // browser takes its print snapshot. Only zoom out if the pins no longer
+    // fit at all.
+    const bounds = pts.length ? L.latLngBounds(pts) : null;
+    const refitForPrint = () => {
+      map.invalidateSize({ animate: false, pan: false });
+      if (!bounds) return;
+      map.setView(bounds.getCenter(), map.getZoom(), { animate: false });
+      if (!map.getBounds().contains(bounds)) map.fitBounds(bounds.pad(0.05), { animate: false });
+    };
+    const refitForScreen = () => {
+      map.invalidateSize({ animate: false });
+      if (bounds) map.fitBounds(bounds.pad(0.18), { animate: false });
+    };
+    const printQuery = window.matchMedia("print");
+    const onPrintChange = (e: MediaQueryListEvent) => (e.matches ? refitForPrint() : refitForScreen());
+    window.addEventListener("beforeprint", refitForPrint);
+    window.addEventListener("afterprint", refitForScreen);
+    printQuery.addEventListener("change", onPrintChange);
+    return () => {
+      window.removeEventListener("beforeprint", refitForPrint);
+      window.removeEventListener("afterprint", refitForScreen);
+      printQuery.removeEventListener("change", onPrintChange);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleKey, city]);
 

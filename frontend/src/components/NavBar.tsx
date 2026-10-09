@@ -18,12 +18,8 @@ const LINKS = [
 export function NavBar({ user }: { user?: { name: string; email: string } | null }) {
   const pathname = usePathname();
 
-  // A client's shareable live link (/s/[slug]) is opened by someone with no
-  // account at all — every link above would just bounce them to /login, and
-  // showing internal broker navigation on a page meant for a client to view
-  // is the wrong audience entirely. See proxy.ts, which already lets this
-  // one path through with no session.
-  if (pathname.startsWith("/s/")) return null;
+  // Only rendered by (app)/layout.tsx — the public client brochure at
+  // /s/[slug] lives outside that route group, so it never gets this nav.
 
   return (
     <header className="sticky top-0 z-10 border-b border-border bg-surface/95 backdrop-blur-sm">
