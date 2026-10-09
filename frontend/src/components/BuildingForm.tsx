@@ -487,7 +487,7 @@ export function BuildingForm({
 
         <div className="mt-6 border-t border-border pt-5">
           <div className="mb-3.5 flex items-baseline justify-between gap-4">
-            <span className="text-xs font-bold uppercase tracking-wide text-muted">Amenities</span>
+            <span className="text-sm font-semibold">Amenities</span>
             <span className="text-xs text-muted">Shown on the client brochure as tagged</span>
           </div>
           <AmenityMultiSelect
@@ -623,7 +623,7 @@ export function BuildingForm({
         <p className="mb-4 text-sm text-muted">Auto-filled once the address is confirmed — edit any field to override.</p>
 
         <div className="mb-4">
-          <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-accent">
+          <div className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground [&>svg]:text-accent">
             <Car size={13} /> Highway access
           </div>
           <input
@@ -634,7 +634,7 @@ export function BuildingForm({
           />
         </div>
         <div className="mb-4">
-          <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-accent">
+          <div className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground [&>svg]:text-accent">
             <Plane size={13} /> Airport access
           </div>
           <input
@@ -645,7 +645,7 @@ export function BuildingForm({
           />
         </div>
         <div className="mb-1">
-          <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-accent">
+          <div className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground [&>svg]:text-accent">
             <Train size={13} /> Public transport
           </div>
           <div className="flex gap-2">

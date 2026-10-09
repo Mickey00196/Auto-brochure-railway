@@ -13,16 +13,21 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   if (!client) notFound();
 
   const buildings = await api.buildings(id).catch(() => []);
+  const details = [client.company_name !== client.display_name ? client.company_name : null, client.industry]
+    .filter(Boolean)
+    .join(", ");
+  const contact = client.contacts[0];
+  const contactLine = contact?.name ? `Contact: ${contact.name}${contact.role ? `, ${contact.role}` : ""}` : null;
 
   return (
     <div>
       <PageHeader
         eyebrow="Client folder"
         title={client.display_name}
-        description="Buildings copied in from your shared library for this client. Editing a copy here never changes the library, and editing the library never changes what's copied here."
+        description={[details, contactLine].filter(Boolean).join(". ") || undefined}
         actions={<DeleteClientButton client={client} />}
         backHref="/clients"
-        backLabel="Back to clients"
+        backLabel="Clients"
       />
       <ClientFolder client={client} buildings={buildings} />
     </div>

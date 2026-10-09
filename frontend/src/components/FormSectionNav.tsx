@@ -59,7 +59,7 @@ export function FormSectionNav({ sections }: { sections: FormSection[] }) {
   return (
     <aside className="hidden lg:block">
       <div className="sticky top-8">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Sections</p>
+        <p className="text-xs font-medium text-muted">On this page</p>
         <nav aria-label="Form sections" className="mt-3 space-y-1">
           {sections.map((s, i) => {
             const active = s.id === activeId;

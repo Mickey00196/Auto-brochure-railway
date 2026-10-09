@@ -13,6 +13,9 @@ export type MapBuilding = {
   city: string;
   lat: number;
   lng: number;
+  /** Where the popup's link goes — defaults to the brochure's in-page
+   * anchor (#id); the library passes the building's own page. */
+  href?: string;
 };
 
 const esc = (s: string) =>
@@ -68,7 +71,7 @@ export default function ShortlistMap({
       });
       const m = L.marker([b.lat, b.lng], { icon }).addTo(map);
       m.bindPopup(
-        `<div class="shortlist-popup"><strong>${esc(b.number)} · ${esc(b.name)}</strong><br/>${esc(b.address)}<br/>${esc(b.available)} available<br/><a href="#${esc(b.id)}">View building</a></div>`,
+        `<div class="shortlist-popup"><strong>${esc(b.number)} · ${esc(b.name)}</strong><br/>${esc(b.address)}<br/>${esc(b.available)} available<br/><a href="${esc(b.href ?? `#${b.id}`)}">View building</a></div>`,
       );
       markersRef.current.set(b.id, m);
       pts.push([b.lat, b.lng]);

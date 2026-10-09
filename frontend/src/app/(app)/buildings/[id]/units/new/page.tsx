@@ -11,6 +11,8 @@ export default async function NewUnitPage({ params }: { params: Promise<{ id: st
   return (
     <div>
       <PageHeader
+        backHref={`/buildings/${id}`}
+        backLabel={building.name}
         eyebrow={`Available space — ${building.name}`}
         title="Add Unit"
         description="Same Unit schema regardless of how the building got here — manual entry or URL import."

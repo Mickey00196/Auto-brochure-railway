@@ -1,57 +1,41 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Plus, Search } from "lucide-react";
 import type { Client } from "@/lib/types";
 import { api } from "@/lib/api";
-import { Card } from "@/components/ui";
+import { ClientCard, NewClientCard } from "@/components/ClientCard";
+import { FOCUS_SEARCH_EVENT } from "@/components/Sidebar";
 
-function initials(name: string): string {
-  return name
-    .trim()
-    .split(/\s+/)
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
+const HOME_LIMIT = 8;
 
 function norm(s: string): string {
   return s.trim().toLowerCase();
 }
 
-function LivePill({ live }: { live: boolean }) {
-  return live ? (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-success-bg px-2.5 py-1 text-[11px] font-medium text-success-foreground">
-      <span className="h-1.5 w-1.5 rounded-full bg-success-foreground" />
-      Live
-    </span>
-  ) : (
-    <span className="shrink-0 rounded-full bg-input-bg px-2.5 py-1 text-[11px] font-medium text-muted">
-      Not shared yet
-    </span>
-  );
-}
-
-/** The home page's single primary interaction: type a client's name to jump
- * straight to their folder, or — if nothing matches — create them on the
- * spot. Replaces a separate "browse recent clients" list and a separate
- * "+ New client" button with one command-bar-style input, the same way
- * typing into Lovable's own landing page both searches and creates. */
+/** The home page: one search over every client folder, sitting in the navy
+ * hero, with the folders as cards underneath. Enter opens the best match;
+ * a brand-new name is only created through the explicit "Create" card, so a
+ * half-typed name can't quietly make a duplicate client. */
 export function ClientSearch({ clients }: { clients: Client[] }) {
   const router = useRouter();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const focus = () => inputRef.current?.focus();
+    window.addEventListener(FOCUS_SEARCH_EVENT, focus);
+    return () => window.removeEventListener(FOCUS_SEARCH_EVENT, focus);
+  }, []);
+
   const q = norm(query);
-  const matches = useMemo(() => {
-    const sorted = [...clients].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-    if (!q) return sorted.slice(0, 4);
-    return sorted.filter((c) => norm(c.display_name).includes(q));
-  }, [clients, q]);
-  const exactMatch = clients.some((c) => norm(c.display_name) === q);
+  const sorted = useMemo(() => [...clients].sort((a, b) => b.updated_at.localeCompare(a.updated_at)), [clients]);
+  const matches = q ? sorted.filter((c) => norm(c.display_name).includes(q)) : sorted.slice(0, HOME_LIMIT);
+  const exactMatch = clients.find((c) => norm(c.display_name) === q);
 
   async function createClient() {
     const name = query.trim();
@@ -67,107 +51,76 @@ export function ClientSearch({ clients }: { clients: Client[] }) {
     }
   }
 
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const target = exactMatch ?? matches[0];
+    if (q && target) router.push(`/clients/${target.client_id}`);
+  }
+
   return (
     <div>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!exactMatch && query.trim()) createClient();
-        }}
-      >
-        <div className="relative">
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 16 16"
-            fill="none"
-            aria-hidden="true"
-            className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-muted"
+      <section className="rounded-[28px] bg-dark px-6 pb-28 pt-12 text-white sm:px-12 sm:pt-14">
+        <h1 className="text-[44px] font-semibold leading-none tracking-[-0.035em] sm:text-[60px]">Find a client</h1>
+        <p className="mt-4 max-w-[48ch] text-base leading-relaxed text-white/75 sm:text-[17px]">
+          Open a client&apos;s folder to add buildings and share their live shortlist, or start a new one.
+        </p>
+        <form role="search" onSubmit={handleSubmit} className="mt-9 flex flex-wrap gap-3">
+          <div className="relative min-w-0 flex-[1_1_380px]">
+            <label htmlFor="client-search" className="sr-only">
+              Find a client
+            </label>
+            <Search size={20} className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
+            <input
+              id="client-search"
+              ref={inputRef}
+              type="search"
+              autoFocus
+              autoComplete="off"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Client or company name"
+              className="h-[60px] w-full rounded-2xl border-0 bg-white pl-14 pr-5 text-[17px] text-[#0f1b33] placeholder:text-[#7c8699] outline-none focus:ring-4 focus:ring-white/25"
+            />
+          </div>
+          <Link
+            href="/clients/new"
+            className="inline-flex h-[60px] items-center gap-2 rounded-2xl border border-white/35 px-6 text-[15px] font-medium text-white transition-colors hover:bg-white/10"
           >
-            <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.4" />
-            <path d="M11 11 14.5 14.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          </svg>
-          <input
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Find a client…"
-            className="h-16 w-full rounded-2xl border border-border bg-surface pl-14 pr-5 text-lg shadow-sm outline-none transition placeholder:text-placeholder focus:border-accent focus:ring-2 focus:ring-accent/15"
-          />
-        </div>
-      </form>
+            <Plus size={16} aria-hidden="true" />
+            New client
+          </Link>
+        </form>
+      </section>
 
-      <div className="mt-4 flex justify-center">
-        <Link
-          href="/clients/new"
-          className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-5 py-2.5 text-sm font-semibold text-dark shadow-sm transition hover:border-accent"
-        >
-          + New client
-        </Link>
-      </div>
-
-      {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
-
-      {query.trim() && !exactMatch && (
-        <button
-          type="button"
-          onClick={createClient}
-          disabled={creating}
-          className="mt-4 flex w-full items-center gap-3 rounded-xl border border-dashed border-border px-4 py-3 text-left transition hover:border-accent hover:bg-input-bg disabled:opacity-60"
-        >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-dark text-sm font-bold text-white">
-            +
-          </span>
-          <span className="text-sm font-semibold">
-            {creating ? "Creating…" : <>Create &ldquo;{query.trim()}&rdquo;</>}
-          </span>
-        </button>
-      )}
-
-      <div className="mt-8">
-        <div className="flex items-center justify-between gap-3 border-b border-border pb-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
-            {q ? `${matches.length} match${matches.length === 1 ? "" : "es"}` : "Recent clients"}
-          </h2>
-          {!q && (
-            <Link href="/clients/new" className="text-xs font-semibold text-accent hover:underline">
-              + New client
-            </Link>
+      <div className="-mt-[72px] px-3 sm:px-6">
+        {error && <p className="mb-3 rounded-xl bg-red-50 px-4 py-2.5 text-sm text-red-700">{error}</p>}
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-5">
+          {q && !exactMatch && (
+            <button
+              type="button"
+              onClick={createClient}
+              disabled={creating}
+              className="flex min-h-[262px] flex-col justify-center gap-3 rounded-[20px] bg-surface p-7 text-left shadow-card transition hover:-translate-y-0.5 hover:shadow-float disabled:opacity-60"
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-white">
+                <Plus size={17} aria-hidden="true" />
+              </span>
+              <span className="text-[17px] font-semibold tracking-tight">
+                {creating ? "Creating…" : <>Create &ldquo;{query.trim()}&rdquo;</>}
+              </span>
+              <span className="text-sm text-muted">Start a new client folder with this name.</span>
+            </button>
           )}
+          {matches.map((c) => (
+            <ClientCard key={c.client_id} client={c} />
+          ))}
+          {!q && <NewClientCard label={clients.length === 0 ? "Create your first client" : "New client"} />}
         </div>
-
-        {matches.length === 0 ? (
-          <Card className="mt-5 border-dashed text-center">
-            <p className="text-sm font-semibold">{q ? `No client named "${query.trim()}"` : "No clients yet"}</p>
-            <p className="mt-1 text-xs text-muted">
-              {q ? "Create them with the button above." : "Search above to add your first client."}
-            </p>
-          </Card>
-        ) : (
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            {matches.map((c) => (
-              <Link key={c.client_id} href={`/clients/${c.client_id}`} className="group">
-                <Card className="flex h-full min-h-[136px] flex-col justify-between transition hover:border-accent">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-input-bg text-xs font-bold text-dark">
-                        {initials(c.display_name)}
-                      </span>
-                      <div className="min-w-0">
-                        <h3 className="truncate font-semibold group-hover:text-accent">{c.display_name}</h3>
-                        <p className="mt-0.5 text-xs text-muted">
-                          {c.building_count} {c.building_count === 1 ? "building" : "buildings"}
-                        </p>
-                      </div>
-                    </div>
-                    <LivePill live={c.is_live} />
-                  </div>
-                  <p className="mt-5 text-[11px] text-muted">
-                    Updated {new Date(c.updated_at).toLocaleDateString()}
-                  </p>
-                </Card>
-              </Link>
-            ))}
+        {!q && clients.length > HOME_LIMIT && (
+          <div className="mt-6 text-center">
+            <Link href="/clients" className="text-sm font-medium text-accent hover:underline">
+              See all {clients.length} clients
+            </Link>
           </div>
         )}
       </div>

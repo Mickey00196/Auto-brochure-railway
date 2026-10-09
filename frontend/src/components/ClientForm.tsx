@@ -5,7 +5,7 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { Button, Card } from "@/components/ui";
 
-const inputClass = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm";
+const inputClass = "w-full rounded-xl border border-transparent bg-input-bg px-3.5 py-2.5 text-sm text-foreground placeholder:text-placeholder transition focus:border-accent focus:bg-surface focus:outline-none";
 const labelClass = "text-sm";
 
 /** Manual client entry — fills the gap where the only way to get a Client

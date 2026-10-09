@@ -14,13 +14,13 @@ export function NavHistoryButtons() {
   const router = useRouter();
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center">
       <button
         type="button"
         onClick={() => router.back()}
         aria-label="Go back"
         title="Back"
-        className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition hover:bg-border/40 hover:text-foreground"
+        className="flex h-7 w-7 items-center justify-center rounded-full text-muted transition hover:bg-background hover:text-foreground"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
@@ -31,7 +31,7 @@ export function NavHistoryButtons() {
         onClick={() => router.forward()}
         aria-label="Go forward"
         title="Forward"
-        className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition hover:bg-border/40 hover:text-foreground"
+        className="flex h-7 w-7 items-center justify-center rounded-full text-muted transition hover:bg-background hover:text-foreground"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M6 3 11 8l-5 5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />

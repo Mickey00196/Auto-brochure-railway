@@ -1,6 +1,7 @@
 """§5.5 Client."""
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -12,6 +13,10 @@ from app.database import Base
 
 def _uuid() -> str:
     return str(uuid.uuid4())
+
+
+# Mirrors isFloorplan() in the frontend's BrochureView.tsx.
+_FLOORPLAN = re.compile(r"plattegrond|floorplan", re.IGNORECASE)
 
 
 class Client(Base):
@@ -67,3 +72,29 @@ class Client(Base):
     @property
     def live(self) -> bool:
         return bool(self.is_live)
+
+    @property
+    def preview_photos(self) -> list[str]:
+        """The first photo of up to three of this client's buildings — the
+        thumbnails on the clients overview, so it doesn't need a request per
+        client. Floor plans are skipped (same rule as the brochure)."""
+        out: list[str] = []
+        for building in self.buildings:
+            photo = next((p for p in (building.photos or []) if not _FLOORPLAN.search(p)), None)
+            if photo:
+                out.append(photo)
+            if len(out) == 3:
+                break
+        return out
+
+    @property
+    def areas(self) -> list[str]:
+        """Distinct submarkets (or cities, when no submarket is set) of this
+        client's buildings, in folder order — "5 buildings in Zuidas and
+        Houthavens" on the overview card."""
+        seen: list[str] = []
+        for building in self.buildings:
+            area = building.submarket or building.city
+            if area and area not in seen:
+                seen.append(area)
+        return seen
