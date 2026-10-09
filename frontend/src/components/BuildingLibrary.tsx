@@ -9,15 +9,7 @@ import { downloadLibraryPdf } from "@/lib/generateLibraryPdf";
 import { formatArea } from "@/lib/format";
 import { Badge, Button, Card } from "@/components/ui";
 import { DeleteBuildingButton } from "@/components/DeleteBuildingButton";
-import { BuildingCard } from "@/components/BuildingCard";
-
-function buildingRentLabel(building: Building): string {
-  const rents = building.units.map((u) => u.rent_eur_per_m2_year).filter((r): r is number => typeof r === "number");
-  if (!rents.length) return "Rent TBD";
-  return rents.length === 1 || Math.min(...rents) === Math.max(...rents)
-    ? `€${Math.min(...rents).toLocaleString("en-US")}/m²/yr`
-    : `€${Math.min(...rents).toLocaleString("en-US")}–€${Math.max(...rents).toLocaleString("en-US")}/m²/yr`;
-}
+import { BuildingCard, buildingRentLabel } from "@/components/BuildingCard";
 
 // A ticked selection used to be plain component state, so navigating away
 // mid-shortlist — to capture one more listing, say — silently threw it away.
@@ -273,7 +265,7 @@ function BuildingLibraryInner({ buildings }: { buildings: Building[] }) {
                       ? formatArea(building.units.reduce((sum, u) => sum + (u.available_area_m2 ?? 0), 0))
                       : "Area TBD"}
                     <span className="mx-1 font-normal text-border">|</span>
-                    <span className="font-normal text-muted">{buildingRentLabel(building)}</span>
+                    <span className="font-normal text-muted">{buildingRentLabel(building.units)}</span>
                   </p>
                   <div className="mt-4 flex flex-wrap gap-1.5">
                     {building.building_amenities.slice(0, 4).map((a) => (
