@@ -1,15 +1,11 @@
-import Link from "next/link";
-import { PageHeader } from "@/components/ui";
 import { serverApi as api } from "@/lib/serverApi";
-import { BuildingForm, type BuildingFormInitial } from "@/components/BuildingForm";
+import { CaptureForm, type CaptureInitial } from "@/components/CaptureForm";
+import { parseFloorsParam } from "@/lib/floors";
 
-// Fields the bookmarklet (see /import) can pre-fill via query params — it
-// reads the Funda page you're already viewing in your own browser and opens
-// this form with what it found, for you to review and submit. Only these
-// keys are read; anything else in the URL is ignored. (No "description" key
-// here on purpose — the redesigned Building card dropped that field, so a
-// bookmarklet/extension URL that still sends one is just silently ignored.)
-const PREFILL_TEXT_KEYS: Exclude<keyof BuildingFormInitial, "buildingAmenities">[] = [
+// Fields the Chrome extension and the bookmarklet (see /import) can pre-fill
+// via query params — read off the listing you're viewing, for you to check
+// and save. Only these keys are read; anything else in the URL is ignored.
+const PREFILL_TEXT_KEYS = [
   "name",
   "address",
   "postalCode",
@@ -19,14 +15,10 @@ const PREFILL_TEXT_KEYS: Exclude<keyof BuildingFormInitial, "buildingAmenities">
   "energyLabel",
   "totalBuildingAreaM2",
   "photos",
-  // Executive-summary fields the extension capture also extracts —
-  // building-level…
   "submarket",
   "accessibilityNote",
   "airportNote",
   "publicTransportNote",
-  // …and lease-terms fields that become the building's first Unit (plus a
-  // parking AddOn) on submit — see BuildingForm.
   "availableAreaM2",
   "minDivisibleAreaM2",
   "parkingRatio",
@@ -34,79 +26,46 @@ const PREFILL_TEXT_KEYS: Exclude<keyof BuildingFormInitial, "buildingAmenities">
   "serviceChargeEurPerM2Year",
   "parkingPriceEurYear",
   "availability",
-];
+] as const satisfies readonly (keyof CaptureInitial)[];
+
+const first = (raw: string | string[] | undefined) => (Array.isArray(raw) ? raw[0] : raw);
 
 export default async function NewBuildingPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  // This is the page the Chrome extension opens, so it must paint fast. The
-  // neighbourhood dropdown and the client list are both optional metadata,
-  // but awaiting either blocked the whole form behind a backend round-trip —
-  // up to the 10s serverApi timeout when the backend is cold, which reads as
-  // "the extension is slow". Cap both: a slow backend costs an empty
-  // dropdown, not a blank tab.
-  const [neighbourhoods, clients] = await Promise.all([
-    Promise.race([
-      api.neighbourhoods().catch(() => []),
-      new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 1500)),
-    ]),
+  // This is the page the extension opens, so it must paint fast: the client
+  // list only feeds the optional "Also add to" picker, so a slow backend
+  // costs an empty picker (1.5s cap), never a blank tab.
+  const [clients, params] = await Promise.all([
     Promise.race([
       api.clients().catch(() => []),
       new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 1500)),
     ]),
+    searchParams,
   ]);
-  const params = await searchParams;
 
-  const initial: BuildingFormInitial = {};
+  const initial: CaptureInitial = {};
   for (const key of PREFILL_TEXT_KEYS) {
-    const raw = params[key];
-    const value = Array.isArray(raw) ? raw[0] : raw;
+    const value = first(params[key]);
     if (value) initial[key] = value;
   }
-  const rawAmenities = params.buildingAmenities;
-  const amenitiesParam = Array.isArray(rawAmenities) ? rawAmenities[0] : rawAmenities;
-  if (amenitiesParam) {
-    initial.buildingAmenities = amenitiesParam
+  const amenities = first(params.buildingAmenities);
+  if (amenities) {
+    initial.buildingAmenities = amenities
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
   }
+  const delivery = first(params.delivery);
+  if (delivery === "turn_key" || delivery === "shell_and_core") initial.delivery = delivery;
+  const floors = parseFloorsParam(first(params.floors));
+  // Sizes per floor only make sense when the listing split the space up.
+  if (floors.length >= 2) initial.floors = floors;
 
-  // Nothing came in via query params — a blank form, not a capture handoff.
-  // This is exactly the moment someone's about to type a whole listing in by
-  // hand, so it's the right place to point at the faster, no-install way to
-  // grab it straight off the page instead.
-  const isBlankForm = !initial.name && !initial.address;
+  const source = first(params.sourceUrl);
+  const sourceUrl = source && /^https?:\/\//i.test(source) ? source : undefined;
 
-  return (
-    <div>
-      <PageHeader
-        eyebrow="Library"
-        title="Add building"
-        description={
-          isBlankForm
-            ? "Fill in what you know — everything can be edited later."
-            : "Captured from the listing. Check the details, then save it to your library."
-        }
-        backHref="/buildings"
-        backLabel="Library"
-      />
-
-      {isBlankForm && (
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-accent/10 px-5 py-4">
-          <p className="text-sm">
-            <strong className="font-semibold">Looking at a listing right now?</strong> The bookmarklet reads it straight
-            off the page and fills in this form, no extension needed.
-          </p>
-          <Link href="/import#bookmarklet" className="shrink-0 text-sm font-medium text-accent hover:underline">
-            Set up the bookmarklet
-          </Link>
-        </div>
-      )}
-
-      <BuildingForm neighbourhoods={neighbourhoods} clients={clients} initial={initial} />
-    </div>
-  );
+  return <CaptureForm clients={clients} initial={initial} sourceUrl={sourceUrl} />;
 }

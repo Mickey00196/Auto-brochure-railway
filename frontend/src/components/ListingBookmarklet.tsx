@@ -35,7 +35,7 @@ var AM=["roof terrace","dakterras","bicycle storage","fietsenstalling","24/7 acc
 if(o.ph.length<4){var SK=["logo","icon","sprite","avatar","pixel","placeholder"];var ims=document.querySelectorAll("img");for(var j=0;j<ims.length;j++){var g=ims[j];var cd=[g.getAttribute("src"),g.getAttribute("data-src"),g.getAttribute("data-lazy-src"),g.getAttribute("data-original")];var ss=g.getAttribute("srcset")||g.getAttribute("data-srcset");if(ss)ss.split(",").forEach(function(pp){cd.push(pp.trim().split(" ")[0]);});for(var q=0;q<cd.length;q++){var s=cd[q];if(!s)continue;if(!/^https?:\\/\\//.test(s)&&s.charAt(0)!=="/")continue;if(SK.some(function(kk){return s.toLowerCase().indexOf(kk)>-1;}))continue;try{s=new URL(s,location.href).href;}catch(e){continue;}if(o.ph.indexOf(s)<0)o.ph.push(s);if(o.ph.length>=8)break;}if(o.ph.length>=8)break;}}
 o.ph=o.ph.map(function(u){try{return new URL(u,location.href).href;}catch(e){return u;}});
 var q=[];var st=function(k,v){if(v!==null&&v!==undefined&&String(v).trim()!=="")q.push(k+"="+encodeURIComponent(v));};
-st("name",o.name);st("address",o.address);st("postalCode",o.pc);st("city",o.city);st("energyLabel",o.energy);st("yearBuilt",o.year);st("totalBuildingAreaM2",o.area);st("buildingAmenities",(o.am||[]).join(", "));st("description",o.desc);st("photos",(o.ph||[]).join(","));
+st("name",o.name);st("address",o.address);st("postalCode",o.pc);st("city",o.city);st("energyLabel",o.energy);st("yearBuilt",o.year);st("totalBuildingAreaM2",o.area);st("buildingAmenities",(o.am||[]).join(", "));st("description",o.desc);st("photos",(o.ph||[]).join(","));st("sourceUrl",location.href);
 window.open("${origin}/buildings/new?"+q.join("&"),"_blank");
 }catch(err){alert("Could not read this page: "+err);}
 })();`;

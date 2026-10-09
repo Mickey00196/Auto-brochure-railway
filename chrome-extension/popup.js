@@ -79,6 +79,7 @@ function extractListing() {
     rentEurPerM2Year: null, serviceChargeEurPerM2Year: null,
     parkingPriceEurYear: null, availability: null,
     airportNote: null, highwayNote: null, publicTransportNote: null,
+    delivery: null, floors: null, sourceUrl: null,
   };
   const pick = (sel, attr) => {
     const el = document.querySelector(sel);
@@ -617,6 +618,63 @@ function extractListing() {
   }
   out.photos = [...byKey.values()];
 
+  // --- delivery: turn-key or shell & core --------------------------------
+  // A labelled row first ("Opleveringsniveau"), then the copy. Only a clear
+  // answer counts: a page that mentions both (or neither) is left blank for
+  // the broker rather than guessed.
+  const TURNKEY_RE = /turn[\s-]?key|instapklaar|gestoffeerd|gemeubileerd|fully\s+(?:fitted|furnished)|plug\s*(?:&|and|n)\s*play/i;
+  const SHELL_RE = /\bcasco\b|cascostaat|shell\s*(?:&|and)\s*core/i;
+  const pickDelivery = (s) => {
+    if (!s) return null;
+    const t = TURNKEY_RE.test(s);
+    const c = SHELL_RE.test(s);
+    return t && !c ? "turn_key" : c && !t ? "shell_and_core" : null;
+  };
+  out.delivery =
+    pickDelivery(fieldValue("opleveringsniveau", "opleverniveau", "oplevering", "staat van oplevering", "delivery level", "delivery")) ||
+    pickDelivery(fullText);
+
+  // --- sizes per floor ("Begane grond 280 m²", "1e verdieping: 301 m²") ---
+  // Only kept when at least two floors are found AND they add up to the
+  // space on offer (within 10%) — a description that lists the floors of
+  // the whole building, or only some of the offered ones, would otherwise
+  // overwrite a correct total with a wrong one.
+  const ordinal = (n) => {
+    const tens = n % 100;
+    if (tens >= 11 && tens <= 13) return n + "th";
+    return n + ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th");
+  };
+  const FLOOR_RE =
+    /(begane\s*grond|ground\s*floor|souterrain|basement|kelder|(\d{1,2})\s*(?:e|ste|de|st|nd|rd|th)?\s*(?:verdieping|etage|floor|verd\.))\s*[:\-\u2013]?\s*(?:ca\.?|circa|approx\.?|\u00b1)?\s*([\d.,]+)\s*(?:m\u00b2|m2|sq\.?\s?m)/gi;
+  const floorSizes = new Map();
+  const floorSources = pairs.map(([k, v]) => k + " " + v).concat([fullText]);
+  for (const src of floorSources) {
+    for (const m of src.matchAll(FLOOR_RE)) {
+      const word = m[1].toLowerCase();
+      let rank;
+      if (/begane|ground/.test(word)) rank = 0;
+      else if (/souterrain|basement|kelder/.test(word)) rank = -1;
+      else rank = parseInt(m[2], 10);
+      if (!Number.isFinite(rank) || rank > 60) continue;
+      const area = parseNum(m[3]);
+      if (area == null || area < 10) continue;
+      if (!floorSizes.has(rank)) floorSizes.set(rank, area);
+    }
+  }
+  if (floorSizes.size >= 2) {
+    const floors = [...floorSizes.entries()].sort((a, b) => a[0] - b[0]);
+    const sum = floors.reduce((t, [, a]) => t + a, 0);
+    const offered = out.availableAreaSqm;
+    if (offered == null || Math.abs(sum - offered) <= offered * 0.1) {
+      out.floors = floors
+        .map(([rank, area]) => (rank === 0 ? "Ground floor" : rank < 0 ? "Basement" : ordinal(rank) + " floor") + ":" + area)
+        .join(";");
+      if (offered == null) out.availableAreaSqm = sum;
+    }
+  }
+
+  out.sourceUrl = location.href;
+
   // --- cap to the listing's own photo count ------------------------------
   // The page states its real photo count ("Foto's 11"). A whole-page scan
   // also picks up images that live BELOW the gallery — the agent portrait,
@@ -661,6 +719,8 @@ function renderPreview(data, photoCount, droppedPhotos) {
     ["Rent €/m²/yr", data.rentEurPerM2Year], ["Service €/m²/yr", data.serviceChargeEurPerM2Year],
     ["Parking €/yr", data.parkingPriceEurYear],
     ["Available", data.availability],
+    ["Delivery", data.delivery === "turn_key" ? "Turn-key" : data.delivery === "shell_and_core" ? "Shell & core" : null],
+    ["Per floor", data.floors ? data.floors.split(";").map((f) => f.replace(":", " ") + " m²").join(", ") : null],
     ["Energy", data.energyLabel], ["Year built", data.yearBuilt],
     ["Airport", data.airportNote], ["Highway", data.highwayNote],
     ["Public transport", data.publicTransportNote],
@@ -707,6 +767,9 @@ function buildHandoffUrl(appUrl, data) {
   set("airportNote", data.airportNote);
   set("accessibilityNote", data.highwayNote);
   set("publicTransportNote", data.publicTransportNote);
+  set("delivery", data.delivery);
+  set("floors", data.floors);
+  set("sourceUrl", data.sourceUrl);
 
   const base = appUrl + "/buildings/new?";
   let photos = (data.photos || []).slice();
