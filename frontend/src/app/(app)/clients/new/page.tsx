@@ -6,7 +6,7 @@ export default function NewClientPage() {
     <div>
       <PageHeader
         eyebrow="Client"
-        title="Add Client"
+        title="New client"
         description="Create a folder for whoever you're preparing an availability overview for. Once created, you'll browse your building library and add the ones that fit into their folder."
         backHref="/clients"
         backLabel="Back to clients"

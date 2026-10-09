@@ -191,6 +191,9 @@ class ClientOut(ClientBase):
     # has to special-case None.
     is_live: bool
     public_slug: str | None = None
+    # Overview-card extras (see the Client model's properties of the same name).
+    preview_photos: list[str] = Field(default_factory=list)
+    areas: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 

@@ -110,6 +110,10 @@ export interface Client {
   building_count: number;
   is_live: boolean;
   public_slug: string | null;
+  /** First photo of up to three of the folder's buildings (overview cards). */
+  preview_photos?: string[];
+  /** Distinct submarkets/cities of the folder's buildings, in folder order. */
+  areas?: string[];
   created_at: string;
   updated_at: string;
 }

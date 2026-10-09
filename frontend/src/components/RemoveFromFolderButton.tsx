@@ -40,7 +40,7 @@ export function RemoveFromFolderButton({ building, onRemoved }: { building: Buil
           setError(null);
           setConfirming(true);
         }}
-        className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full text-muted transition hover:bg-red-500/10 hover:text-red-600"
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-surface/95 text-muted shadow-card backdrop-blur transition hover:bg-red-50 hover:text-red-600"
       >
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
           <path d="M2 2 12 12M12 2 2 12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />

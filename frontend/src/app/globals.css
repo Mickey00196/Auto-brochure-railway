@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
-/* Palette: deep navy for primary actions and headings, a vivid blue for
-   links/highlights, white cards on a soft blue-grey page. */
+/* Palette: deep navy for primary actions and the home hero, a vivid blue for
+   links/selection, white cards floating on a cool blue-grey page. */
 :root {
-  --background: #f4f6fb;
-  --foreground: #0f1e3d;
-  --muted: #64748b;
-  --border: #e2e8f4;
+  --background: #eef1f6;
+  --foreground: #0f1b33;
+  --muted: #5b667c;
+  --border: #dde3ec;
   --surface: #ffffff;
-  --input-bg: #eef2fa;
-  --placeholder: #94a3b8;
+  --input-bg: #f3f5f9;
+  --placeholder: #7c8699;
   --accent: #1d4ed8;
   --accent-foreground: #ffffff;
   --dark: #0f2557;
@@ -43,16 +43,16 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a1428;
+    --background: #0b1426;
     --foreground: #eef2fa;
-    --muted: #94a3b8;
-    --border: #1e2c4a;
-    --surface: #101f3c;
-    --input-bg: #16305e;
-    --placeholder: #64748b;
-    --accent: #60a5fa;
-    --accent-foreground: #0a1428;
-    --dark: #16305e;
+    --muted: #9aa6bb;
+    --border: #22304a;
+    --surface: #111d33;
+    --input-bg: #18263f;
+    --placeholder: #6b7891;
+    --accent: #6ea0ff;
+    --accent-foreground: #0b1426;
+    --dark: #1b3470;
     --warn-bg: #3a2c14;
     --warn-foreground: #f2b866;
     --success-bg: #123023;
@@ -64,6 +64,24 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* The one card elevation used across the app: a hairline lift plus a soft,
+   low shadow — cards float on the blue-grey page rather than being boxed
+   in by borders. */
+@utility shadow-card {
+  box-shadow:
+    0 1px 2px rgb(15 27 51 / 0.06),
+    0 12px 32px -18px rgb(15 27 51 / 0.28);
+}
+@utility shadow-float {
+  box-shadow: 0 18px 40px -16px rgb(15 27 51 / 0.45);
+}
+
+/* Visible keyboard focus everywhere, in the accent colour. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* Numbered brand pins for the public shortlist's locations map — see

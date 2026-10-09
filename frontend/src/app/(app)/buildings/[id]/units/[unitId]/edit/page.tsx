@@ -43,6 +43,8 @@ export default async function EditUnitPage({
   return (
     <div>
       <PageHeader
+        backHref={`/buildings/${id}`}
+        backLabel={building.name}
         eyebrow={building.address}
         title="Edit space"
         description="Area, rent, service charges and availability — these are the figures that appear in a client PDF."

@@ -1,19 +1,32 @@
-import { NavBar } from "@/components/NavBar";
+import { Sidebar, type SidebarClient } from "@/components/Sidebar";
 import { serverApi } from "@/lib/serverApi";
 
-/** Chrome for every broker-facing page: nav bar + the centred max-width
- * column. The public client brochure (/s/[slug]) deliberately sits outside
- * this group so it isn't boxed in by it. */
+/** Chrome for every signed-in broker page: the sidebar plus a centred content
+ * column. The public client brochure (/s/[slug]) and the login/signup pages
+ * ((auth) group) sit outside this group, so they get neither. */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  // /login itself has no session cookie yet, so this legitimately fails
-  // there — proxy.ts is what actually gates access, this is just for the
-  // nav bar's "signed in as" display.
-  const user = await serverApi.me().catch(() => null);
+  // Both are only for the sidebar (name, client count, live links): a slow
+  // backend costs an emptier sidebar, never a blank page — same 1.5s cap the
+  // capture form uses. proxy.ts is what actually gates access.
+  const [user, clients] = await Promise.all([
+    serverApi.me().catch(() => null),
+    Promise.race([
+      serverApi.clients().catch(() => []),
+      new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 1500)),
+    ]),
+  ]);
+  const sidebarClients: SidebarClient[] = clients.map((c) => ({
+    client_id: c.client_id,
+    display_name: c.display_name,
+    is_live: c.is_live,
+  }));
 
   return (
-    <>
-      <NavBar user={user} />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">{children}</main>
-    </>
+    <div className="flex min-h-dvh flex-col lg:flex-row">
+      <Sidebar user={user} clients={sidebarClients} />
+      <main className="min-w-0 flex-1">
+        <div className="mx-auto w-full max-w-[1200px] px-4 py-8 sm:px-8 lg:px-12 lg:py-10">{children}</div>
+      </main>
+    </div>
   );
 }

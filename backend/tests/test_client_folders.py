@@ -141,3 +141,34 @@ def test_deleting_a_client_cascades_its_copied_buildings(client):
     assert client.delete(f"/clients/{a_client['client_id']}").status_code == 204
     assert client.get(f"/buildings/{copy['building_id']}").status_code == 404
     assert client.get(f"/buildings/{building['building_id']}").status_code == 200
+
+
+def test_client_listing_includes_preview_photos_and_areas(client):
+    a_client = client.post("/clients", json={"name": "Acme BV"}).json()
+    assert a_client["preview_photos"] == []
+    assert a_client["areas"] == []
+
+    specs = [
+        ("Tower A", "Zuidas", ["https://img.test/a1.jpg", "https://img.test/a2.jpg"]),
+        ("Tower B", "Zuidas", ["https://img.test/b-plattegrond.jpg", "https://img.test/b1.jpg"]),
+        ("Tower C", None, []),
+        ("Tower D", "Houthavens", ["https://img.test/d1.jpg"]),
+        ("Tower E", "Houthavens", ["https://img.test/e1.jpg"]),
+    ]
+    for name, submarket, photos in specs:
+        b = client.post(
+            "/buildings",
+            json={"name": name, "address": f"{name} 1", "city": "Amsterdam", "submarket": submarket, "photos": photos},
+        ).json()
+        client.post(f"/buildings/{b['building_id']}/copy-to-client", json={"client_id": a_client["client_id"]})
+
+    listed = next(c for c in client.get("/clients").json() if c["client_id"] == a_client["client_id"])
+    # First real photo per building, floor plans skipped, buildings without
+    # photos skipped, capped at three.
+    assert listed["preview_photos"] == [
+        "https://img.test/a1.jpg",
+        "https://img.test/b1.jpg",
+        "https://img.test/d1.jpg",
+    ]
+    # Distinct, in folder order; a building with no submarket falls back to its city.
+    assert listed["areas"] == ["Zuidas", "Amsterdam", "Houthavens"]

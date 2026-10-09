@@ -71,17 +71,17 @@ export function AddFromLibraryModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/40" onClick={onClose} role="presentation">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-end bg-[rgb(15_27_51/0.45)] backdrop-blur-[2px]" onClick={onClose} role="presentation">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-from-library-title"
         onClick={(e) => e.stopPropagation()}
-        className="flex h-full w-full max-w-2xl flex-col border-l border-border bg-background shadow-lg"
+        className="flex h-full w-full max-w-2xl flex-col bg-background shadow-float"
       >
         <div className="flex items-start justify-between gap-4 border-b border-border p-6">
           <div>
-            <h2 id="add-from-library-title" className="text-lg font-semibold">
+            <h2 id="add-from-library-title" className="text-xl font-semibold tracking-tight">
               Add from library
             </h2>
             <p className="mt-1 text-sm text-muted">
@@ -106,7 +106,7 @@ export function AddFromLibraryModal({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by address, city or area…"
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+            className="h-10 w-full rounded-full border border-border bg-surface px-4 text-sm outline-none placeholder:text-placeholder focus:border-accent focus:ring-4 focus:ring-accent/10"
           />
         </div>
 
@@ -130,6 +130,7 @@ export function AddFromLibraryModal({
                   onClick={() => !locked && toggle(building.building_id)}
                 >
                   <BuildingCard
+                    linkable={false}
                     building={building}
                     selected={picked.includes(building.building_id)}
                     locked={locked}
@@ -155,7 +156,7 @@ export function AddFromLibraryModal({
           </div>
         </div>
 
-        <div className="border-t border-border bg-background p-4">
+        <div className="border-t border-border bg-surface p-4">
           {addError && <p className="mb-2 text-xs text-red-500">{addError}</p>}
           <div className="flex items-center justify-between gap-3">
             <Button variant="ghost" onClick={onClose} disabled={adding}>

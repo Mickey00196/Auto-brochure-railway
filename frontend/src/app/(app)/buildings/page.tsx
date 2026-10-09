@@ -1,10 +1,9 @@
-import Link from "next/link";
+import { Download, Plus } from "lucide-react";
 import { serverApi as api } from "@/lib/serverApi";
-import { Button, Card, PageHeader } from "@/components/ui";
+import { ButtonLink, PageHeader } from "@/components/ui";
 import { BuildingLibrary } from "@/components/BuildingLibrary";
 
-/** The home of the tool: everything captured, ever, reusable for any client.
- * Select any subset here and generate that client's PDF. */
+/** The home of the tool: everything captured, ever, reusable for any client. */
 export default async function BuildingsPage() {
   let buildings: Awaited<ReturnType<typeof api.buildings>> = [];
   let error: string | null = null;
@@ -17,23 +16,30 @@ export default async function BuildingsPage() {
   return (
     <div>
       <PageHeader
-        title="Building library"
-        description="Every building you've captured, kept exactly as saved. Tick the ones that fit a client's search and generate their PDF."
+        title="Library"
+        description="Every building you've captured, ready to add to any client's shortlist."
         actions={
-          <Link href="/buildings/new">
-            <Button>+ Add building</Button>
-          </Link>
+          <>
+            <ButtonLink href="/import" variant="ghost">
+              <Download size={15} aria-hidden="true" />
+              Import links
+            </ButtonLink>
+            <ButtonLink href="/buildings/new">
+              <Plus size={15} aria-hidden="true" />
+              Capture building
+            </ButtonLink>
+          </>
         }
         showHomeLink={false}
       />
 
       {error ? (
-        <Card className="border-red-300 bg-red-50 text-red-700">
-          <p className="font-medium">Can&apos;t reach the database right now.</p>
+        <div className="rounded-[18px] bg-red-50 p-6 text-red-800">
+          <p className="font-semibold">Can&apos;t reach the database right now.</p>
           <p className="mt-1 text-sm">
             Your saved buildings are safe — this is a connection problem, not data loss. Try again in a moment. ({error})
           </p>
-        </Card>
+        </div>
       ) : (
         <BuildingLibrary buildings={buildings} />
       )}

@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { Plus } from "lucide-react";
 import { notFound } from "next/navigation";
 import { serverApi as api } from "@/lib/serverApi";
-import { Badge, Button, Card, PageHeader } from "@/components/ui";
+import { Badge, ButtonLink, Card, PageHeader } from "@/components/ui";
 import { AddOnForm } from "@/components/AddOnForm";
 import { BuildingForm, type BuildingFormInitial } from "@/components/BuildingForm";
 import { formatArea, formatUnitHeadlinePrice } from "@/lib/format";
@@ -46,14 +47,21 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
   return (
     <div>
       <PageHeader
-        eyebrow="Building library"
+        eyebrow={building.client_id ? "Client copy" : "Library"}
         title={building.name}
-        description="Everything here is editable — correct anything the capture got wrong, then save. Your changes stay; nothing re-scrapes over them."
-        actions={
-          <Link href={`/buildings/${id}/units/new`}>
-            <Button>+ Add space</Button>
-          </Link>
+        description={
+          building.client_id
+            ? "This is a client's own copy. Changes here only affect their folder and live link, never the library."
+            : "Everything here is editable. Correct anything the capture got wrong, then save — nothing re-scrapes over it."
         }
+        actions={
+          <ButtonLink href={`/buildings/${id}/units/new`}>
+            <Plus size={15} aria-hidden="true" />
+            Add space
+          </ButtonLink>
+        }
+        backHref={building.client_id ? `/clients/${building.client_id}` : "/buildings"}
+        backLabel={building.client_id ? "Client folder" : "Library"}
       />
 
       {building.building_amenities.length > 0 && (
@@ -69,8 +77,8 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
       </div>
 
       <Card className="mb-6">
-        <h2 className="mb-3 text-lg font-semibold">
-          Available spaces ({building.units.length})
+        <h2 className="mb-4 text-lg font-semibold tracking-tight">
+          Available spaces <span className="ml-1 font-normal tabular-nums text-muted">{building.units.length}</span>
         </h2>
         {building.units.length === 0 ? (
           <p className="text-sm text-muted">
@@ -80,7 +88,7 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">
+                <tr className="border-b border-border text-left text-xs text-muted">
                   <th className="pb-2 pr-4">Floor</th>
                   <th className="pb-2 pr-4">Area</th>
                   <th className="pb-2 pr-4">Pricing</th>
@@ -105,7 +113,7 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
                         href={`/buildings/${id}/units/${unit.unit_id}/edit`}
                         className="text-xs font-semibold text-accent hover:underline"
                       >
-                        Edit →
+                        Edit
                       </Link>
                     </td>
                   </tr>
@@ -117,7 +125,9 @@ export default async function BuildingDetailPage({ params }: { params: Promise<{
       </Card>
 
       <Card>
-        <h2 className="mb-3 text-lg font-semibold">Add-ons ({addons.length})</h2>
+        <h2 className="mb-4 text-lg font-semibold tracking-tight">
+          Add-ons <span className="ml-1 font-normal tabular-nums text-muted">{addons.length}</span>
+        </h2>
         {addons.length > 0 && (
           <ul className="mb-4 space-y-1 text-sm">
             {addons.map((a) => (
