@@ -10,7 +10,6 @@ const PREFILL_TEXT_KEYS = [
   "address",
   "postalCode",
   "city",
-  "buildingType",
   "yearBuilt",
   "energyLabel",
   "totalBuildingAreaM2",

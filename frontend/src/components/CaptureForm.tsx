@@ -25,7 +25,6 @@ const EMPTY = {
   postalCode: "",
   city: "",
   submarket: "",
-  buildingType: "",
   yearBuilt: "",
   energyLabel: "",
   breeamRating: "",
@@ -370,7 +369,6 @@ export function CaptureForm({
         latitude: form.latitude ? Number(form.latitude) : null,
         longitude: form.longitude ? Number(form.longitude) : null,
         submarket: form.submarket.trim() || null,
-        building_type: form.buildingType.trim() || null,
         year_built: num(form.yearBuilt),
         energy_label: form.energyLabel || null,
         breeam_rating: form.breeamRating.trim() || null,
@@ -774,9 +772,6 @@ export function CaptureForm({
             </DetailRow>
             <DetailRow label="Year of construction" htmlFor="cap-year">
               <input id="cap-year" value={form.yearBuilt} onChange={(e) => update("yearBuilt", e.target.value)} inputMode="numeric" placeholder="Optional" className={rowInputClass} />
-            </DetailRow>
-            <DetailRow label="Building type" htmlFor="cap-type">
-              <input id="cap-type" value={form.buildingType} onChange={(e) => update("buildingType", e.target.value)} placeholder="Office" className={rowInputClass} />
             </DetailRow>
             <DetailRow label="Available from" htmlFor="cap-avail">
               <input id="cap-avail" value={form.availability} onChange={(e) => update("availability", e.target.value)} placeholder="Per direct" className={rowInputClass} />
