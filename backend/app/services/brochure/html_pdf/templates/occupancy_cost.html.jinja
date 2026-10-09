@@ -1,0 +1,45 @@
+{% import "_macros.html.jinja" as m with context %}
+<section class="page" data-page="occupancy-cost">
+  {{ m.page_header("Office market inventory" + (" · " + city if city else "")) }}
+  <div style="position:absolute;left:56px;top:100px;width:1011px;">
+    {{ m.kicker_rule() }}
+    <div class="eyebrow">03 &middot; Comparison</div>
+    <h2 class="display" style="font-size:36px;line-height:1.1;">Indicative occupancy cost</h2>
+    <p style="margin-top:14px;font-size:14px;line-height:1.5;color:#3A3F45;">
+      Rent plus service charges for <span class="ph">{{ required_area_label }}</span>, per year, from lowest to highest.
+      Parking for <span class="ph">{{ parking_spaces_label }}</span> is shown separately. All amounts excl. VAT.
+    </p>
+  </div>
+  <div style="position:absolute;left:56px;top:244px;width:1011px;">
+    <div style="display:grid;grid-template-columns:230px 1fr 130px 110px 140px;gap:12px;padding-bottom:8px;border-bottom:1px solid #16191D;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#5E636B;">
+      <div>Building</div>
+      <div><span style="display:inline-block;width:10px;height:10px;background:#16191D;margin-right:5px;vertical-align:middle;"></span>Rent <span style="display:inline-block;width:10px;height:10px;background:#B9B4AA;margin:0 5px;vertical-align:middle;"></span>Service charges</div>
+      <div style="text-align:right;">Total per year</div>
+      <div style="text-align:right;">All-in per sqm</div>
+      <div style="text-align:right;">Parking per year</div>
+    </div>
+    {% for row in rows %}
+    <div style="display:grid;grid-template-columns:230px 1fr 130px 110px 140px;gap:12px;align-items:center;padding:14px 0;border-bottom:1px solid #DCD8D1;">
+      <div>
+        <div style="font-size:14px;font-weight:600;">{{ row.name }}</div>
+        <div style="font-size:12px;color:#5E636B;">{{ row.address }}</div>
+        {% if row.note %}<div style="font-size:11px;color:#E4002B;">{{ row.note }}</div>{% endif %}
+      </div>
+      <div style="height:14px;display:flex;border-radius:2px;overflow:hidden;width:{{ row.bar_width_pct }}%;min-width:20px;">
+        <div style="background:#16191D;width:{{ row.rent_share_pct }}%;"></div>
+        <div style="background:#B9B4AA;width:{{ 100 - row.rent_share_pct }}%;"></div>
+      </div>
+      <div style="text-align:right;font-size:15px;font-weight:600;">{{ row.total_label }}</div>
+      <div style="text-align:right;font-size:14px;">{{ row.all_in_label }}</div>
+      <div style="text-align:right;font-size:13px;">
+        <div>{{ row.parking_total_label }}</div>
+        <div style="color:#5E636B;font-size:11px;">{{ row.parking_unit_label }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div style="position:absolute;left:56px;bottom:68px;width:1011px;font-size:12px;font-style:italic;color:#5E636B;">
+    Indicative only, based on asking rents and service charges. Excludes incentives, indexation and VAT. Final terms are subject to negotiation.
+  </div>
+  {{ m.page_footer(occupancy_page) }}
+</section>

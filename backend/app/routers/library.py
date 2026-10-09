@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.services.brochure.availability_pdf import build_library_pdf
+from app.services.brochure.html_pdf import render_library_pdf_html
 
 router = APIRouter(prefix="/library", tags=["library"])
 
@@ -25,6 +25,11 @@ class LibraryPdfRequest(BaseModel):
     client_name: str = Field(min_length=1, description="Who the overview is for — shown on the cover")
     building_ids: list[str] = Field(min_length=1, description="Selection order is preserved in the PDF")
     prepared_by: str | None = None
+    # Set when generated from a client's own folder (ClientFolder.tsx) — lets
+    # the "Your requirements" page pull the client's real search_brief
+    # instead of rendering every field as a fill-in-later placeholder. Unset
+    # from the library page's ad-hoc flow, which has no Client record at all.
+    client_id: str | None = None
 
 
 def _slug(text: str) -> str:
@@ -34,11 +39,12 @@ def _slug(text: str) -> str:
 @router.post("/pdf")
 def generate_library_pdf(payload: LibraryPdfRequest, db: Session = Depends(get_db)):
     try:
-        pdf_bytes = build_library_pdf(
+        pdf_bytes = render_library_pdf_html(
             db,
             client_name=payload.client_name.strip(),
             building_ids=payload.building_ids,
             prepared_by=(payload.prepared_by or "").strip() or None,
+            client_id=payload.client_id,
         )
     except Exception as exc:
         # Without this, a rendering failure reaches the client as a bare

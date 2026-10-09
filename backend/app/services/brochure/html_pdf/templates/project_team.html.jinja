@@ -1,0 +1,25 @@
+{% import "_macros.html.jinja" as m with context %}
+<section class="page" data-page="project-team">
+  <div class="panel panel-left" style="width:472px;"></div>
+  {{ m.page_header("Office market inventory" + (" · " + city if city else "")) }}
+  <div style="position:absolute;left:56px;top:100px;width:340px;display:flex;flex-direction:column;">
+    {{ m.kicker_rule() }}
+    <div class="eyebrow">04 &middot; Contact</div>
+    <h2 class="display" style="font-size:40px;line-height:1.1;">Project team</h2>
+    <p class="lede">We arrange viewings, collect proposals from landlords and negotiate on your behalf. Contact us directly.</p>
+  </div>
+  <div style="position:absolute;left:56px;bottom:52px;width:340px;display:flex;flex-direction:column;gap:3px;font-size:13px;line-height:1.5;color:#3A3F45;">
+    <div>{{ firm_address_line1 }}</div>
+    <div>{{ firm_address_line2 }}</div>
+    <div><a href="mailto:{{ firm_email }}">{{ firm_email }}</a></div>
+  </div>
+  <div style="position:absolute;left:520px;top:120px;width:547px;">
+    <div style="display:flex;flex-direction:column;gap:8px;padding-top:14px;border-top:1px solid #16191D;">
+      <div style="font-size:24px;font-weight:300;">{{ prepared_by or "Your " + firm_name + " team" }}</div>
+      {% if prepared_by %}<div style="font-size:13px;color:#5E636B;">{{ m.placeholder("Job title") }}</div>{% endif %}
+      <div style="margin-top:10px;font-size:14px;"><a href="mailto:{{ firm_email }}">{{ firm_email }}</a></div>
+      <div style="font-size:14px;color:#3A3F45;">{{ firm_phone }}</div>
+    </div>
+  </div>
+  {{ m.page_footer(team_page) }}
+</section>

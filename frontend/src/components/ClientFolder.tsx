@@ -46,6 +46,7 @@ export function ClientFolder({ client: initialClient, buildings: initial }: { cl
         clientName: client.display_name,
         buildingIds: buildings.map((b) => b.building_id),
         preparedBy: preparedBy.trim() || null,
+        clientId: client.client_id,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not generate the PDF");

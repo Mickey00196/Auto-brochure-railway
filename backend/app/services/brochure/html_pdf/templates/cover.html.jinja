@@ -1,0 +1,21 @@
+{% import "_macros.html.jinja" as m with context %}
+<section class="page" data-page="cover">
+  <div style="position:absolute;left:448px;top:0;width:675px;height:794px;background:linear-gradient(135deg,#0F2557,#1D4ED8);"></div>
+  {% if hero_photo %}
+  <img src="{{ hero_photo }}" alt="" onerror="this.style.display='none'" style="position:absolute;left:448px;top:0;width:675px;height:794px;object-fit:cover;object-position:60% 50%;display:block;">
+  {% endif %}
+  <div style="position:absolute;left:440px;top:0;width:8px;height:794px;background:#E4002B;"></div>
+  <div style="position:absolute;left:0;top:0;width:440px;height:794px;box-sizing:border-box;padding:56px 56px 52px;display:flex;flex-direction:column;justify-content:space-between;">
+    <img src="{{ logo_src }}" alt="Cushman &amp; Wakefield" style="height:34px;width:auto;display:block;align-self:flex-start;">
+    <div style="display:flex;flex-direction:column;">
+      {{ m.kicker_rule() }}
+      <div class="eyebrow">Office market inventory</div>
+      <h1 style="margin:18px 0 0;font-size:56px;line-height:1.08;font-weight:300;letter-spacing:-0.02em;color:#16191D;">Your next office{% if city %} in {{ city }}{% endif %}</h1>
+      <div style="margin-top:22px;font-size:18px;line-height:1.45;font-weight:400;color:#3A3F45;">Prepared for {{ client_display_name }}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;font-size:13px;line-height:1.5;">
+      <div style="font-weight:600;color:#16191D;">{{ prepared_date }} &middot; Confidential</div>
+      <div style="color:#5E636B;">{{ firm_name }}</div>
+    </div>
+  </div>
+</section>

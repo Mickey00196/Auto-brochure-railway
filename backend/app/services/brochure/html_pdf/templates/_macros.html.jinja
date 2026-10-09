@@ -1,0 +1,23 @@
+{% macro page_header(section_label) -%}
+<div class="eyebrow-top">{{ section_label }}</div>
+<img class="logo-top" src="{{ logo_src }}" alt="Cushman &amp; Wakefield">
+{%- endmacro %}
+
+{% macro page_footer(page_number) -%}
+<div class="footer-row">
+  <span>{{ firm_name }}</span>
+  <span class="page-number">{{ "%02d"|format(page_number) }}</span>
+</div>
+{%- endmacro %}
+
+{% macro kicker_rule() -%}
+<div class="kicker-rule"></div>
+{%- endmacro %}
+
+{% macro placeholder(text) -%}
+<span class="ph">{{ text }}</span>
+{%- endmacro %}
+
+{% macro fact_row(label, value) -%}
+<div class="fact-row"><div class="fact-label">{{ label }}</div><div class="fact-value">{{ value }}</div></div>
+{%- endmacro %}

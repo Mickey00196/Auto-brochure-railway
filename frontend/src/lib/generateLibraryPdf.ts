@@ -6,7 +6,9 @@ import { PROXY_BASE_URL } from "@/lib/api";
 // bound here means a stuck backend costs a clear error, not a "Generating…"
 // button that never comes back — the caller still has to refresh before,
 // there was no way out at all short of that.
-const GENERATE_TIMEOUT_MS = 45_000;
+// Headless-Chromium rendering (web fonts, a stitched OSM map image) costs
+// more than the old ReportLab path did, especially on a cold browser launch.
+const GENERATE_TIMEOUT_MS = 75_000;
 
 /** Shared by the library page and a client folder — both build the same
  * availability PDF from a client name + an ordered list of building ids,
@@ -15,17 +17,26 @@ export async function downloadLibraryPdf({
   clientName,
   buildingIds,
   preparedBy,
+  clientId,
 }: {
   clientName: string;
   buildingIds: string[];
   preparedBy: string | null;
+  /** Set from a client's own folder, so the PDF's "Your requirements" page
+   * can pull that client's real search brief instead of blank placeholders. */
+  clientId?: string;
 }): Promise<void> {
   let res: Response;
   try {
     res = await fetch(`${PROXY_BASE_URL}/library/pdf`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client_name: clientName, building_ids: buildingIds, prepared_by: preparedBy }),
+      body: JSON.stringify({
+        client_name: clientName,
+        building_ids: buildingIds,
+        prepared_by: preparedBy,
+        client_id: clientId ?? null,
+      }),
       signal: AbortSignal.timeout(GENERATE_TIMEOUT_MS),
     });
   } catch (e) {

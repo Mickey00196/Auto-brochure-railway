@@ -1,0 +1,28 @@
+{% import "_macros.html.jinja" as m with context %}
+<section class="page" data-page="contents">
+  {{ m.page_header("Office market inventory" + (" · " + city if city else "")) }}
+  <div style="position:absolute;left:56px;top:100px;width:392px;display:flex;flex-direction:column;">
+    {{ m.kicker_rule() }}
+    <div class="eyebrow">Introduction</div>
+    <h2 class="display" style="font-size:40px;line-height:1.1;">About this inventory</h2>
+    <div style="margin-top:24px;display:flex;flex-direction:column;gap:14px;font-size:15px;line-height:1.6;color:#3A3F45;">
+      <p style="margin:0;">This market inventory gives {{ client_display_name }} an overview of the office space currently available{% if city %} in and around {{ city }}{% endif %}.</p>
+      <p style="margin:0;">It covers {{ building_count }} option{{ "" if building_count == 1 else "s" }}{% if subareas %} across {{ subareas|length }} subarea{{ "" if subareas|length == 1 else "s" }}{% endif %}, with their characteristics, indicative costs and accessibility.</p>
+      <p style="margin:0;">It is the starting point for a shortlist, viewings and proposals from landlords.</p>
+    </div>
+  </div>
+  <div style="position:absolute;left:56px;bottom:80px;width:392px;padding-top:14px;border-top:1px solid #DCD8D1;font-size:12px;line-height:1.55;color:#5E636B;">
+    All information is indicative and based on market information available at the time of writing. See the disclaimer on page {{ disclaimer_page }}.
+  </div>
+  <div style="position:absolute;left:560px;top:122px;width:507px;display:flex;flex-direction:column;">
+    <div style="font-size:13px;font-weight:600;letter-spacing:0.2em;text-transform:uppercase;color:#5E636B;padding-bottom:14px;border-bottom:1px solid #16191D;">Contents</div>
+    {% for entry in toc %}
+    <div style="display:grid;grid-template-columns:48px minmax(0,1fr) 40px;align-items:baseline;padding:22px 0;border-bottom:1px solid #DCD8D1;">
+      <span style="font-size:13px;font-weight:600;color:#E4002B;">{{ "%02d"|format(loop.index) }}</span>
+      <span style="font-size:22px;font-weight:300;">{{ entry.label }}</span>
+      <span style="font-size:13px;color:#5E636B;text-align:right;">{{ "%02d"|format(entry.page) }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {{ m.page_footer(2) }}
+</section>
