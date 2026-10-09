@@ -172,3 +172,24 @@ def test_client_listing_includes_preview_photos_and_areas(client):
     ]
     # Distinct, in folder order; a building with no submarket falls back to its city.
     assert listed["areas"] == ["Zuidas", "Amsterdam", "Houthavens"]
+
+
+def test_client_copies_lists_the_folders_holding_a_copy(client):
+    building, _ = _seed_master(client)
+    acme = client.post("/clients", json={"name": "Acme BV"}).json()
+    northwind = client.post("/clients", json={"company_name": "Northwind Logistics"}).json()
+    assert client.get(f"/buildings/{building['building_id']}/client-copies").json() == []
+
+    copy_a = client.post(
+        f"/buildings/{building['building_id']}/copy-to-client", json={"client_id": acme["client_id"]}
+    ).json()
+    client.post(f"/buildings/{building['building_id']}/copy-to-client", json={"client_id": northwind["client_id"]})
+
+    rows = client.get(f"/buildings/{building['building_id']}/client-copies").json()
+    assert [r["client_id"] for r in rows] == [acme["client_id"], northwind["client_id"]]
+    assert rows[0]["building_id"] == copy_a["building_id"]
+    assert rows[1]["display_name"] == "Northwind Logistics"
+
+    # A copy has no copies of its own, and an unknown id is a 404.
+    assert client.get(f"/buildings/{copy_a['building_id']}/client-copies").json() == []
+    assert client.get("/buildings/does-not-exist/client-copies").status_code == 404

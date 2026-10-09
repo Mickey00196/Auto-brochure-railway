@@ -207,6 +207,16 @@ class CopyToClientRequest(BaseModel):
     client_id: str
 
 
+class ClientCopyOut(BaseModel):
+    """One client folder holding a copy of a library building — the "In 2
+    client folders" line on the building page."""
+
+    client_id: str
+    display_name: str
+    building_id: str
+    copied_at: datetime | None = None
+
+
 class SetClientLiveRequest(BaseModel):
     enable: bool
 

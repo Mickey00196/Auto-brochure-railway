@@ -2,6 +2,7 @@ import type {
   AddOn,
   Building,
   Client,
+  ClientCopy,
   DashboardData,
   DuplicateCandidate,
   ImportResult,
@@ -35,6 +36,7 @@ export function makeApi(request: DoRequest) {
     updateBuilding: (id: string, payload: Record<string, unknown>) =>
       request<Building>(`/buildings/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
     deleteBuilding: (id: string) => request<void>(`/buildings/${id}`, { method: "DELETE" }),
+    clientCopies: (buildingId: string) => request<ClientCopy[]>(`/buildings/${buildingId}/client-copies`),
     copyBuildingToClient: (buildingId: string, clientId: string) =>
       request<Building>(`/buildings/${buildingId}/copy-to-client`, {
         method: "POST",

@@ -49,6 +49,14 @@ export interface Building {
   units: Unit[];
 }
 
+/** A client folder holding a copy of a library building. */
+export interface ClientCopy {
+  client_id: string;
+  display_name: string;
+  building_id: string;
+  copied_at: string | null;
+}
+
 export interface DuplicateCandidate {
   building_id: string;
   name: string;
