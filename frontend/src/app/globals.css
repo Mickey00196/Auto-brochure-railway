@@ -108,6 +108,32 @@ body {
 .shortlist-pin--active span {
   transform: scale(1.25);
 }
+/* The client link's city map: a grey base map so the pins carry the colour. */
+.shortlist-map--muted .leaflet-tile-pane {
+  filter: grayscale(1) contrast(0.92) brightness(1.04);
+}
+/* Smaller pins at city scale, where neighbouring offices sit close together;
+   centred in the same 34px icon box so the anchor stays right. */
+.shortlist-map--muted .shortlist-pin span {
+  width: 28px;
+  height: 28px;
+  margin: 3px;
+  font-size: 11px;
+}
+.leaflet-tooltip.shortlist-tip {
+  border: 0;
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: var(--foreground);
+  color: var(--surface);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: 0 8px 20px -10px rgb(15 30 61 / 0.6);
+}
+.leaflet-tooltip.shortlist-tip.leaflet-tooltip-top::before {
+  border-top-color: var(--foreground);
+}
 .shortlist-popup {
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   font-size: 13px;
