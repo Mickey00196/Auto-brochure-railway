@@ -543,11 +543,11 @@ function extractListing() {
     for (const c of matches) addPhoto(c.split("?")[0]);
   }
 
-  // Pass 1/2 are skipped on "Pass 0 found something" ONLY on an actual
-  // funda.nl page: there, Pass 0 is scoped to #overview-photos or the
-  // lightbox slideshow, both server-rendered with the FULL gallery already
-  // present via data-lazy (see the comment above) — running Pass 1/2 too
-  // would only reintroduce the noise Pass 0 exists to exclude.
+  // Pass 1/2 are skipped on "Pass 0 found something" on an actual funda.nl
+  // page: there, Pass 0 is scoped to #overview-photos or the lightbox
+  // slideshow, both server-rendered with the FULL gallery already present
+  // via data-lazy (see the comment above) — running Pass 1/2 too would only
+  // reintroduce the noise Pass 0 exists to exclude.
   //
   // On any other host — confirmed on fundainbusiness.nl, which serves
   // photos from the same cloud.funda.nl CDN but without that guarantee —
@@ -555,13 +555,20 @@ function extractListing() {
   // whichever gallery slides happen to be mounted as real <img> elements at
   // that moment. A virtualized lightbox easily leaves most of a 22-photo
   // gallery unmounted, so "Pass 0 found 3" must NOT be read as "Pass 0
-  // found everything". Always running Pass 1 (a regex over the raw HTML,
-  // which catches URLs embedded in inline JSON/app state regardless of
-  // what's mounted) and Pass 2 costs nothing extra on a non-funda.nl page:
-  // they share Pass 0's own addPhoto()/seen Set, so anything already found
-  // is a no-op, and the size-agnostic dedup below collapses every size
-  // variant of a photo to one entry however many passes caught it.
-  if (!isFunda || out.photos.length === beforeFundaPass) {
+  // found everything" THERE — but Pass 1/2 are genuinely expensive (Pass 1
+  // runs three full-string replaces plus a regex scan over the page's
+  // entire HTML source, which on a heavy listing page can be several MB;
+  // Pass 2 walks every <img>/<source>/<a>/background-image element in the
+  // whole document), and running them unconditionally on every non-funda.nl
+  // capture froze the tab for a second or more — a real regression, not
+  // worth paying on a page where Pass 0 already found a solid set. Only pay
+  // for them when Pass 0 is clearly short: below the page's own stated
+  // photo count when known, else below a flat floor that a real gallery
+  // (not just a couple of stray funda-CDN thumbnails elsewhere on the page)
+  // should comfortably clear.
+  const fundaPassYield = out.photos.length - beforeFundaPass;
+  const metPhotoTarget = out.photoTarget > 0 ? fundaPassYield >= out.photoTarget : fundaPassYield >= 8;
+  if (isFunda ? out.photos.length === beforeFundaPass : !metPhotoTarget) {
     // Pass 1 — regex over the page's own HTML source. Listing pages embed the
     // gallery in inline JSON/app state (before the lazy <img> tags swap in
     // their real src), so the full list is usually in the markup already. The
@@ -582,8 +589,13 @@ function extractListing() {
     // Pass 2 — the rendered DOM. Always run it (not just as a fallback): when
     // the gallery/"Alle media" view is open, the full-size photos exist as real
     // elements even though they never appeared in the served HTML.
+    // A content-heavy listing page can carry thousands of <img> elements
+    // (ads, trackers, related-listing carousels) — capped the same way
+    // Pass 1 is, so a pathological page can't turn this into another
+    // multi-second scan.
     const candidates = [];
     for (const img of document.querySelectorAll("img")) {
+      if (candidates.length >= PHOTO_SCAN_LIMIT * 4) break;
       candidates.push(img.getAttribute("src"), img.currentSrc || null);
       for (const attr of img.attributes) {
         // data-src, data-lazy-src, data-original, data-large, data-zoom-image…
@@ -594,6 +606,7 @@ function extractListing() {
       pushSrcset(img.getAttribute("srcset") || img.getAttribute("data-srcset"), candidates);
     }
     for (const source of document.querySelectorAll("source")) {
+      if (candidates.length >= PHOTO_SCAN_LIMIT * 4) break;
       pushSrcset(source.getAttribute("srcset") || source.getAttribute("data-srcset"), candidates);
     }
     for (const anchor of document.querySelectorAll('a[href*=".jpg"], a[href*=".jpeg"], a[href*=".png"], a[href*=".webp"]')) {
