@@ -261,14 +261,32 @@ function extractListing() {
     if (ratioMatch) out.parkingRatio = formatRatio(ratioMatch);
   }
 
-  // --- rental price office (only per-m²-per-year figures; a lump-sum
-  // monthly rent is a different quantity and must not land in €/m²/yr) ---
-  const rentRaw = fieldValue("huurprijs", "huurprijs kantoorruimte", "rental price", "rent", "rent price");
-  if (rentRaw && /m²|m2|vierkante meter/i.test(rentRaw)) out.rentEurPerM2Year = parseNum(rentRaw);
+  // --- rental price office: a stated per-m²-per-year figure is used as-is.
+  // Some listings (funda in business small units especially) price the
+  // whole space as a flat lump sum instead — "€ 5.200 per maand" for the
+  // 481 m² on offer, never a rate at all. That's not a different quantity
+  // to discard, just a total that needs dividing by the area it prices (the
+  // area ON OFFER, never the whole building) and annualizing if it's
+  // monthly — an exact unit conversion, not a guess, so it's safe to do
+  // automatically. Same "maand"/"month" check already used for the parking
+  // price below; no explicit monthly marker is taken to mean the total was
+  // already annual.
+  const toPerM2PerYear = (raw, area) => {
+    if (!raw || area == null || area <= 0) return null;
+    const amount = parseNum(raw);
+    if (amount == null) return null;
+    const annual = /maand|\bmnd\b|month|\bmo\b|p\.?\s*m\.?\b/i.test(raw) ? amount * 12 : amount;
+    return Math.round(annual / area);
+  };
 
-  // --- rental service charges (same per-m² rule) ---
+  const rentRaw = fieldValue("huurprijs", "huurprijs kantoorruimte", "rental price", "rent", "rent price");
+  out.rentEurPerM2Year =
+    rentRaw && /m²|m2|vierkante meter/i.test(rentRaw) ? parseNum(rentRaw) : toPerM2PerYear(rentRaw, out.availableAreaSqm);
+
+  // --- rental service charges (same per-m² rule and lump-sum fallback) ---
   const scRaw = fieldValue("servicekosten", "service charges", "service costs", "servicekosten kantoorruimte");
-  if (scRaw && /m²|m2|vierkante meter/i.test(scRaw)) out.serviceChargeEurPerM2Year = parseNum(scRaw);
+  out.serviceChargeEurPerM2Year =
+    scRaw && /m²|m2|vierkante meter/i.test(scRaw) ? parseNum(scRaw) : toPerM2PerYear(scRaw, out.availableAreaSqm);
 
   // --- rental price parking space (per space per year) ---
   const parkRaw = fieldValue("huurprijs parkeerplaats", "prijs parkeerplaats", "huurprijs per parkeerplaats", "parkeerplaats huurprijs", "rental price parking space", "parking price");
