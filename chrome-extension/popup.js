@@ -543,10 +543,25 @@ function extractListing() {
     for (const c of matches) addPhoto(c.split("?")[0]);
   }
 
-  // Pass 1/2 only run when Pass 0 found nothing of its own — i.e. this isn't
-  // a funda page. On a page where Pass 0 did find photos, running these too
-  // would just reintroduce the noise Pass 0 was built to exclude.
-  if (out.photos.length === beforeFundaPass) {
+  // Pass 1/2 are skipped on "Pass 0 found something" ONLY on an actual
+  // funda.nl page: there, Pass 0 is scoped to #overview-photos or the
+  // lightbox slideshow, both server-rendered with the FULL gallery already
+  // present via data-lazy (see the comment above) — running Pass 1/2 too
+  // would only reintroduce the noise Pass 0 exists to exclude.
+  //
+  // On any other host — confirmed on fundainbusiness.nl, which serves
+  // photos from the same cloud.funda.nl CDN but without that guarantee —
+  // Pass 0 falls back to scanning the whole document, which only catches
+  // whichever gallery slides happen to be mounted as real <img> elements at
+  // that moment. A virtualized lightbox easily leaves most of a 22-photo
+  // gallery unmounted, so "Pass 0 found 3" must NOT be read as "Pass 0
+  // found everything". Always running Pass 1 (a regex over the raw HTML,
+  // which catches URLs embedded in inline JSON/app state regardless of
+  // what's mounted) and Pass 2 costs nothing extra on a non-funda.nl page:
+  // they share Pass 0's own addPhoto()/seen Set, so anything already found
+  // is a no-op, and the size-agnostic dedup below collapses every size
+  // variant of a photo to one entry however many passes caught it.
+  if (!isFunda || out.photos.length === beforeFundaPass) {
     // Pass 1 — regex over the page's own HTML source. Listing pages embed the
     // gallery in inline JSON/app state (before the lazy <img> tags swap in
     // their real src), so the full list is usually in the markup already. The
@@ -613,10 +628,27 @@ function extractListing() {
     s = s.replace(/\d{2,4}x\d{2,4}/g, "");
     s = s.replace(/[-_/](?:thumbnails?|thumbs?|small|medium|large|preview|mini|orig(?:inal)?|full|xs|sm|md|lg|xl)\b/g, "");
     s = s.replace(/[-_](?:w|h)\d{2,4}\b/g, "");
+    // Funda's own CDN (cloud.funda.nl/valentina_media) serves each photo's
+    // srcset as a bare width suffix with no "w"/"h" prefix and no "x" —
+    // "913_1440.jpg", "913_180.jpg", etc. — which none of the patterns
+    // above catch, so every width came out as a separately-kept "photo".
+    // Scoped to Funda's own documented srcset widths specifically (not any
+    // trailing 2-4 digit number) so a genuinely different photo numbered
+    // sequentially on some other site ("img_01.jpg", "img_02.jpg") never
+    // collapses into its neighbour.
+    s = s.replace(/[-_](?:180|360|720|1080|1440|2160)$/, "");
     s = s.replace(/[-_]{2,}/g, "-");
     return s.replace(/[-_./]+$/, "");
   };
-  const dim = (u) => { const m = u.match(/(\d{2,4})x(\d{2,4})/); return m ? Number(m[1]) * Number(m[2]) : 0; };
+  const dim = (u) => {
+    const m = u.match(/(\d{2,4})x(\d{2,4})/);
+    if (m) return Number(m[1]) * Number(m[2]);
+    // Funda's own bare width suffix ("913_1440.jpg") has no height — compare
+    // by the stated width alone so the largest srcset variant still wins
+    // instead of "whichever happened to be seen first".
+    const w = u.match(/[-_](180|360|720|1080|1440|2160)\.(?:jpe?g|png|webp|avif)(?:\?|$)/i);
+    return w ? Number(w[1]) : 0;
+  };
   const thumbish = (u) => (/(thumb|small|preview|mini)/i.test(u) ? 1 : 0);
   const looksLarger = (a, b) =>
     thumbish(a) !== thumbish(b) ? thumbish(a) < thumbish(b) : dim(a) >= dim(b);
