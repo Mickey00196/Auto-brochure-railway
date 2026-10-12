@@ -79,7 +79,7 @@ function extractListing() {
     rentEurPerM2Year: null, serviceChargeEurPerM2Year: null,
     parkingPriceEurYear: null, availability: null,
     airportNote: null, highwayNote: null, publicTransportNote: null,
-    delivery: null, floors: null, sourceUrl: null,
+    delivery: null, floors: null, sourceUrl: null, contractTerm: null,
   };
   const pick = (sel, attr) => {
     const el = document.querySelector(sel);
@@ -233,6 +233,13 @@ function extractListing() {
   // value is NOT an area (an area means it was the available-surface row).
   const acceptRaw = fieldValue("aanvaarding", "beschikbaar", "beschikbaar per", "beschikbaar vanaf", "availability", "available", "available from");
   if (acceptRaw && !/m²|m2/i.test(acceptRaw)) out.availability = acceptRaw;
+
+  // --- lease term ("Huurtermijn: 5 (vijf) jaar...") — labelled only, same
+  // as "Available from" above: a loose "N jaar" scan over the whole page
+  // would just as easily catch a building's age or an energy certificate's
+  // validity period, so this only fills in when the listing states it
+  // under a clear lease-term label. ---
+  out.contractTerm = fieldValue("huurtermijn", "lease term", "contract term", "rental term", "lease period", "huurperiode");
 
   // --- parking ratio -----------------------------------------------------
   // Stated as a labelled row ("Parkeerratio 1 op 80 m²") or, more often, in
@@ -818,6 +825,7 @@ function renderPreview(data, photoCount, droppedPhotos) {
     ["Rent €/m²/yr", data.rentEurPerM2Year], ["Service €/m²/yr", data.serviceChargeEurPerM2Year],
     ["Parking €/yr", data.parkingPriceEurYear],
     ["Available", data.availability],
+    ["Lease term", data.contractTerm],
     ["Delivery", data.delivery === "turn_key" ? "Turn-key" : data.delivery === "shell_and_core" ? "Shell & core" : null],
     ["Per floor", data.floors ? data.floors.split(";").map((f) => f.replace(":", " ") + " m²").join(", ") : null],
     ["Energy", data.energyLabel], ["Year built", data.yearBuilt],
@@ -863,6 +871,7 @@ function buildHandoffUrl(appUrl, data) {
   set("serviceChargeEurPerM2Year", data.serviceChargeEurPerM2Year);
   set("parkingPriceEurYear", data.parkingPriceEurYear);
   set("availability", data.availability);
+  set("contractTerm", data.contractTerm);
   set("airportNote", data.airportNote);
   set("accessibilityNote", data.highwayNote);
   set("publicTransportNote", data.publicTransportNote);

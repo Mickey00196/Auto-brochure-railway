@@ -25,6 +25,7 @@ const PREFILL_TEXT_KEYS = [
   "serviceChargeEurPerM2Year",
   "parkingPriceEurYear",
   "availability",
+  "contractTerm",
 ] as const satisfies readonly (keyof CaptureInitial)[];
 
 const first = (raw: string | string[] | undefined) => (Array.isArray(raw) ? raw[0] : raw);

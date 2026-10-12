@@ -45,6 +45,7 @@ const EMPTY = {
   serviceChargeEurPerM2Year: "",
   parkingPriceEurYear: "",
   availability: "",
+  contractTerm: "",
   delivery: "shell_and_core" as Delivery,
   floors: [] as CaptureFloor[],
 };
@@ -372,7 +373,9 @@ export function CaptureForm({
       const rent = num(form.rentEurPerM2Year);
       const service = num(form.serviceChargeEurPerM2Year);
       const minDivisible = num(form.minDivisibleAreaM2);
-      const hasTerms = Boolean(rent != null || service != null || form.parkingRatio.trim() || form.availability.trim());
+      const hasTerms = Boolean(
+        rent != null || service != null || form.parkingRatio.trim() || form.availability.trim() || form.contractTerm.trim(),
+      );
       const pieces: { floor: string | null; area: number }[] = floorsDriveTotal
         ? form.floors
             .map((f, i) => ({ floor: f.floor.trim() || null, area: floorAreas[i] }))
@@ -396,6 +399,7 @@ export function CaptureForm({
           service_charge_eur_per_m2_year: service,
           parking_ratio: form.parkingRatio.trim() || null,
           availability: form.availability.trim() || null,
+          contract_term: form.contractTerm.trim() || null,
         });
         unitIds.push(unit.unit_id);
       }
@@ -758,6 +762,9 @@ export function CaptureForm({
             </DetailRow>
             <DetailRow label="Available from" htmlFor="cap-avail">
               <input id="cap-avail" value={form.availability} onChange={(e) => update("availability", e.target.value)} placeholder="Per direct" className={rowInputClass} />
+            </DetailRow>
+            <DetailRow label="Lease term" htmlFor="cap-term">
+              <input id="cap-term" value={form.contractTerm} onChange={(e) => update("contractTerm", e.target.value)} placeholder="e.g. 5 years" className={rowInputClass} />
             </DetailRow>
             <DetailRow label="Total building area" htmlFor="cap-total">
               <UnitInput id="cap-total" value={form.totalBuildingAreaM2} onChange={(v) => update("totalBuildingAreaM2", v)} unit="m²" />
