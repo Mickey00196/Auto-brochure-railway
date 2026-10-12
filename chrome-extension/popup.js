@@ -238,8 +238,11 @@ function extractListing() {
   // Stated as a labelled row ("Parkeerratio 1 op 80 m²") or, more often, in
   // the description ("Parking ratio: 1 space per 348 m² LFA"). The unit that
   // follows matters to a tenant — 1:348 LFA is not 1:348 BVO — so it's kept.
+  // "van" between the keyword and the ratio ("parkeernorm van 1:100", a real
+  // phrasing — the keyword and the figure aren't always adjacent) — optional
+  // so "parkeernorm 1:100" (no "van") still matches too.
   const RATIO_BODY_RE =
-    /(?:parking\s*(?:ratio|norm)|parkeer(?:ratio|norm)|parkeerplaats(?:en)?\s*ratio)\s*[:\-–]?\s*(?:1|one|één|een)\s*(?:parkeer)?(?:plaats|plek|space|spot|spaces)?\s*(?:per|op|:|\/|to)\s*([\d.,]+)\s*(m²|m2|lfa|vvo|bvo|sq\.?\s?m)?[\s]*(lfa|vvo|bvo)?/i;
+    /(?:parking\s*(?:ratio|norm)|parkeer(?:ratio|norm)|parkeerplaats(?:en)?\s*ratio)\s*[:\-–]?\s*(?:van\s*)?(?:1|one|één|een)\s*(?:parkeer)?(?:plaats|plek|space|spot|spaces)?\s*(?:per|op|:|\/|to)\s*([\d.,]+)\s*(m²|m2|lfa|vvo|bvo|sq\.?\s?m)?[\s]*(lfa|vvo|bvo)?/i;
   const RATIO_PLAIN_RE =
     /(?:1|one|één|een)\s*(?:parkeerplaats|parkeerplek|parking\s*space|space)\s*(?:per|op|\/)\s*([\d.,]+)\s*(m²|m2|lfa|vvo|bvo)?[\s]*(lfa|vvo|bvo)?/i;
 
@@ -251,7 +254,9 @@ function extractListing() {
   };
 
   const ratioRaw = fieldValue("parkeerratio", "parking ratio", "parkeernorm", "parking norm");
-  let ratioMatch = ratioRaw ? ratioRaw.match(/(?:1|one|één|een)\s*(?:parkeer)?(?:plaats|plek|space|spot)?\s*(?:per|op|:|\/)\s*([\d.,]+)\s*(m²|m2|lfa|vvo|bvo)?[\s]*(lfa|vvo|bvo)?/i) : null;
+  let ratioMatch = ratioRaw
+    ? ratioRaw.match(/(?:van\s*)?(?:1|one|één|een)\s*(?:parkeer)?(?:plaats|plek|space|spot)?\s*(?:per|op|:|\/)\s*([\d.,]+)\s*(m²|m2|lfa|vvo|bvo)?[\s]*(lfa|vvo|bvo)?/i)
+    : null;
   if (ratioMatch) {
     out.parkingRatio = formatRatio(ratioMatch);
   } else if (ratioRaw) {
@@ -294,6 +299,21 @@ function extractListing() {
     let price = parseNum(parkRaw);
     if (price != null && /maand|month/i.test(parkRaw)) price = Math.round(price * 12);
     out.parkingPriceEurYear = price;
+  } else {
+    // The structured label lookup above needs the price on the line right
+    // after a matching label — real listings often don't do that (e.g. a
+    // "Parkeerplaatsen:" heading followed by an access-hours line, THEN the
+    // price, or several tiered prices for different access hours with no
+    // single labelled row at all). Scan the prose directly instead: first
+    // "€ X per parkeerplaats per jaar/maand" wins when there's more than
+    // one tier (a broker checks the figure over anyway, same as every other
+    // captured field — this just saves them typing a starting number).
+    const pm = fullText.match(/€\s*([\d.,]+)(?:,-)?\s*per\s*parkeerplaats\s*per\s*(jaar|maand|year|month)/i);
+    if (pm) {
+      let price = parseNum(pm[1]);
+      if (price != null && /maand|month/i.test(pm[2])) price = Math.round(price * 12);
+      out.parkingPriceEurYear = price;
+    }
   }
 
   // --- distances: airport / highway / public transport ---
