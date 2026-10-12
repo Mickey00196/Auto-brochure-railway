@@ -1,7 +1,7 @@
 {
   "fixture": "grote-bickersstraat-74-78-live.html",
   "url": "https://www.fundainbusiness.nl/kantoor/amsterdam/object-eval-grote-bickersstraat-74-78-live/",
-  "notes": "As the live funda page behaves: only the first lines of the description are on the page until 'Lees de volledige omschrijving' is clicked, after which the rest arrives (300 ms later here). A 'Lees meer' link to the broker page must not be followed. Service charge, parking ratio and parking price are only in the part that arrives.",
+  "notes": "As the live funda page behaves: only the first lines of the description are on the page until 'Lees de volledige omschrijving' is clicked, after which the rest arrives (300 ms later here). A 'Lees meer' link to the broker page must not be followed. Service charge, parking ratio and parking price are only in the part that arrives. Kenmerken 'Oppervlakte' (1.355 m²) is only the 3rd-floor unit; the copy states 1.993 m² in total across the 3rd (1.355) and 5th (638), with part-letting of the 3rd from ca. 600 m².",
   "expected": {
     "rentEurPerM2Year": null,
     "serviceChargeEurPerM2Year": 61,
@@ -9,6 +9,22 @@
     "parkingPriceEurYear": 3500,
     "availability": "In overleg",
     "energyLabel": "A+++",
-    "yearBuilt": 1966
+    "yearBuilt": 1966,
+    "floors": [
+      {
+        "floor": "3rd floor",
+        "area": 1355,
+        "rent": null,
+        "availability": null
+      },
+      {
+        "floor": "5th floor",
+        "area": 638,
+        "rent": null,
+        "availability": null
+      }
+    ],
+    "availableAreaSqm": 1993,
+    "minDivisibleAreaSqm": 600
   }
 }

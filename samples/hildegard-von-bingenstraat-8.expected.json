@@ -1,0 +1,20 @@
+{
+  "fixture": "hildegard-von-bingenstraat-8.html",
+  "url": "https://www.fundainbusiness.nl/kantoor/amsterdam/object-eval-hildegard-von-bingenstraat-8/",
+  "notes": "Floors split into lettable parts ('2nd floor – unit A: 1,071 m²', '2nd floor – unit B: 280 m²'); each part is its own unit. The listed units add up to 3,761 m² while the listing states 4,525 m² available, so the stated total stays the available figure.",
+  "expected": {
+    "floors": [
+      { "floor": "2nd floor – unit A", "area": 1071, "rent": null, "availability": null },
+      { "floor": "2nd floor – unit B", "area": 280, "rent": null, "availability": null },
+      { "floor": "3rd floor – unit A", "area": 563, "rent": null, "availability": null },
+      { "floor": "3rd floor – unit B", "area": 389, "rent": null, "availability": null },
+      { "floor": "9th floor", "area": 1098, "rent": null, "availability": null },
+      { "floor": "11th floor", "area": 360, "rent": null, "availability": null }
+    ],
+    "availableAreaSqm": 4525,
+    "minDivisibleAreaSqm": 280,
+    "parkingRatio": "1:348",
+    "rentEurPerM2Year": 500,
+    "serviceChargeEurPerM2Year": 100
+  }
+}

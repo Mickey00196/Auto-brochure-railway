@@ -247,8 +247,8 @@ function extractListing() {
   // --- smallest lettable unit ("in units vanaf 280 m²", "from 280 m² LFA") ---
   const divSource = (offeredRaw || "") + " " + fullText;
   const divMatch =
-    divSource.match(/(?:in\s*units?\s*vanaf|units?\s*(?:from|vanaf)|deelbaar\s*(?:vanaf|per)|vanaf)\s*([\d.,]+)\s*(?:m²|m2)/i) ||
-    divSource.match(/(?:part[- ]floor|deelverhuur)[^.]{0,40}?(?:from|vanaf)\s*([\d.,]+)\s*(?:m²|m2)/i);
+    divSource.match(/(?:in\s*units?\s*vanaf|units?\s*(?:from|vanaf)|deelbaar\s*(?:vanaf|per)|vanaf)\s*(?:(?:ca|circa|approx)\.?\s*|±\s*)?([\d.,]+)\s*(?:m²|m2)/i) ||
+    divSource.match(/(?:part[- ]floor|deelverhuur)[^.]{0,40}?(?:from|vanaf)\s*(?:(?:ca|circa|approx)\.?\s*|±\s*)?([\d.,]+)\s*(?:m²|m2)/i);
   if (divMatch) {
     const d = parseNum(divMatch[1]);
     // Only meaningful if it's genuinely smaller than what's on offer.
@@ -962,14 +962,18 @@ function extractListing() {
     return rate >= 20 && rate <= 2000 ? rate : null;
   };
 
-  const units = new Map(); // key "3" / "18,19" → unit
-  const addUnit = (set, area, rest, ctx) => {
+  const units = new Map(); // key "3" / "18,19" / "2#A" → unit
+  // A floor split into lettable parts ("2nd floor – unit A: 1,071 m²",
+  // "2nd floor – unit B: 280 m²") gives one unit per part, each with the
+  // part's letter or number in its name.
+  const addUnit = (set, area, rest, ctx, part) => {
     if (!set.length || area == null || area < 10 || area > 50000) return;
-    const key = set.join(",");
+    const sub = part ? String(part).toUpperCase() : null;
+    const key = set.join(",") + (sub ? `#${sub}` : "");
     if (units.has(key)) return;
     units.set(key, {
-      set, ctx,
-      floor: unitLabel(set),
+      set, ctx, sub,
+      floor: unitLabel(set) + (sub ? ` – unit ${sub}` : ""),
       area,
       rent: rest ? rateFrom(rest, area) : null,
       availability: rest ? normAvail((rest.match(AVAIL_RE) || [])[1]) : null,
@@ -1002,8 +1006,12 @@ function extractListing() {
   }
 
   // 2) Lines of text: "<floors> [:–] [ca.] <area> m² … [€ rent] … [availability]".
+  // Optional part of a floor between the floor and its area: "– unit A",
+  // ", unit 2", " (unit B)", "- deel 1", "- vleugel A".
+  const UNIT_PART_SRC =
+    "(?:[^\\S\\n]*[,\\-–—(][^\\S\\n]*(?:units?|deel|ruimte|vleugel|wing|kavel|zone|part)[^\\S\\n]*([a-z]|\\d{1,2}(?:\\.\\d{1,2})?)(?![\\w.])\\)?)?";
   const FLOOR_AREA_RE = new RegExp(
-    `(${FLOOR_SPEC_SRC})[^\\S\\n]*[:,\\-–]?[^\\S\\n]*(?:(?:ca|circa|approx|appr|ongeveer|±|van|groot|totaal|of)\\.?[^\\S\\n]*)*(\\d[\\d.,]*)[^\\S\\n]*(?:m²|m2|sq\\.?\\s?m|vierkante)`,
+    `(${FLOOR_SPEC_SRC})${UNIT_PART_SRC}[^\\S\\n]*[:,\\-–]?[^\\S\\n]*(?:(?:ca|circa|approx|appr|ongeveer|±|van|groot|totaal|of)\\.?[^\\S\\n]*)*(\\d[\\d.,]*)[^\\S\\n]*(?:m²|m2|sq\\.?\\s?m|vierkante)`,
     "gi",
   );
   // Cheap keyword checks first: the floor patterns are only worth running
@@ -1020,7 +1028,7 @@ function extractListing() {
       const restEnd = mi + 1 < matches.length ? matches[mi + 1].index : t.length;
       const rest = t.slice(m.index + m[0].length, restEnd);
       const near = floorLines.slice(Math.max(0, li - 3), li + 1).join(" ");
-      addUnit(floorSet(m[1]), parseNum(m[2]), rest, /beschikbaar|verhuur|available|te huur|for rent|to let|aangeboden/i.test(near));
+      addUnit(floorSet(m[1]), parseNum(m[3]), rest, /beschikbaar|verhuur|available|te huur|for rent|to let|aangeboden/i.test(near), m[2]);
     }
   }
 
@@ -1039,17 +1047,40 @@ function extractListing() {
   }
 
   let unitList = [...units.values()].sort((a, b) => a.set[0] - b.set[0]);
-  // Two units claiming the same floor: keep the first one stated.
+  // Two units claiming the same floor: keep the first one stated. Named
+  // parts of one floor ("unit A", "unit B") share it; a whole-floor figure
+  // and its parts never both count, so the floor isn't offered twice.
   {
-    const taken = new Set();
+    const whole = new Set();
+    const parted = new Set();
     unitList = unitList.filter((u) => {
-      if (u.set.some((n) => taken.has(n))) return false;
-      u.set.forEach((n) => taken.add(n));
+      if (u.set.some((n) => whole.has(n))) return false;
+      if (u.sub) {
+        u.set.forEach((n) => parted.add(n));
+        return true;
+      }
+      if (u.set.some((n) => parted.has(n))) return false;
+      u.set.forEach((n) => whole.add(n));
       return true;
     });
   }
   const unitSum = unitList.reduce((t, u) => t + u.area, 0);
-  const offered = areaFromLooseScan ? null : out.availableAreaSqm;
+  let offered = areaFromLooseScan ? null : out.availableAreaSqm;
+  // funda's "Oppervlakte" row sometimes covers only one of the units on
+  // offer (1.355 m²) while the copy states the total ("In het gebouw is in
+  // totaal circa 1.993 m² v.v.o. kantoorruimte beschikbaar … op de 3e en 5e
+  // verdieping"). When the units add up to that stated total, the total is
+  // what's on offer.
+  if (offered != null && unitList.length >= 2 && unitSum > offered * 1.15) {
+    const tm =
+      fullText.match(/tot(?:al|aal)\s*(?:available|beschikbaar)\s*:?\s*(?:(?:ca|circa|approx)\.?\s*|±\s*)?([\d.,]+)\s*(?:m²|m2)/i) ||
+      fullText.match(/in\s+(?:het\s+)?totaal\s+(?:is\s+)?(?:(?:ca|circa)\.?\s*|±\s*)?([\d.,]+)\s*(?:m²|m2)[^\n]{0,60}?beschikbaar/i);
+    const stated = tm ? parseNum(tm[1]) : null;
+    if (stated != null && Math.abs(unitSum - stated) <= stated * 0.02) {
+      offered = stated;
+      out.availableAreaSqm = stated;
+    }
+  }
   // Floor sizes that add up to MORE than the space on offer describe the
   // whole building, not what's for rent; a single stray floor mention only
   // counts when the text around it is about what's available.

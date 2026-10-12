@@ -1,7 +1,7 @@
 {
   "fixture": "grote-bickersstraat-74-78.html",
   "url": "https://www.fundainbusiness.nl/kantoor/amsterdam/object-eval-grote-bickersstraat-74-78/",
-  "notes": "Kenmerken says 'Geen servicekosten bekend' and has no parking rows; the service charge (€ 61/m²/jr), parking ratio (1:130) and parking price (€ 3.500/jr) are only in the description, which is collapsed behind 'Lees de volledige omschrijving'.",
+  "notes": "Kenmerken says 'Geen servicekosten bekend' and has no parking rows; the service charge (€ 61/m²/jr), parking ratio (1:130) and parking price (€ 3.500/jr) are only in the description, which is collapsed behind 'Lees de volledige omschrijving'. Kenmerken 'Oppervlakte' (1.355 m²) is only the 3rd-floor unit; the copy states 1.993 m² in total across the 3rd (1.355) and 5th (638), with part-letting of the 3rd from ca. 600 m².",
   "expected": {
     "rentEurPerM2Year": null,
     "serviceChargeEurPerM2Year": 61,
@@ -9,6 +9,22 @@
     "parkingPriceEurYear": 3500,
     "availability": "In overleg",
     "energyLabel": "A+++",
-    "yearBuilt": 1966
+    "yearBuilt": 1966,
+    "floors": [
+      {
+        "floor": "3rd floor",
+        "area": 1355,
+        "rent": null,
+        "availability": null
+      },
+      {
+        "floor": "5th floor",
+        "area": 638,
+        "rent": null,
+        "availability": null
+      }
+    ],
+    "availableAreaSqm": 1993,
+    "minDivisibleAreaSqm": 600
   }
 }

@@ -61,6 +61,11 @@ meta tags, and visible text:
   in business the "Oppervlakte" row is the space being *offered*, not the size
   of the building — the total building area is only filled from a label that
   genuinely means the whole building, and otherwise stays blank.
+- **Units per floor** (area, rent and availability where stated). A floor
+  split into parts ("2nd floor – unit A: 1,071 m²", "unit B: 280 m²") gives
+  one unit per part. When the "Oppervlakte" row covers only one unit but the
+  copy states a total that the units add up to, that total is used as the
+  available space.
 - **Parking ratio**, from the characteristics row or the description prose
   ("Parking ratio: 1 space per 348 m² LFA" → 1:348 m² LFA). The reference unit
   is kept, since 1:348 LFA is not the same promise as 1:348 BVO.
