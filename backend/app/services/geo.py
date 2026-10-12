@@ -596,6 +596,62 @@ def _overpass_nearby(
     return best
 
 
+# Motorway exits only, nodes only: a fraction of the work of the combined
+# station + exit query above, so it still answers when the public Overpass
+# instance is too loaded to finish the bigger one in time (seen in
+# production: the combined query timing out request after request, leaving
+# "Highway" blank). Given its own, longer budget and one retry, since it is
+# the only source for that field.
+JUNCTION_RADIUS_M = 15_000
+JUNCTION_TIMEOUT_SECONDS = 20
+JUNCTION_ATTEMPTS = 2
+
+
+def _junction_query(lat: float, lon: float) -> str:
+    return f"""[out:json][timeout:{JUNCTION_TIMEOUT_SECONDS - 4}];
+node(around:{JUNCTION_RADIUS_M},{lat},{lon})["highway"="motorway_junction"];
+out;"""
+
+
+def nearest_motorway_junction(lat: float, lon: float, *, fetch: Fetcher = _http) -> tuple[float, str] | None:
+    """(distance_metres, label) of the nearest motorway exit, or None."""
+    junction_fetch = functools.partial(_http, timeout=JUNCTION_TIMEOUT_SECONDS) if fetch is _http else fetch
+    payload = _junction_query(lat, lon).encode("utf-8")
+    # The primary mirror only: overpass.osm.ch answered the same Amsterdam
+    # query with nothing (see OVERPASS_MIRRORS), so asking it would only
+    # turn "couldn't reach the data" into a wrong "no exit nearby". A failed
+    # request is retried; a real answer, even an empty one, is final.
+    for attempt in range(JUNCTION_ATTEMPTS):
+        try:
+            data = json.loads(junction_fetch(OVERPASS_MIRRORS[0], payload))
+        except Exception:
+            logger.warning("Overpass junction query failed for (%s, %s), attempt %s", lat, lon, attempt + 1, exc_info=True)
+            continue
+        if "elements" not in data:
+            logger.warning("Overpass junction query returned no 'elements' for (%s, %s): %r", lat, lon, data)
+            continue
+        best: tuple[float, str] | None = None
+        for el in data["elements"]:
+            tags = el.get("tags") or {}
+            point = _element_point(el)
+            if tags.get("highway") != "motorway_junction" or not point:
+                continue
+            distance = haversine_m(lat, lon, point[0], point[1])
+            if best is None or distance < best[0]:
+                best = (distance, _junction_label(tags))
+        return best
+    return None
+
+
+def _junction_label(tags: dict) -> str:
+    """"Exit 3 Coenplein" / "Coenplein" / "Motorway exit"."""
+    name = tags.get("name")
+    ref = tags.get("ref")
+    if ref and name:
+        return f"Exit {ref} {name}"
+    return str(name) if name else (f"Exit {ref}" if ref else "Motorway exit")
+
+
 def _highway_line_query(lat: float, lon: float, radius_m: int, *, include_trunk_roads: bool) -> str:
     tag_filter = _highway_line_tag_filter(include_trunk_roads=include_trunk_roads)
     return f"""[out:json][timeout:{_OVERPASS_QUERY_TIMEOUT_SECONDS}];
@@ -753,17 +809,19 @@ def nearby_distances(
     api_key = _google_maps_api_key()
     place_type = _GOOGLE_PLACE_TYPES.get(transport_mode, _GOOGLE_TRANSIT_FALLBACK_TYPE) if api_key else None
 
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=4) as pool:
         google_future = (
             pool.submit(_google_nearby, lat, lon, place_type, api_key, fetch=fetch, kind="public_transport")
             if api_key else None
         )
         overpass_future = pool.submit(_overpass_nearby, lat, lon, transport_mode, fetch=fetch)
         highway_line_future = pool.submit(nearest_highway_line, lat, lon, fetch=fetch)
+        junction_future = pool.submit(nearest_motorway_junction, lat, lon, fetch=fetch)
 
         transit = google_future.result() if google_future else None
         overpass_best = overpass_future.result()
         highway_line = highway_line_future.result()
+        junction = junction_future.result()
 
     if transit:
         best["public_transport"] = transit
@@ -772,6 +830,12 @@ def nearby_distances(
     # the only source for highway access.
     for kind, value in overpass_best.items():
         best.setdefault(kind, value)
+    # Highway, in order: the combined query's exit, the exit-only query's,
+    # then the nearest point on a motorway itself ("A10 3.2 km").
+    if junction:
+        best.setdefault("highway", junction)
+    if highway_line:
+        best.setdefault("highway", highway_line)
 
     return Distances(
         latitude=lat,

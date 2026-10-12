@@ -196,10 +196,15 @@ function extractListing() {
   // not a labeled "Bushalte 200 m" row) isn't a distance and must not be
   // returned as one; better an honest blank than a category word standing
   // in for a figure it never carried (§24).
+  // Only a short value that IS a distance counts: a heading such as
+  // "Openbaar vervoer" followed by a whole paragraph about bus lines is
+  // description, not a distance, and is left to the capture page, which
+  // works the distances out from the address itself.
+  const DISTANCE_RE = /\d[\d.,]*\s*(?:km|kilometer|m|meter|min(?:uten|utes|\.)?)\b/i;
   const fieldNote = (...labels) => {
     const hit = findPair(labels);
-    if (!hit || !/\d/.test(hit[1])) return null;
-    return hit[1].length < 40 ? `${hit[0].replace(/:$/, "")} ${hit[1]}` : hit[1];
+    if (!hit || hit[1].length > 40 || !DISTANCE_RE.test(hit[1])) return null;
+    return `${hit[0].replace(/:$/, "")} ${hit[1]}`;
   };
 
   // --- areas ------------------------------------------------------------

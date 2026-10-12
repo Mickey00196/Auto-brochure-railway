@@ -531,3 +531,63 @@ def test_nearby_distances_runs_lookups_concurrently_not_sequentially(monkeypatch
     elapsed = time.monotonic() - start
 
     assert elapsed < sleep_seconds * 3
+
+
+# ---------------------------------------------------------------------------
+# The exit-only fallback that keeps "Highway" filled when the combined
+# station + exit query times out.
+# ---------------------------------------------------------------------------
+
+
+def test_highway_comes_from_the_exit_only_query_when_the_combined_query_fails():
+    from app.services.geo import JUNCTION_RADIUS_M
+
+    exit_node = {
+        "type": "node", "id": 1, "lat": 52.3900, "lon": 4.8600,
+        "tags": {"highway": "motorway_junction", "ref": "3", "name": "Coenplein"},
+    }
+
+    def fetch(url: str, body: bytes | None) -> str:
+        query = (body or b"").decode()
+        if f"node(around:{JUNCTION_RADIUS_M}" in query:
+            return json.dumps({"elements": [exit_node]})
+        raise TimeoutError("The read operation timed out")  # the combined query and the road query
+
+    d = nearby_distances(52.3863673, 4.889874, fetch=fetch)
+    assert d.highway is not None and d.highway.startswith("Exit 3 Coenplein ")
+
+
+def test_exit_only_query_retries_once_after_a_failed_request():
+    from app.services.geo import nearest_motorway_junction
+
+    calls = []
+
+    def fetch(url: str, body: bytes | None) -> str:
+        calls.append(url)
+        if len(calls) == 1:
+            raise TimeoutError("The read operation timed out")
+        return json.dumps({"elements": [{"type": "node", "id": 1, "lat": 52.39, "lon": 4.86, "tags": {"highway": "motorway_junction", "name": "Coenplein"}}]})
+
+    result = nearest_motorway_junction(52.3863673, 4.889874, fetch=fetch)
+    assert len(calls) == 2
+    assert result is not None and result[1] == "Coenplein"
+
+
+def test_highway_falls_back_to_the_nearest_motorway_road():
+    from app.services.geo import JUNCTION_RADIUS_M
+
+    road = {
+        "type": "way", "id": 9, "tags": {"highway": "motorway", "ref": "A10"},
+        "geometry": [{"lat": 52.39, "lon": 4.85}, {"lat": 52.40, "lon": 4.86}],
+    }
+
+    def fetch(url: str, body: bytes | None) -> str:
+        query = (body or b"").decode()
+        if f"node(around:{JUNCTION_RADIUS_M}" in query:
+            return json.dumps({"elements": []})
+        if "way(around:" in query:
+            return json.dumps({"elements": [road]})
+        raise TimeoutError("The read operation timed out")
+
+    d = nearby_distances(52.3863673, 4.889874, fetch=fetch)
+    assert d.highway is not None and d.highway.startswith("A10 ")

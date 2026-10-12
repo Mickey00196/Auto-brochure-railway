@@ -280,9 +280,11 @@ export function CaptureForm({
     };
   }
 
-  /** overwrite=false (on open) only fills blanks — a distance the listing
-   * stated beats a straight line. The explicit button replaces all three. */
-  async function lookUpDistances(overwrite: boolean) {
+  /** Distances are worked out from the building's actual location and
+   * replace whatever the listing said; a listing value only stays when the
+   * lookup found nothing for that field. `announce` is for the explicit
+   * button, which says what it did. */
+  async function lookUpDistances(announce: boolean) {
     if (!form.address.trim() && !form.city.trim()) {
       setLocateNote("Fill in the address first.");
       return;
@@ -297,16 +299,18 @@ export function CaptureForm({
       }
       setForm((prev) => {
         const next = { ...prev };
-        if (d.public_transport && (overwrite || !prev.publicTransportNote)) next.publicTransportNote = d.public_transport;
-        if (d.highway && (overwrite || !prev.accessibilityNote)) next.accessibilityNote = d.highway;
-        if (d.airport && (overwrite || !prev.airportNote)) next.airportNote = d.airport;
+        if (d.public_transport) next.publicTransportNote = d.public_transport;
+        if (d.highway) next.accessibilityNote = d.highway;
+        if (d.airport) next.airportNote = d.airport;
         if (d.latitude != null && d.longitude != null) {
           next.latitude = String(d.latitude);
           next.longitude = String(d.longitude);
         }
         return next;
       });
-      if (overwrite) setLocateNote("Updated from the address. These are straight-line distances.");
+      const missed = [!d.highway && "highway", !d.public_transport && "public transport"].filter(Boolean);
+      if (missed.length) setLocateNote(`Couldn't find the nearest ${missed.join(" or ")} right now — try “Look up again” in a moment.`);
+      else if (announce) setLocateNote("Updated from the address. These are straight-line distances.");
     } catch (e) {
       setLocateNote(`Distance lookup failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -335,7 +339,7 @@ export function CaptureForm({
   useEffect(() => {
     if (autoLookupRan.current) return;
     autoLookupRan.current = true;
-    if ((form.address.trim() || form.city.trim()) && (!form.publicTransportNote || !form.accessibilityNote || !form.airportNote)) {
+    if (form.address.trim() || form.city.trim()) {
       queueMicrotask(() => lookUpDistances(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design

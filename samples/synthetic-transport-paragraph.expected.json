@@ -1,0 +1,10 @@
+{
+  "fixture": "synthetic-transport-paragraph.html",
+  "url": "https://www.example-broker.nl/aanbod/westerdok-1/",
+  "notes": "Synthetic: a paragraph under an 'Openbaar vervoer' heading is description, not a distance. The capture page works distances out from the address instead.",
+  "expected": {
+    "publicTransportNote": null,
+    "highwayNote": null,
+    "airportNote": null
+  }
+}
