@@ -430,7 +430,7 @@ function extractListing() {
     ["Underground parking", ["underground car park", "underground parking", "parkeerkelder", "ondergrondse parkeer"]],
     ["EV charging", ["charging point", "charging station", "laadpunt", "laadpalen", "ev charging", "electric vehicle charging"]],
     ["Air conditioning", ["air conditioning", "airconditioning", "klimaatbeheersing", "koeling"]],
-    ["Meeting rooms", ["meeting room", "vergaderruimte", "vergaderzaal", "conference room"]],
+    ["Meeting rooms", ["meeting room", "vergaderruimte", "vergaderzaal", "vergadercentrum", "conference room", "conference center", "conference centre"]],
     ["Auditorium", ["auditorium", "theater", "theatre"]],
     ["Furnished", ["furnished", "gemeubileerd", "turn-key", "turnkey"]],
     ["Lifts", ["lift core", "lift cores", "elevator", "passagierslift", "liften"]],
@@ -440,7 +440,23 @@ function extractListing() {
     ["Solar panels", ["solar panel", "zonnepanelen"]],
     ["Sustainability certified", ["breeam", "well platinum", "well gold", "leed", "paris proof", "net carbon zero"]],
   ];
-  const low = fullText.toLowerCase();
+  // Scoped to the listing's own facilities section when it has one — the
+  // whole page's prose otherwise reads as the BUILDING's amenities too: a
+  // "the area has restaurants and bars nearby" line in a Location
+  // paragraph, a catering company's own name ("Vermaat Catering") — real
+  // false positives seen on an actual listing. Requires the heading to be
+  // its OWN line (not just the word appearing somewhere in a sentence —
+  // "in de directe omgeving zijn veel voorzieningen aanwezig..." is not a
+  // facilities heading and matched the loose version of this check on that
+  // same listing). 40 lines comfortably covers a facilities bullet list
+  // without running into the next, unrelated section. Falls back to the
+  // whole page when no such heading line exists, so a listing that states
+  // its facilities inline without one still gets scanned (the previous,
+  // unscoped behaviour).
+  const normLine = (s) => s.toLowerCase().replace(/[:*]+$/, "").trim();
+  const facilitiesLineIdx = lines.findIndex((l) => /^(voorzieningen|faciliteiten|facilities|amenities)$/i.test(normLine(l)));
+  const amenitiesSource = facilitiesLineIdx >= 0 ? lines.slice(facilitiesLineIdx, facilitiesLineIdx + 40).join(" ") : fullText;
+  const low = amenitiesSource.toLowerCase();
   out.amenities = AMENITIES.filter(([, keys]) => keys.some((k) => low.includes(k))).map(([label]) => label);
   // "Underground parking" already implies parking — don't list both.
   if (out.amenities.includes("Underground parking")) {
