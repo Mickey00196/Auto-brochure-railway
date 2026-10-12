@@ -80,6 +80,9 @@ function extractListing() {
     parkingPriceEurYear: null, availability: null,
     airportNote: null, highwayNote: null, publicTransportNote: null,
     delivery: null, floors: null, sourceUrl: null, contractTerm: null,
+    // The sentence each parking figure was read from, so the broker can
+    // check the normalized number against what the listing actually says.
+    parkingRatioRaw: null, parkingPriceRaw: null,
   };
   const pick = (sel, attr) => {
     const el = document.querySelector(sel);
@@ -159,13 +162,27 @@ function extractListing() {
   // a line that IS a known label, followed by its value on the next line.
   const lines = bodyText.split("\n").map((s) => s.trim()).filter(Boolean);
   const norm = (s) => s.toLowerCase().replace(/[:*]+$/, "").replace(/\s+/g, " ").trim();
+  // Labels are tried in the order given, so the most specific one wins: a
+  // stacked "Status / Beschikbaar / Aanvaarding / In overleg" must answer
+  // "aanvaarding" with "In overleg", not "beschikbaar" with "Aanvaarding".
+  // A value line that is itself a short sub-heading ("Huurprijs" /
+  // "Kantoorruimte:" / "€ 355,00 per m² per jaar") hands over to the line
+  // after it.
   const findPair = (labels) => {
-    for (const [k, v] of pairs) {
-      const nk = norm(k);
-      if (labels.some((l) => nk === l) && v) return [k.trim(), v.trim()];
+    for (const l of labels) {
+      for (const [k, v] of pairs) {
+        if (norm(k) === l && v) return [k.trim(), v.trim()];
+      }
     }
-    for (let i = 0; i < lines.length - 1; i++) {
-      if (labels.some((l) => norm(lines[i]) === l)) return [lines[i], lines[i + 1]];
+    for (const l of labels) {
+      for (let i = 0; i < lines.length - 1; i++) {
+        if (norm(lines[i]) !== l) continue;
+        const v = lines[i + 1];
+        if (/:$/.test(v) && v.length <= 40 && !/\d/.test(v) && i + 2 < lines.length) {
+          return [`${lines[i]} ${v}`, lines[i + 2]];
+        }
+        return [lines[i], v];
+      }
     }
     return null;
   };
@@ -210,11 +227,16 @@ function extractListing() {
     const tm = fullText.match(/tot(?:al|aal)\s*(?:available|beschikbaar)\s*:?\s*([\d.,]+)\s*(?:m²|m2)/i);
     if (tm) out.availableAreaSqm = parseNum(tm[1]);
   }
+  // Last resort: the first m² figure on the page. Flagged, because the
+  // per-floor list below is a far better source when it exists.
+  let areaFromLooseScan = false;
   if (out.availableAreaSqm == null) {
+    areaFromLooseScan = true;
     const range = bodyText.match(/([\d.,]+)\s*(?:m2|m²)?\s*(?:tot|to|-|–|—)\s*([\d.,]+)\s*(?:m2|m²)/i);
     const single = bodyText.match(/([\d.,]+)\s*(?:m2|m²)/i);
     if (range) out.availableAreaSqm = parseNum(range[2]);
     else if (single) out.availableAreaSqm = parseNum(single[1]);
+    else areaFromLooseScan = false;
   }
 
   // --- smallest lettable unit ("in units vanaf 280 m²", "from 280 m² LFA") ---
@@ -231,7 +253,10 @@ function extractListing() {
   // --- availability / acceptance date ---
   // "Aanvaarding" is funda's label; a bare "beschikbaar" only counts when the
   // value is NOT an area (an area means it was the available-surface row).
-  const acceptRaw = fieldValue("aanvaarding", "beschikbaar", "beschikbaar per", "beschikbaar vanaf", "availability", "available", "available from");
+  const acceptRaw = fieldValue(
+    "aanvaarding", "huuringangsdatum", "ingangsdatum", "beschikbaar per", "beschikbaar vanaf", "beschikbaarheid",
+    "availability", "available from", "start date", "beschikbaar", "available",
+  );
   if (acceptRaw && !/m²|m2/i.test(acceptRaw)) out.availability = acceptRaw;
 
   // --- lease term ("Huurtermijn: 5 (vijf) jaar...") — labelled only, same
@@ -241,37 +266,75 @@ function extractListing() {
   // under a clear lease-term label. ---
   out.contractTerm = fieldValue("huurtermijn", "lease term", "contract term", "rental term", "lease period", "huurperiode");
 
-  // --- parking ratio -----------------------------------------------------
-  // Stated as a labelled row ("Parkeerratio 1 op 80 m²") or, more often, in
-  // the description ("Parking ratio: 1 space per 348 m² LFA"). The unit that
-  // follows matters to a tenant — 1:348 LFA is not 1:348 BVO — so it's kept.
-  // "van" between the keyword and the ratio ("parkeernorm van 1:100", a real
-  // phrasing — the keyword and the figure aren't always adjacent) — optional
-  // so "parkeernorm 1:100" (no "van") still matches too.
-  const RATIO_BODY_RE =
-    /(?:parking\s*(?:ratio|norm)|parkeer(?:ratio|norm)|parkeerplaats(?:en)?\s*ratio)\s*[:\-–]?\s*(?:van\s*)?(?:1|one|één|een)\s*(?:parkeer)?(?:plaats|plek|space|spot|spaces)?\s*(?:per|op|:|\/|to)\s*([\d.,]+)\s*(m²|m2|lfa|vvo|bvo|sq\.?\s?m)?[\s]*(lfa|vvo|bvo)?/i;
-  const RATIO_PLAIN_RE =
-    /(?:1|one|één|een)\s*(?:parkeerplaats|parkeerplek|parking\s*space|space)\s*(?:per|op|\/)\s*([\d.,]+)\s*(m²|m2|lfa|vvo|bvo)?[\s]*(lfa|vvo|bvo)?/i;
-
-  const formatRatio = (m) => {
-    const n = String(m[1]).replace(/[.,]$/, "");
-    const unit = [m[2], m[3]].filter(Boolean).join(" ").trim();
-    const pretty = unit ? ` ${unit.replace(/m2/i, "m²").replace(/\b(lfa|vvo|bvo)\b/i, (u) => u.toUpperCase())}` : "";
-    return `1:${n}${pretty}`;
-  };
-
-  const ratioRaw = fieldValue("parkeerratio", "parking ratio", "parkeernorm", "parking norm");
-  let ratioMatch = ratioRaw
-    ? ratioRaw.match(/(?:van\s*)?(?:1|one|één|een)\s*(?:parkeer)?(?:plaats|plek|space|spot)?\s*(?:per|op|:|\/)\s*([\d.,]+)\s*(m²|m2|lfa|vvo|bvo)?[\s]*(lfa|vvo|bvo)?/i)
-    : null;
-  if (ratioMatch) {
-    out.parkingRatio = formatRatio(ratioMatch);
-  } else if (ratioRaw) {
-    out.parkingRatio = ratioRaw;
-  } else {
-    ratioMatch = fullText.match(RATIO_BODY_RE) || fullText.match(RATIO_PLAIN_RE);
-    if (ratioMatch) out.parkingRatio = formatRatio(ratioMatch);
+  // --- parking ratio → "1:N" --------------------------------------------
+  // Every phrasing is normalized to one number: how many m² per parking
+  // space. "Parkeernorm: 1 parkeerplaats per 250 m² kantoorruimte",
+  // "1 pp per 250 m² VVO", "parkeernorm van 1 op 250", "1/250", "1:250" all
+  // become "1:250"; "4 parkeerplaatsen per 1.000 m²" becomes 1:250 too (an
+  // exact division, not an estimate). The sentence it came from is kept in
+  // parkingRatioRaw. Only text that talks about parking is searched — a
+  // floor plan's "schaal 1:100" must never become a parking ratio.
+  const textLines = [];
+  {
+    const seen = new Set();
+    for (const raw of fullText.split("\n")) {
+      const t = raw.replace(/\s+/g, " ").trim();
+      if (!t || seen.has(t)) continue;
+      seen.add(t);
+      textLines.push(t);
+    }
   }
+  const clip = (s) => (s.length > 220 ? s.slice(0, 217) + "…" : s);
+  // The one sentence of a paragraph that holds the figure, for the raw text.
+  const sentenceWith = (t, test) =>
+    t.split(/(?<=[.;!?])\s+(?=[A-Z€•\-])/).find((part) => test(part)) || t;
+  const PARKING_CTX = /parkeer|parkeren|parking|\bp\.?p\.?\b|garage|auto'?s?\b|\bcars?\b/i;
+  const parseRatio = (s) => {
+    if (!s) return null;
+    let m = s.match(
+      /(?:^|[^\d.,a-z])(?:1|één|een|one)\s*(?:p\.?p\.?|parkeer(?:plaats|plek)(?:en|ken)?|plaats(?:en)?|plek(?:ken)?|(?:parking\s*)?(?:spaces?|spots?|lots?|bays?)|auto)?\s*(?:per|op|:|\/|to|for\s*every|every|voor\s*(?:elke|iedere))\s*(?:elke\s*|iedere\s*)?(\d[\d.,]*)/i,
+    );
+    let denom = m ? parseNum(m[1]) : null;
+    if (denom == null) {
+      // "N spaces per 100 m²" / "0,4 pp per 100 m²"
+      m = s.match(
+        /(\d[\d.,]*)\s*(?:p\.?p\.?|parkeer(?:plaats|plek)(?:en|ken)?|plaatsen|plekken|(?:parking\s*)?spaces)\s*(?:per|op|\/|for\s*every)\s*(\d[\d.,]*)\s*(?:m²|m2|sq)/i,
+      );
+      if (m) {
+        const n = parseNum(m[1]);
+        const a = parseNum(m[2]);
+        if (n && a) denom = a / n;
+      }
+    }
+    if (denom == null || denom < 10 || denom > 2000) return null;
+    return Math.round(denom);
+  };
+  const ratioLabelRaw = fieldValue("parkeerratio", "parking ratio", "parkeernorm", "parking norm", "parkeernormering");
+  let ratioDenom = parseRatio(ratioLabelRaw);
+  if (ratioDenom != null) out.parkingRatioRaw = clip(ratioLabelRaw);
+  if (ratioDenom == null) {
+    // Lines naming the ratio itself first, then any line about parking.
+    // A heading line ("Parkeernorm:") is read together with the line
+    // under it.
+    const NORM_KW = /parkeer(?:norm|ratio)|parking\s*(?:ratio|norm)|\bnorm\b|ratio/i;
+    const tiers = [
+      textLines.map((t, i) => [t, i]).filter(([t]) => NORM_KW.test(t)),
+      textLines.map((t, i) => [t, i]).filter(([t]) => PARKING_CTX.test(t) && !NORM_KW.test(t)),
+    ];
+    outer: for (const tier of tiers) {
+      for (const [t, i] of tier) {
+        const withNext = t.length <= 40 && i + 1 < textLines.length ? `${t} ${textLines[i + 1]}` : t;
+        const d = parseRatio(t) ?? parseRatio(withNext);
+        if (d != null) {
+          ratioDenom = d;
+          out.parkingRatioRaw = clip(parseRatio(t) != null ? sentenceWith(t, (x) => parseRatio(x) != null) : withNext);
+          break outer;
+        }
+      }
+    }
+  }
+  if (ratioDenom != null) out.parkingRatio = `1:${ratioDenom}`;
+  else if (ratioLabelRaw) out.parkingRatioRaw = clip(ratioLabelRaw); // shown for checking, never guessed at
 
   // --- rental price office: a stated per-m²-per-year figure is used as-is.
   // Some listings (funda in business small units especially) price the
@@ -300,28 +363,62 @@ function extractListing() {
   out.serviceChargeEurPerM2Year =
     scRaw && /m²|m2|vierkante meter/i.test(scRaw) ? parseNum(scRaw) : toPerM2PerYear(scRaw, out.availableAreaSqm);
 
-  // --- rental price parking space (per space per year) ---
-  const parkRaw = fieldValue("huurprijs parkeerplaats", "prijs parkeerplaats", "huurprijs per parkeerplaats", "parkeerplaats huurprijs", "rental price parking space", "parking price");
-  if (parkRaw) {
-    let price = parseNum(parkRaw);
-    if (price != null && /maand|month/i.test(parkRaw)) price = Math.round(price * 12);
-    out.parkingPriceEurYear = price;
-  } else {
-    // The structured label lookup above needs the price on the line right
-    // after a matching label — real listings often don't do that (e.g. a
-    // "Parkeerplaatsen:" heading followed by an access-hours line, THEN the
-    // price, or several tiered prices for different access hours with no
-    // single labelled row at all). Scan the prose directly instead: first
-    // "€ X per parkeerplaats per jaar/maand" wins when there's more than
-    // one tier (a broker checks the figure over anyway, same as every other
-    // captured field — this just saves them typing a starting number).
-    const pm = fullText.match(/€\s*([\d.,]+)(?:,-)?\s*per\s*parkeerplaats\s*per\s*(jaar|maand|year|month)/i);
-    if (pm) {
-      let price = parseNum(pm[1]);
-      if (price != null && /maand|month/i.test(pm[2])) price = Math.round(price * 12);
-      out.parkingPriceEurYear = price;
+  // --- rental price parking space → € per space per year ------------------
+  // Read from a labelled row when there is one, otherwise from any line
+  // about parking ("Huurprijs parkeerplaats: € 3.700,36 per plaats per jaar",
+  // "€ 3.500 per parkeerplaats per jaar", "€ 150 p/m per plek"), or a line
+  // just under a parking heading. A monthly figure is multiplied by 12 in
+  // code; the line it came from is kept in parkingPriceRaw. With several
+  // tiers (office hours vs 24/7) the first one stated wins. Amounts that are
+  // a rate per m² are never a parking price.
+  const YEAR_RE = /per\s*(?:jaar|annum|year|jr)|\bp\.?\s*\/?\s*j\.?(?![a-z])|\/\s*(?:jaar|jr|year|yr)\b|jaarlijks|annually|yearly|per\s*plaats\s*per\s*jaar/i;
+  const MONTH_RE = /per\s*(?:maand|mnd|month)|\bp\.?\s*\/?\s*m\.?(?![a-z²2])|\/\s*(?:maand|mnd|mo|month)\b|maandelijks|monthly/i;
+  const parsePrice = (s, assumeYear) => {
+    for (const m of s.matchAll(/(?:€|eur(?:o)?\b)\s*(\d[\d.,]*)(?:,-|,—)?/gi)) {
+      const after = s.slice(m.index + m[0].length, m.index + m[0].length + 60);
+      const upToNextAmount = after.split(/€/)[0];
+      if (/m²|m2|vierkante\s*meter|sq\.?\s*m/i.test(upToNextAmount)) continue;
+      const amount = parseNum(m[1]);
+      if (amount == null) continue;
+      let perYear = null;
+      const yi = upToNextAmount.search(YEAR_RE);
+      const mi = upToNextAmount.search(MONTH_RE);
+      if (mi >= 0 && (yi < 0 || mi < yi)) perYear = amount * 12;
+      else if (yi >= 0) perYear = amount;
+      else if (assumeYear) perYear = amount;
+      if (perYear == null) continue;
+      perYear = Math.round(perYear * 100) / 100;
+      if (perYear < 100 || perYear > 25000) continue;
+      return perYear;
+    }
+    return null;
+  };
+  // A labelled price row with no period stated is taken as per year (funda
+  // states space prices annually); a generic "Parkeren" row must say so.
+  const parkPriceLabelRaw = fieldValue(
+    "huurprijs parkeerplaats", "huurprijs parkeerplaatsen", "prijs parkeerplaats", "prijs parkeerplaatsen",
+    "huurprijs per parkeerplaats", "parkeerplaats huurprijs", "rental price parking space", "parking price",
+  );
+  const parkLabelRaw = parkPriceLabelRaw || fieldValue("parkeerplaatsen", "parkeren", "parking", "parking spaces");
+  let parkPrice = parkLabelRaw ? parsePrice(parkLabelRaw, !!parkPriceLabelRaw) : null;
+  if (parkPrice != null) out.parkingPriceRaw = clip(parkLabelRaw);
+  if (parkPrice == null) {
+    let headingUntil = -1; // lines up to this index sit under a parking heading
+    for (let i = 0; i < textLines.length; i++) {
+      const t = textLines[i];
+      const isParkingHeading = t.length <= 40 && /^[^€\d]*(?:parkeer|parkeren|parking)/i.test(t);
+      if (isParkingHeading) headingUntil = i + 4;
+      if (!/€|eur/i.test(t)) continue;
+      if (!PARKING_CTX.test(t) && i > headingUntil) continue;
+      const price = parsePrice(t, false);
+      if (price != null) {
+        parkPrice = price;
+        out.parkingPriceRaw = clip(sentenceWith(t, (x) => parsePrice(x, false) != null));
+        break;
+      }
     }
   }
+  out.parkingPriceEurYear = parkPrice;
 
   // --- distances: airport / highway / public transport ---
   out.airportNote = fieldNote("luchthaven", "airport", "schiphol", "afstand tot luchthaven", "distance airport");
@@ -344,8 +441,12 @@ function extractListing() {
   // never a bare standalone-letter scan, which grabs random capitals) ---
   const enRaw = fieldValue("energielabel", "energy label", "energy rating", "energieklasse");
   if (enRaw) {
-    const em = enRaw.toUpperCase().match(/([A-G])(\+{0,5})/);
-    if (em) out.energyLabel = em[1] + em[2];
+    // A standalone class letter only — "Het kantoorgebouw beschikt over
+    // A+++" must read A+++, not the E of "HET".
+    const em =
+      enRaw.match(/(?:^|[^A-Za-z])([A-G])(\+{0,5})(?![A-Za-z])/) ||
+      enRaw.match(/(?:^|[^A-Za-z])([a-g])(\+{0,5})(?![A-Za-z])/);
+    if (em) out.energyLabel = em[1].toUpperCase() + em[2];
   } else {
     const em = fullText.match(/energ(?:ielabel|y\s*(?:label|rating))\s*:?\s*([A-Ga-g])(\+{0,5})/i);
     if (em) out.energyLabel = em[1].toUpperCase() + em[2];
@@ -740,43 +841,182 @@ function extractListing() {
     pickDelivery(fieldValue("opleveringsniveau", "opleverniveau", "oplevering", "staat van oplevering", "delivery level", "delivery")) ||
     pickDelivery(fullText);
 
-  // --- sizes per floor ("Begane grond 280 m²", "1e verdieping: 301 m²") ---
-  // Only kept when at least two floors are found AND they add up to the
-  // space on offer (within 10%) — a description that lists the floors of
-  // the whole building, or only some of the offered ones, would otherwise
-  // overwrite a correct total with a wrong one.
+  // --- units per floor: area, rent and availability, one row per floor ---
+  // Read line by line (and table row by row) from the listing:
+  //   "3de verdieping: ca. 341 m² VVO kantoorruimte per direct beschikbaar;"
+  //   "18de en 19de verdieping: ca. 985 m² VVO … per Q1 2027 beschikbaar."
+  //   "- Begane grond: ca. 258 m²", "Verdieping 3: 500 m²"
+  // and the rent per floor from lines such as
+  //   "• Verdieping 3, 4 & 5: € 375,- per m²", "17 t/m 19: € 450,- per m²".
+  // Floors offered together ("18de en 19de") stay one unit. Nothing is
+  // estimated: a floor without a stated rent or date gets none.
   const ordinal = (n) => {
     const tens = n % 100;
     if (tens >= 11 && tens <= 13) return n + "th";
-    return n + ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th");
+    return n + ({ 1: "st", 2: "nd", 3: "rd" } [n % 10] || "th");
   };
-  const FLOOR_RE =
-    /(begane\s*grond|ground\s*floor|souterrain|basement|kelder|(\d{1,2})\s*(?:e|ste|de|st|nd|rd|th)?\s*(?:verdieping|etage|floor|verd\.))\s*[:\-\u2013]?\s*(?:ca\.?|circa|approx\.?|\u00b1)?\s*([\d.,]+)\s*(?:m\u00b2|m2|sq\.?\s?m)/gi;
-  const floorSizes = new Map();
-  const floorSources = pairs.map(([k, v]) => k + " " + v).concat([fullText]);
-  for (const src of floorSources) {
-    for (const m of src.matchAll(FLOOR_RE)) {
-      const word = m[1].toLowerCase();
-      let rank;
-      if (/begane|ground/.test(word)) rank = 0;
-      else if (/souterrain|basement|kelder/.test(word)) rank = -1;
-      else rank = parseInt(m[2], 10);
-      if (!Number.isFinite(rank) || rank > 60) continue;
-      const area = parseNum(m[3]);
-      if (area == null || area < 10) continue;
-      if (!floorSizes.has(rank)) floorSizes.set(rank, area);
+  const ORD = "(?:e|ste|de|st|nd|rd|th)";
+  const FLOOR_WORD = "(?:verdiepingen|verdieping|verd\\.?|etages?|bouwlagen|bouwlaag|floors?|levels?)";
+  const JOIN = "(?:\\s*(?:,|&|\\+|en|and|t\\/m|tot\\s*en\\s*met|tot|to|through|-|–|—)\\s*)";
+  const GROUND = "(?:begane\\s*grond|ground\\s*floor|ground|bg|souterrain|basement|kelder)";
+  const NUM_ITEM = `(?:${GROUND}|\\d{1,2}\\s*${ORD}?)`;
+  // number-first: "18de en 19de verdieping", "begane grond", "3e-5e verdieping"
+  // word-first: "Verdieping 3, 4 & 5", "Floor 17 t/m 19"
+  const FLOOR_SPEC_SRC =
+    `(?:(?:${NUM_ITEM}${JOIN}){0,8}\\d{1,2}\\s*${ORD}?\\s*${FLOOR_WORD}` +
+    `|${FLOOR_WORD}\\s*\\d{1,2}(?:${JOIN}\\d{1,2}){0,8}` +
+    `|(?:${GROUND})(?:${JOIN}\\d{1,2}\\s*${ORD}?\\s*${FLOOR_WORD})?)`;
+  const floorSet = (spec) => {
+    const s = spec.toLowerCase()
+      .replace(/begane\s*grond|ground\s*floor|ground|\bbg\b/g, " 0 ")
+      .replace(/souterrain|basement|kelder/g, " -1 ");
+    const set = [];
+    let rangeFrom = null;
+    for (const m of s.matchAll(/(-1|\d{1,2})(?!\d)|(t\/m|tot\s*en\s*met|\btot\b|\bto\b|through|[-–—](?!1\b))/g)) {
+      if (m[2]) { rangeFrom = set.length ? set[set.length - 1] : null; continue; }
+      const n = parseInt(m[1], 10);
+      if (rangeFrom != null && n > rangeFrom && n - rangeFrom <= 60) {
+        for (let k = rangeFrom + 1; k <= n; k++) set.push(k);
+      } else set.push(n);
+      rangeFrom = null;
+    }
+    return [...new Set(set)].filter((n) => n >= -1 && n <= 60).sort((a, b) => a - b);
+  };
+  const floorName = (n) => (n === 0 ? "Ground floor" : n < 0 ? "Basement" : `${ordinal(n)} floor`);
+  const unitLabel = (set) => {
+    if (set.length === 1) return floorName(set[0]);
+    const contiguous = set.every((n, i) => i === 0 || n === set[i - 1] + 1);
+    const names = set.map((n) => (n === 0 ? "Ground" : n < 0 ? "Basement" : ordinal(n)));
+    if (contiguous) return `${names[0]}–${names[names.length - 1]} floor`;
+    return `${names.slice(0, -1).join(", ")} & ${names[names.length - 1]} floor`;
+  };
+  const AVAIL_RE =
+    /\b(per\s*direct|direct\s*beschikbaar|direct|in\s*overleg|nader\s*overeen\s*te\s*komen|n\.?o\.?t\.?k\.?|immediately|by\s*arrangement|(?:per|vanaf|from|beschikbaar\s*(?:per|vanaf))\s*(?:q[1-4]\s*\d{4}|\d{1,2}[-\/.]\d{1,2}[-\/.]\d{2,4}|\d{1,2}\s*[a-z]+\s*\d{4}|[a-z]+\s*\d{4}|\d{4}))/i;
+  const normAvail = (s) => {
+    if (!s) return null;
+    let t = s.replace(/\s+/g, " ").trim();
+    if (/^(?:direct|direct beschikbaar)$/i.test(t)) t = "per direct";
+    t = t.replace(/\bq([1-4])\b/i, "Q$1");
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  };
+  // A per-m² rate ("€ 375,- per m² per jaar"; "€ 25 per m² per maand" → 300).
+  // A lump sum for the whole floor is divided by that floor's area.
+  const rateFrom = (s, area) => {
+    const m = s.match(/(?:€|eur(?:o)?\b)\s*(\d[\d.,]*)(?:,-|,—)?([^€]{0,50})/i);
+    if (!m) return null;
+    const amount = parseNum(m[1]);
+    if (amount == null) return null;
+    const tail = m[2];
+    if (/parkeer|parking|service/i.test(tail)) return null;
+    const monthly = /per\s*(?:maand|mnd|month)|\/\s*(?:maand|mnd|mo|month)\b|\bp\.?\s*\/?\s*m\.?(?![a-z²2])/i.test(tail);
+    const perM2 = /m²|m2|vierkante|sq\.?\s*m/i.test(tail);
+    let rate;
+    if (perM2) rate = monthly ? amount * 12 : amount;
+    else if (area && amount > 2000) rate = (monthly ? amount * 12 : amount) / area;
+    else if (!monthly && amount >= 20 && amount <= 2000) rate = amount; // table cell under a "€/m²/jaar" header
+    else return null;
+    rate = Math.round(rate * 100) / 100;
+    return rate >= 20 && rate <= 2000 ? rate : null;
+  };
+
+  const units = new Map(); // key "3" / "18,19" → unit
+  const addUnit = (set, area, rest, ctx) => {
+    if (!set.length || area == null || area < 10 || area > 50000) return;
+    const key = set.join(",");
+    if (units.has(key)) return;
+    units.set(key, {
+      set, ctx,
+      floor: unitLabel(set),
+      area,
+      rent: rest ? rateFrom(rest, area) : null,
+      availability: rest ? normAvail((rest.match(AVAIL_RE) || [])[1]) : null,
+    });
+  };
+
+  // 1) Tables, row by row, using the header to know which column is which.
+  for (const table of document.querySelectorAll("table")) {
+    const rows = [...table.querySelectorAll("tr")].map((tr) => [...tr.querySelectorAll("th, td")].map((c) => c.innerText.trim()));
+    if (rows.length < 2) continue;
+    const head = rows[0].map((h) => h.toLowerCase());
+    const col = (re) => head.findIndex((h) => re.test(h));
+    const areaCol = col(/m²|m2|oppervlak|vvo|area|size|sqm/);
+    const rentCol = col(/huur|rent|prijs|price/);
+    const availCol = col(/beschikbaar|aanvaarding|availab|oplevering|per\b/);
+    for (const r of rows.slice(1)) {
+      const fm = (r[0] || "").match(new RegExp(FLOOR_SPEC_SRC, "i"));
+      if (!fm) continue;
+      const areaCell = areaCol >= 0 ? r[areaCol] : r.find((c, i) => i > 0 && /m²|m2/i.test(c));
+      const area = parseNum(areaCell);
+      const rentCell = rentCol >= 0 && r[rentCol] ? (/€/.test(r[rentCol]) ? r[rentCol] : `€ ${r[rentCol]}`) : "";
+      const availCell = availCol >= 0 ? r[availCol] : "";
+      addUnit(floorSet(fm[0]), area, "", true);
+      const u = units.get(floorSet(fm[0]).join(","));
+      if (u && u.area === area) {
+        if (u.rent == null && rentCell) u.rent = rateFrom(`${rentCell} ${/m²|m2/.test(head[rentCol] || "") ? "per m²" : ""}`, area);
+        if (u.availability == null && availCell) u.availability = normAvail((availCell.match(AVAIL_RE) || [])[1]) || availCell.slice(0, 40);
+      }
     }
   }
-  if (floorSizes.size >= 2) {
-    const floors = [...floorSizes.entries()].sort((a, b) => a[0] - b[0]);
-    const sum = floors.reduce((t, [, a]) => t + a, 0);
-    const offered = out.availableAreaSqm;
-    if (offered == null || Math.abs(sum - offered) <= offered * 0.1) {
-      out.floors = floors
-        .map(([rank, area]) => (rank === 0 ? "Ground floor" : rank < 0 ? "Basement" : ordinal(rank) + " floor") + ":" + area)
-        .join(";");
-      if (offered == null) out.availableAreaSqm = sum;
+
+  // 2) Lines of text: "<floors> [:–] [ca.] <area> m² … [€ rent] … [availability]".
+  const FLOOR_AREA_RE = new RegExp(
+    `(${FLOOR_SPEC_SRC})[^\\S\\n]*[:,\\-–]?[^\\S\\n]*(?:(?:ca|circa|approx|appr|ongeveer|±|van|groot|totaal|of)\\.?[^\\S\\n]*)*(\\d[\\d.,]*)[^\\S\\n]*(?:m²|m2|sq\\.?\\s?m|vierkante)`,
+    "gi",
+  );
+  // Cheap keyword checks first: the floor patterns are only worth running
+  // on the few lines that name a floor at all.
+  const HAS_FLOOR = /verdieping|verd\.|etage|floor|bouwla|level|begane|ground|souterrain|basement|kelder|\bbg\b/i;
+  const floorLines = pairs.map(([k, v]) => `${k}: ${v}`).concat(textLines);
+  for (let li = 0; li < floorLines.length; li++) {
+    const t = floorLines[li];
+    if (!HAS_FLOOR.test(t) || !/m²|m2|sq|vierkante/i.test(t)) continue;
+    const matches = [...t.matchAll(FLOOR_AREA_RE)];
+    for (let mi = 0; mi < matches.length; mi++) {
+      const m = matches[mi];
+      // Everything after the area up to the next floor in the same line.
+      const restEnd = mi + 1 < matches.length ? matches[mi + 1].index : t.length;
+      const rest = t.slice(m.index + m[0].length, restEnd);
+      const near = floorLines.slice(Math.max(0, li - 3), li + 1).join(" ");
+      addUnit(floorSet(m[1]), parseNum(m[2]), rest, /beschikbaar|verhuur|available|te huur|for rent|to let|aangeboden/i.test(near));
     }
+  }
+
+  // 3) Rent per floor stated separately ("Verdieping 8 & 9: € 395,- per m²").
+  const RENT_LINE_RE = new RegExp(`(${FLOOR_SPEC_SRC})[^€\\n]{0,25}((?:€|eur(?:o)?\\b)[^\\n]*)`, "i");
+  for (const t of textLines) {
+    if (!HAS_FLOOR.test(t) || !/€|eur/i.test(t) || /parkeer|parking|service/i.test(t)) continue;
+    const m = t.match(RENT_LINE_RE);
+    if (!m || /m²|m2/i.test(t.slice(0, m.index + m[0].length - m[2].length).replace(m[1], ""))) continue; // an area line, handled above
+    const set = floorSet(m[1]);
+    const rate = rateFrom(m[2], null);
+    if (!set.length || rate == null) continue;
+    for (const u of units.values()) {
+      if (u.rent == null && u.set.every((n) => set.includes(n))) u.rent = rate;
+    }
+  }
+
+  let unitList = [...units.values()].sort((a, b) => a.set[0] - b.set[0]);
+  // Two units claiming the same floor: keep the first one stated.
+  {
+    const taken = new Set();
+    unitList = unitList.filter((u) => {
+      if (u.set.some((n) => taken.has(n))) return false;
+      u.set.forEach((n) => taken.add(n));
+      return true;
+    });
+  }
+  const unitSum = unitList.reduce((t, u) => t + u.area, 0);
+  const offered = areaFromLooseScan ? null : out.availableAreaSqm;
+  // Floor sizes that add up to MORE than the space on offer describe the
+  // whole building, not what's for rent; a single stray floor mention only
+  // counts when the text around it is about what's available.
+  const plausible =
+    unitList.length > 0 &&
+    (offered == null || unitSum <= offered * 1.15) &&
+    (unitList.length >= 2 || unitList[0].ctx || (offered != null && Math.abs(unitSum - offered) <= offered * 0.15));
+  if (plausible) {
+    out.floors = unitList.map((u) => ({ floor: u.floor, area: u.area, rent: u.rent, availability: u.availability }));
+    if (offered == null) out.availableAreaSqm = unitSum;
   }
 
   out.sourceUrl = location.href;
@@ -821,13 +1061,15 @@ function renderPreview(data, photoCount, droppedPhotos) {
     ["Available m²", data.availableAreaSqm], ["Min. unit m²", data.minDivisibleAreaSqm],
     ["Total building m²", data.areaSqm],
     ["Amenities", (data.amenities || []).join(", ")],
-    ["Parking ratio", data.parkingRatio],
+    ["Parking ratio", data.parkingRatio || (data.parkingRatioRaw ? `? “${data.parkingRatioRaw}”` : null)],
     ["Rent €/m²/yr", data.rentEurPerM2Year], ["Service €/m²/yr", data.serviceChargeEurPerM2Year],
     ["Parking €/yr", data.parkingPriceEurYear],
     ["Available", data.availability],
     ["Lease term", data.contractTerm],
     ["Delivery", data.delivery === "turn_key" ? "Turn-key" : data.delivery === "shell_and_core" ? "Shell & core" : null],
-    ["Per floor", data.floors ? data.floors.split(";").map((f) => f.replace(":", " ") + " m²").join(", ") : null],
+    ["Per floor", (data.floors || []).map((f) =>
+      [`${f.floor} ${f.area} m²`, f.rent != null ? `€ ${f.rent}` : null, f.availability].filter(Boolean).join(" · "),
+    ).join("; ")],
     ["Energy", data.energyLabel], ["Year built", data.yearBuilt],
     ["Airport", data.airportNote], ["Highway", data.highwayNote],
     ["Public transport", data.publicTransportNote],
@@ -876,7 +1118,10 @@ function buildHandoffUrl(appUrl, data) {
   set("accessibilityNote", data.highwayNote);
   set("publicTransportNote", data.publicTransportNote);
   set("delivery", data.delivery);
-  set("floors", data.floors);
+  // One entry per floor: { floor, area, rent, availability } as JSON.
+  if (data.floors && data.floors.length) set("floors", JSON.stringify(data.floors));
+  set("parkingRatioRaw", data.parkingRatioRaw);
+  set("parkingPriceRaw", data.parkingPriceRaw);
   set("sourceUrl", data.sourceUrl);
 
   const base = appUrl + "/buildings/new?";

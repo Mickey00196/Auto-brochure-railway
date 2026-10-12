@@ -1,0 +1,33 @@
+{
+  "fixture": "piet-heinkade-81.html",
+  "url": "https://www.fundainbusiness.nl/kantoor/amsterdam/object-eval-piet-heinkade-81/",
+  "notes": "The listing header says € 315 /m²/jaar but the brochure text prices the offered office space at € 355,00 per m² v.v.o. per jaar; the text is what's expected. Parking has two tiers (€ 3.500 office hours, € 4.500 24/7): the first stated is expected.",
+  "expected": {
+    "floors": [
+      {
+        "floor": "7th floor",
+        "area": 366,
+        "rent": null,
+        "availability": null
+      }
+    ],
+    "parkingRatio": "1:100",
+    "parkingPriceEurYear": 3500,
+    "rentEurPerM2Year": 355,
+    "serviceChargeEurPerM2Year": 82,
+    "availableAreaSqm": 366,
+    "minDivisibleAreaSqm": null,
+    "availability": "Per direct beschikbaar.",
+    "contractTerm": "5 (vijf) jaar met verlengingsperioden van telkens 5 (vijf) jaar.",
+    "energyLabel": "A+++",
+    "yearBuilt": null,
+    "amenities": [
+      "Terrace",
+      "Bicycle storage",
+      "Restaurant",
+      "Meeting rooms",
+      "Lifts",
+      "Reception"
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "fixture": "synthetic-ratio-slash.html",
+  "url": "https://www.example-broker.nl/aanbod/synthetic-ratio-slash/",
+  "notes": "Synthetic: a floor range offered as one unit, '1/250' and 'p/m' monthly parking (125 × 12).",
+  "expected": {
+    "floors": [
+      {
+        "floor": "2nd–4th floor",
+        "area": 900,
+        "rent": null,
+        "availability": "Per 1 maart 2027"
+      }
+    ],
+    "parkingRatio": "1:250",
+    "parkingPriceEurYear": 1500
+  }
+}

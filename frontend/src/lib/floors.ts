@@ -5,6 +5,10 @@
 export interface CaptureFloor {
   floor: string;
   area: string;
+  /** € per m² per year for this floor, when the listing prices floors apart. */
+  rent: string;
+  /** "Per direct", "Per Q1 2027", … as the listing states it for this floor. */
+  availability: string;
 }
 
 function ordinal(n: number): string {
@@ -27,20 +31,36 @@ export function floorLabel(rank: number): string {
   return `${ordinal(rank)} floor`;
 }
 
-/** The extension's `floors` param: "Ground floor:280;1st floor:301". Sorted
- * bottom-up, duplicates and sizeless entries dropped. */
+const text = (v: unknown) => (v == null ? "" : String(v).trim());
+
+/** The extension's `floors` param: a JSON list of
+ * `{ floor, area, rent, availability }` (extension 2.12+), or the older
+ * "Ground floor:280;1st floor:301". Sorted bottom-up, duplicates and
+ * sizeless entries dropped. */
 export function parseFloorsParam(raw: string | undefined): CaptureFloor[] {
   if (!raw) return [];
+  let entries: { floor: unknown; area: unknown; rent?: unknown; availability?: unknown }[] = [];
+  if (raw.trim().startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) entries = parsed.filter((e) => e && typeof e === "object");
+    } catch {
+      return [];
+    }
+  } else {
+    for (const part of raw.split(";")) {
+      const at = part.lastIndexOf(":");
+      if (at > 0) entries.push({ floor: part.slice(0, at), area: part.slice(at + 1) });
+    }
+  }
   const seen = new Set<string>();
   const floors: CaptureFloor[] = [];
-  for (const part of raw.split(";")) {
-    const at = part.lastIndexOf(":");
-    if (at <= 0) continue;
-    const floor = part.slice(0, at).trim();
-    const area = part.slice(at + 1).trim();
+  for (const e of entries) {
+    const floor = text(e.floor);
+    const area = text(e.area);
     if (!floor || !/\d/.test(area) || seen.has(floor.toLowerCase())) continue;
     seen.add(floor.toLowerCase());
-    floors.push({ floor, area });
+    floors.push({ floor, area, rent: text(e.rent), availability: text(e.availability) });
   }
   return floors.sort((a, b) => floorRank(a.floor) - floorRank(b.floor));
 }

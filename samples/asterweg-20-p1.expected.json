@@ -1,0 +1,31 @@
+{
+  "fixture": "asterweg-20-p1.html",
+  "url": "https://www.fundainbusiness.nl/kantoor/amsterdam/object-eval-asterweg-20-p1/",
+  "notes": "Rent and service charges are stated per month for the whole 481 m² (€ 5.200 and € 535); expected values are those converted to €/m²/year, rounded.",
+  "expected": {
+    "floors": [
+      {
+        "floor": "Ground floor",
+        "area": 258,
+        "rent": null,
+        "availability": null
+      },
+      {
+        "floor": "1st floor",
+        "area": 223,
+        "rent": null,
+        "availability": null
+      }
+    ],
+    "parkingRatio": null,
+    "parkingPriceEurYear": 900,
+    "rentEurPerM2Year": 130,
+    "serviceChargeEurPerM2Year": 13,
+    "availableAreaSqm": 481,
+    "minDivisibleAreaSqm": null,
+    "availability": "Per direct beschikbaar",
+    "contractTerm": "Uiterlijk t/m 31 december 2027, geen verlenging mogelijk.",
+    "energyLabel": "C",
+    "yearBuilt": 2005
+  }
+}

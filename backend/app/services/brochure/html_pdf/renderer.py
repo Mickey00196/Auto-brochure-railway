@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import base64
 import datetime as dt
+import re
 from collections import Counter
 from pathlib import Path
 
@@ -85,32 +86,87 @@ def _primary_unit(units: list[Unit]) -> Unit | None:
     return units[0] if units else None
 
 
+def _floor_rank(label: str | None) -> float:
+    """Ground = 0, basement = -1, "3rd floor" / "18th–19th floor" = 3 / 18."""
+    text = (label or "").lower()
+    if re.search(r"ground|begane|\bbg\b", text):
+        return 0
+    if re.search(r"basement|souterrain|kelder", text):
+        return -1
+    m = re.search(r"\d+", text)
+    return int(m.group()) if m else 99
+
+
+def _fmt_euro(value: float) -> str:
+    """€ 375 / € 3,700.36 — cents only when the source had them."""
+    return f"€ {value:,.2f}" if round(value % 1, 2) else f"€ {value:,.0f}"
+
+
+def _floor_lines(units: list[Unit]) -> list[str]:
+    """One line per floor on offer: "3rd · 341 sqm · € 375" (the row is
+    labelled "Floors", so the word itself is left off to keep one line each)."""
+    lines = []
+    for u in sorted(units, key=lambda u: _floor_rank(u.floor)):
+        name = re.sub(r"\s*floor$", "", (u.floor or "").strip(), flags=re.I) or "Space"
+        parts = [name, _fmt_area(u.available_area_m2)]
+        if u.rent_eur_per_m2_year is not None:
+            parts.append(_fmt_euro(u.rent_eur_per_m2_year))
+        lines.append(" · ".join(parts))
+    return lines
+
+
+def _availability_text(units: list[Unit]) -> str | None:
+    """The availability, or — when floors differ — each date with its
+    floors: "Per direct (3rd, 8th, 9th); In overleg (4th)"."""
+    dated = [u for u in sorted(units, key=lambda u: _floor_rank(u.floor)) if u.availability]
+    distinct = list(dict.fromkeys(u.availability.strip() for u in dated))
+    if len(distinct) <= 1:
+        return distinct[0] if distinct else None
+    groups = []
+    for value in distinct:
+        floors = [
+            re.sub(r"\s*floor$", "", u.floor.strip(), flags=re.I)
+            for u in dated
+            if u.availability.strip() == value and u.floor
+        ]
+        groups.append(f"{value} ({', '.join(floors)})" if floors else value)
+    return "; ".join(groups)
+
+
 def _building_context(building: Building, units: list[Unit], addons: list[AddOn], number: int, page: int) -> dict:
     total_available = sum(u.available_area_m2 for u in units) if units else building.total_building_area_m2
     rents = [u.rent_eur_per_m2_year for u in units if u.rent_eur_per_m2_year is not None]
     service_charges = [u.service_charge_eur_per_m2_year for u in units if u.service_charge_eur_per_m2_year is not None]
     smallest_divisible = min((u.min_divisible_area_m2 for u in units if u.min_divisible_area_m2), default=None)
-    availability = next((u.availability for u in units if u.availability), None)
+    availability = _availability_text(units)
     parking_ratio = next((u.parking_ratio for u in units if u.parking_ratio), None)
     delivery = next((u.delivery_condition for u in units if u.delivery_condition), None)
     parking_addon = next(
         (a for a in addons if "park" in a.name.lower()), None
     )
 
-    units_text = "TBD"
-    if smallest_divisible:
+    # Per floor when the space is split by floor (each with its own rent),
+    # otherwise the smallest unit or the number of spaces as before.
+    units_label = "Units"
+    units_text: str | list[str] = "TBD"
+    if any(u.floor for u in units):
+        units_label = "Floors"
+        units_text = _floor_lines(units)
+        if smallest_divisible:
+            units_text.append(f"Units from approx. {smallest_divisible:,.0f} sqm")
+    elif smallest_divisible:
         units_text = f"From approx. {smallest_divisible:,.0f} sqm"
     elif units:
         units_text = f"{len(units)} space{'s' if len(units) != 1 else ''}"
 
-    facts: list[tuple[str, str]] = [
+    facts: list[tuple[str, str | list[str]]] = [
         ("Subarea", building.submarket or "TBD"),
         ("Total surface", _fmt_area(building.total_building_area_m2) if building.total_building_area_m2 else "TBD"),
-        ("Units", units_text),
+        (units_label, units_text),
         ("Parking", parking_ratio or "TBD"),
         (
             "Parking rent",
-            f"€ {parking_addon.price:,.0f} per space per year" if parking_addon else "TBD",
+            f"{_fmt_euro(parking_addon.price)} per space per year" if parking_addon else "TBD",
         ),
         ("Delivery", DELIVERY_LABELS.get(delivery, delivery) if delivery else "TBD"),
         ("Availability", availability or "TBD"),
@@ -136,6 +192,8 @@ def _building_context(building: Building, units: list[Unit], addons: list[AddOn]
             f"€ {min(rents):,.0f}–{max(rents):,.0f}" if len(set(rents)) > 1 else (f"€ {rents[0]:,.0f}" if rents else "TBD")
         ),
         "rent_unit": "per sqm per year",
+        # A range ("€ 375–450") needs a smaller size to stay on one line.
+        "rent_is_range": len(set(rents)) > 1,
         "energy_label": building.energy_label or "TBD",
         "road_access": building.accessibility_note or "TBD",
         "public_transport": building.public_transport_note or "TBD",

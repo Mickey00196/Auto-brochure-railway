@@ -39,7 +39,7 @@
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;">
         <div style="font-size:12px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#5E636B;">Office rent</div>
-        <div style="font-size:28px;font-weight:300;line-height:1.1;letter-spacing:-0.01em;">{{ b.rent_value }}</div>
+        <div style="font-size:{{ 21 if b.rent_is_range else 28 }}px;font-weight:300;line-height:{{ 1.47 if b.rent_is_range else 1.1 }};letter-spacing:-0.01em;white-space:nowrap;">{{ b.rent_value }}</div>
         <div style="font-size:12px;color:#5E636B;">{{ b.rent_unit }}</div>
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;">

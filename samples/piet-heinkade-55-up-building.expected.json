@@ -1,0 +1,61 @@
+{
+  "fixture": "piet-heinkade-55-up-building.html",
+  "url": "https://www.fundainbusiness.nl/kantoor/amsterdam/object-eval-piet-heinkade-55/",
+  "notes": "Kenmerken says 4.957 m² on offer; the floor list in the description adds up to 4.642 m² (also stated in the copy). The labelled figure is kept.",
+  "expected": {
+    "floors": [
+      {
+        "floor": "3rd floor",
+        "area": 341,
+        "rent": 375,
+        "availability": "Per direct"
+      },
+      {
+        "floor": "4th floor",
+        "area": 490,
+        "rent": 375,
+        "availability": "In overleg"
+      },
+      {
+        "floor": "5th floor",
+        "area": 484,
+        "rent": 375,
+        "availability": "Per Q1 2027"
+      },
+      {
+        "floor": "8th floor",
+        "area": 914,
+        "rent": 395,
+        "availability": "Per direct"
+      },
+      {
+        "floor": "9th floor",
+        "area": 478,
+        "rent": 395,
+        "availability": "Per direct"
+      },
+      {
+        "floor": "17th floor",
+        "area": 950,
+        "rent": 450,
+        "availability": "Per Q2 2027"
+      },
+      {
+        "floor": "18th–19th floor",
+        "area": 985,
+        "rent": 450,
+        "availability": "Per Q1 2027"
+      }
+    ],
+    "parkingRatio": "1:250",
+    "parkingPriceEurYear": 3700.36,
+    "rentEurPerM2Year": 375,
+    "serviceChargeEurPerM2Year": null,
+    "availableAreaSqm": 4957,
+    "minDivisibleAreaSqm": 193,
+    "availability": "In overleg",
+    "contractTerm": null,
+    "energyLabel": "A++",
+    "yearBuilt": 2001
+  }
+}

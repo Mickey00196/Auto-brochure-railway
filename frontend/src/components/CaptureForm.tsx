@@ -44,6 +44,10 @@ const EMPTY = {
   rentEurPerM2Year: "",
   serviceChargeEurPerM2Year: "",
   parkingPriceEurYear: "",
+  // The listing's own sentence behind each parking figure, shown under the
+  // figure so it can be checked; never saved.
+  parkingRatioRaw: "",
+  parkingPriceRaw: "",
   availability: "",
   contractTerm: "",
   delivery: "shell_and_core" as Delivery,
@@ -193,7 +197,7 @@ export function CaptureForm({
     setForm((prev) => {
       const ranks = prev.floors.map((f) => floorRank(f.floor)).filter((r) => r !== 99);
       const top = ranks.length ? Math.max(...ranks) : -1;
-      return { ...prev, floors: [...prev.floors, { floor: floorLabel(top + 1), area: "" }] };
+      return { ...prev, floors: [...prev.floors, { floor: floorLabel(top + 1), area: "", rent: "", availability: "" }] };
     });
   }
   function removeFloor(index: number) {
@@ -203,8 +207,8 @@ export function CaptureForm({
     setForm((prev) => ({
       ...prev,
       floors: [
-        { floor: "Ground floor", area: "" },
-        { floor: "1st floor", area: "" },
+        { floor: "Ground floor", area: "", rent: "", availability: "" },
+        { floor: "1st floor", area: "", rent: "", availability: "" },
       ],
     }));
   }
@@ -213,6 +217,9 @@ export function CaptureForm({
   const figureValue = (f: KeyFigure) =>
     f.key === "availableAreaM2" && floorsDriveTotal ? String(floorsTotal) : form[f.key];
   const missing = KEY_FIGURES.filter((f) => !String(figureValue(f)).trim());
+  // The sentence the extension read a parking figure from, to check it by.
+  const rawSource = (key: KeyFigure["key"]) =>
+    key === "parkingRatio" ? form.parkingRatioRaw : key === "parkingPriceEurYear" ? form.parkingPriceRaw : "";
 
   // ── amenities ──────────────────────────────────────────────────────────
   // Captured ones first, then the usual suspects. The list only ever grows,
@@ -369,20 +376,27 @@ export function CaptureForm({
       });
 
       // The space on offer: one unit per floor when sizes per floor were
-      // given, otherwise a single unit — same terms on each.
+      // given, otherwise a single unit. A floor's own rent and availability
+      // win; the general figures fill in where a floor states none.
       const rent = num(form.rentEurPerM2Year);
       const service = num(form.serviceChargeEurPerM2Year);
       const minDivisible = num(form.minDivisibleAreaM2);
       const hasTerms = Boolean(
         rent != null || service != null || form.parkingRatio.trim() || form.availability.trim() || form.contractTerm.trim(),
       );
-      const pieces: { floor: string | null; area: number }[] = floorsDriveTotal
+      type Piece = { floor: string | null; area: number; rent: number | null; availability: string | null };
+      const general = (f?: CaptureFloor) => ({
+        rent: num(f?.rent ?? "") ?? rent,
+        availability: f?.availability.trim() || form.availability.trim() || null,
+      });
+      const pieces: Piece[] = floorsDriveTotal
         ? form.floors
-            .map((f, i) => ({ floor: f.floor.trim() || null, area: floorAreas[i] }))
+            .map((f, i) => ({ floor: f.floor.trim() || null, area: floorAreas[i], ...general(f) }))
             .filter((p) => p.area > 0)
         : (() => {
             const area = num(form.availableAreaM2) ?? num(form.totalBuildingAreaM2);
-            return area && hasTerms ? [{ floor: form.floors[0]?.floor.trim() || null, area }] : [];
+            const f = form.floors[0];
+            return area && hasTerms ? [{ floor: f?.floor.trim() || null, area, ...general(f) }] : [];
           })();
 
       const unitIds: string[] = [];
@@ -393,12 +407,12 @@ export function CaptureForm({
           available_area_m2: piece.area,
           min_divisible_area_m2: minDivisible != null && minDivisible < piece.area ? minDivisible : null,
           delivery_condition: form.delivery,
-          rent_price_type: rent != null ? "fixed" : "tbd",
-          rent_eur_per_m2_year: rent,
+          rent_price_type: piece.rent != null ? "fixed" : "tbd",
+          rent_eur_per_m2_year: piece.rent,
           service_charge_price_type: service != null ? "fixed" : "tbd",
           service_charge_eur_per_m2_year: service,
           parking_ratio: form.parkingRatio.trim() || null,
-          availability: form.availability.trim() || null,
+          availability: piece.availability,
           contract_term: form.contractTerm.trim() || null,
         });
         unitIds.push(unit.unit_id);
@@ -612,6 +626,11 @@ export function CaptureForm({
                     </span>
                   )}
                 </span>
+                {rawSource(f.key) && (
+                  <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-muted" title={rawSource(f.key)}>
+                    From listing: “{rawSource(f.key)}”
+                  </p>
+                )}
               </div>
             );
           })}
@@ -649,7 +668,7 @@ export function CaptureForm({
                 return (
                   <div
                     key={i}
-                    className="group flex h-[58px] items-center gap-3 rounded-[10px] px-3 text-accent-foreground sm:px-5"
+                    className="group flex min-h-[58px] flex-wrap items-center gap-x-3 gap-y-1 rounded-[10px] px-3 py-2 text-accent-foreground sm:px-5"
                     style={{ background: `color-mix(in srgb, var(--accent) ${shade}%, var(--surface))` }}
                   >
                     <label htmlFor={`cap-floor-${i}`} className={srOnly}>
@@ -673,6 +692,33 @@ export function CaptureForm({
                       className="w-24 rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-right text-2xl font-semibold tracking-[-0.02em] tabular-nums text-accent-foreground placeholder:text-accent-foreground/50 hover:border-accent-foreground/30 focus:border-accent-foreground/60 focus:outline-none"
                     />
                     <span className="text-sm text-accent-foreground/75">m²</span>
+                    <label htmlFor={`cap-floor-rent-${i}`} className={srOnly}>
+                      Rent for {f.floor || "this floor"} in € per m² per year
+                    </label>
+                    <span className="flex items-baseline text-sm text-accent-foreground/75">
+                      €
+                      <input
+                        id={`cap-floor-rent-${i}`}
+                        value={f.rent}
+                        onChange={(e) => setFloor(i, { rent: e.target.value })}
+                        inputMode="decimal"
+                        placeholder={form.rentEurPerM2Year || "rent"}
+                        title="Rent for this floor, € per m² per year (left empty, the general rent applies)"
+                        className="w-16 rounded-md border border-transparent bg-transparent px-1 py-0.5 text-right text-[15px] font-semibold tabular-nums text-accent-foreground placeholder:font-normal placeholder:text-accent-foreground/50 hover:border-accent-foreground/30 focus:border-accent-foreground/60 focus:outline-none"
+                      />
+                      /m²/yr
+                    </span>
+                    <label htmlFor={`cap-floor-avail-${i}`} className={srOnly}>
+                      Availability of {f.floor || "this floor"}
+                    </label>
+                    <input
+                      id={`cap-floor-avail-${i}`}
+                      value={f.availability}
+                      onChange={(e) => setFloor(i, { availability: e.target.value })}
+                      placeholder={form.availability || "available"}
+                      title="When this floor is available (left empty, the general date applies)"
+                      className="w-28 rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-[13px] text-accent-foreground placeholder:text-accent-foreground/50 hover:border-accent-foreground/30 focus:border-accent-foreground/60 focus:outline-none"
+                    />
                     <button
                       type="button"
                       onClick={() => removeFloor(i)}

@@ -1,0 +1,30 @@
+{
+  "fixture": "synthetic-table-monthly-parking.html",
+  "url": "https://www.example-broker.nl/aanbod/synthetic-table-monthly-parking/",
+  "notes": "Synthetic: an availability table read row by row, '1 pp per 250 m² VVO', and a monthly parking price (150 × 12).",
+  "expected": {
+    "floors": [
+      {
+        "floor": "Ground floor",
+        "area": 410,
+        "rent": 210,
+        "availability": "Per direct"
+      },
+      {
+        "floor": "1st floor",
+        "area": 420,
+        "rent": 220,
+        "availability": "Per 1 januari 2027"
+      },
+      {
+        "floor": "2nd floor",
+        "area": 420,
+        "rent": 230,
+        "availability": "In overleg"
+      }
+    ],
+    "parkingRatio": "1:250",
+    "parkingPriceEurYear": 1800,
+    "availableAreaSqm": 1250
+  }
+}

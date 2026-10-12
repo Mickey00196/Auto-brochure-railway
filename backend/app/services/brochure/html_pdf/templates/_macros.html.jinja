@@ -19,5 +19,9 @@
 {%- endmacro %}
 
 {% macro fact_row(label, value) -%}
-<div class="fact-row"><div class="fact-label">{{ label }}</div><div class="fact-value">{{ value }}</div></div>
+<div class="fact-row"><div class="fact-label">{{ label }}</div><div class="fact-value">
+{%- if value is not string and value is iterable -%}
+{%- for line in value %}<div class="fact-line">{{ line }}</div>{% endfor -%}
+{%- else %}{{ value }}{% endif -%}
+</div></div>
 {%- endmacro %}

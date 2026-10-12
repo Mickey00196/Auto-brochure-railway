@@ -1,0 +1,23 @@
+{
+  "fixture": "synthetic-ratio-op.html",
+  "url": "https://www.example-broker.nl/aanbod/synthetic-ratio-op/",
+  "notes": "Synthetic: word-first floors ('Verdieping 2'), a rent line for both floors, 'parkeernorm 1 op 250', and a floor-plan scale that must NOT be read as a ratio.",
+  "expected": {
+    "floors": [
+      {
+        "floor": "2nd floor",
+        "area": 400,
+        "rent": 195,
+        "availability": "Per direct"
+      },
+      {
+        "floor": "3rd floor",
+        "area": 380,
+        "rent": 195,
+        "availability": "Per Q3 2026"
+      }
+    ],
+    "parkingRatio": "1:250",
+    "parkingPriceEurYear": 2100
+  }
+}

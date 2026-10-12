@@ -21,9 +21,11 @@ const PREFILL_TEXT_KEYS = [
   "availableAreaM2",
   "minDivisibleAreaM2",
   "parkingRatio",
+  "parkingRatioRaw",
   "rentEurPerM2Year",
   "serviceChargeEurPerM2Year",
   "parkingPriceEurYear",
+  "parkingPriceRaw",
   "availability",
   "contractTerm",
 ] as const satisfies readonly (keyof CaptureInitial)[];
@@ -61,8 +63,9 @@ export default async function NewBuildingPage({
   const delivery = first(params.delivery);
   if (delivery === "turn_key" || delivery === "shell_and_core") initial.delivery = delivery;
   const floors = parseFloorsParam(first(params.floors));
-  // Sizes per floor only make sense when the listing split the space up.
-  if (floors.length >= 2) initial.floors = floors;
+  // One floor counts too: "7e verdieping ca. 366 m²" is what's on offer,
+  // and the floor name is worth keeping.
+  if (floors.length) initial.floors = floors;
 
   const source = first(params.sourceUrl);
   const sourceUrl = source && /^https?:\/\//i.test(source) ? source : undefined;
