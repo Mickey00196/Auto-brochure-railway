@@ -34,6 +34,9 @@ try {
 
 const src = readFileSync(popupPath, "utf8");
 const extractSrc = src.match(/function extractListing\(\)[\s\S]*?\n}\n/)[0];
+// The popup opens a collapsed description before reading (expandHiddenText);
+// run it the same way when this version has it, so the eval mirrors a real read.
+const expandSrc = (src.match(/async function expandHiddenText\(\)[\s\S]*?\n}\n/) || [null])[0];
 
 // Older versions sent floors as "3rd floor:341;4th floor:490" — read both
 // shapes so a before/after run compares like with like.
@@ -89,6 +92,7 @@ for (const file of readdirSync(samplesDir).filter((f) => f.endsWith(".expected.j
   const page = await browser.newPage();
   await page.route(spec.url, (r) => r.fulfill({ status: 200, contentType: "text/html", body: html }));
   await page.goto(spec.url, { waitUntil: "load" });
+  if (expandSrc) await page.evaluate((s) => new Function(`return (${s})`)()(), expandSrc);
   const data = await page.evaluate((s) => new Function(`return (${s})`)()(), extractSrc);
   await page.close();
   results.push({ sample: file.replace(".expected.json", ""), fields: compare(spec.expected, data) });

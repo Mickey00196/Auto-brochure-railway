@@ -1194,6 +1194,71 @@ function withTimeout(promise, ms, message) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+// Runs INSIDE the listing tab, just before extractListing. funda in business
+// only puts the full description on the page once "Lees de volledige
+// omschrijving" is clicked — and the service charges, parking ratio and
+// parking price are often stated only in that part. So the expander is
+// clicked here, the same click the user would make, and the read waits until
+// the text has arrived. Only elements that open text in place are clicked: a
+// real link to another page is never followed. Must be fully self-contained.
+async function expandHiddenText() {
+  const EXPAND_RE = /^(?:lees|toon|bekijk)\s+(?:de\s+)?(?:volledige\s+|hele\s+)?(?:omschrijving|beschrijving)$|^(?:lees|toon)\s+(?:meer|verder)$|^meer\s+lezen$|^read\s+(?:the\s+)?(?:full\s+)?(?:description|more)$|^show\s+(?:the\s+)?(?:full\s+)?(?:description|more)$/i;
+  const textOf = (el) => (el.textContent || "").replace(/\s+/g, " ").trim();
+  const navigates = (el) => {
+    const a = el.closest("a[href]");
+    if (!a) return false;
+    const href = (a.getAttribute("href") || "").trim();
+    return !(href === "" || href.startsWith("#") || /^javascript:/i.test(href));
+  };
+  if (!document.body) return { clicked: 0 };
+  // The element that holds the expander label; the click bubbles to
+  // whatever handler sits on an ancestor. Found via text nodes, which is
+  // quick even on a heavy page.
+  const found = new Set();
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walker.nextNode())) {
+    const t = node.nodeValue.replace(/\s+/g, " ").trim();
+    if (!t || t.length > 50 || !EXPAND_RE.test(t)) continue;
+    const el = node.parentElement;
+    if (el && !/^(?:SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/i.test(el.nodeName)) found.add(el);
+  }
+  for (const el of document.body.querySelectorAll('button, [role="button"], summary')) {
+    if (EXPAND_RE.test(textOf(el))) found.add(el);
+  }
+  // One click per expander: a button and the label span inside it are the
+  // same control, and clicking both would open it and close it again.
+  const targets = [...found].filter(
+    (el) =>
+      ![...found].some((other) => other !== el && el.contains(other)) &&
+      !el.closest('[aria-expanded="true"]') &&
+      !navigates(el),
+  );
+  if (!targets.length) return { clicked: 0 };
+
+  const lengthNow = () => (document.body ? document.body.textContent.length : 0);
+  const before = lengthNow();
+  for (const el of targets) {
+    try { el.click(); } catch (e) { /* one stubborn element must not stop the read */ }
+  }
+  // Wait for the text to land (it may be fetched), then for it to settle.
+  // A page that already had the text (only clipped by CSS) doesn't grow at
+  // all, so give up waiting after a short while instead of the full budget.
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const startedAt = performance.now();
+  let last = lengthNow();
+  let grew = false;
+  while (performance.now() - startedAt < 2500) {
+    await sleep(100);
+    const now = lengthNow();
+    if (now > before + 100) grew = true;
+    if (grew && now === last) break;
+    if (!grew && performance.now() - startedAt > 1200) break;
+    last = now;
+  }
+  return { clicked: targets.length, grewBy: lengthNow() - before };
+}
+
 async function readPage() {
   const startedAt = performance.now();
   const [tab] = await withTimeout(
@@ -1206,6 +1271,17 @@ async function readPage() {
   // present AND clearly not a web page.
   if (tab.url && !/^https?:/i.test(tab.url)) {
     throw new Error("This isn't a web page — open a listing first.");
+  }
+  // Open a collapsed description first. Best effort: if it fails or takes
+  // too long, the page is still read as it is.
+  try {
+    await withTimeout(
+      chrome.scripting.executeScript({ target: { tabId: tab.id }, func: expandHiddenText }),
+      3500,
+      "expand timed out",
+    );
+  } catch (e) {
+    /* read the page as it is */
   }
   const results = await withTimeout(
     chrome.scripting.executeScript({ target: { tabId: tab.id }, func: extractListing }),

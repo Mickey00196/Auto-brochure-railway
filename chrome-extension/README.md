@@ -13,6 +13,12 @@ it found. There is no automated request to the source, no bot, and nothing that
 tries to get around a site's access controls. It is the copy-paste flow, made
 one click.
 
+The one thing it does on the page is open a collapsed description: funda in
+business only shows the full text after "Lees de volledige omschrijving" is
+clicked, and the service charges and parking terms are often only in that
+part. The extension makes that same click for you before reading. It only
+clicks buttons that open text in place, never a link to another page.
+
 Because it only reads an already-open page, it does **not** get past a block
 for pages you can't open yourself — if you see a verification page, so does the
 extension, and it will say so instead of capturing garbage.

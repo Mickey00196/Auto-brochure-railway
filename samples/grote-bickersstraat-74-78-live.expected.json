@@ -1,0 +1,14 @@
+{
+  "fixture": "grote-bickersstraat-74-78-live.html",
+  "url": "https://www.fundainbusiness.nl/kantoor/amsterdam/object-eval-grote-bickersstraat-74-78-live/",
+  "notes": "As the live funda page behaves: only the first lines of the description are on the page until 'Lees de volledige omschrijving' is clicked, after which the rest arrives (300 ms later here). A 'Lees meer' link to the broker page must not be followed. Service charge, parking ratio and parking price are only in the part that arrives.",
+  "expected": {
+    "rentEurPerM2Year": null,
+    "serviceChargeEurPerM2Year": 61,
+    "parkingRatio": "1:130",
+    "parkingPriceEurYear": 3500,
+    "availability": "In overleg",
+    "energyLabel": "A+++",
+    "yearBuilt": 1966
+  }
+}
