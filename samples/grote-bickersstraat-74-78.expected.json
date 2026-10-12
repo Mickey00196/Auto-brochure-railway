@@ -1,0 +1,14 @@
+{
+  "fixture": "grote-bickersstraat-74-78.html",
+  "url": "https://www.fundainbusiness.nl/kantoor/amsterdam/object-eval-grote-bickersstraat-74-78/",
+  "notes": "Kenmerken says 'Geen servicekosten bekend' and has no parking rows; the service charge (€ 61/m²/jr), parking ratio (1:130) and parking price (€ 3.500/jr) are only in the description, which is collapsed behind 'Lees de volledige omschrijving'.",
+  "expected": {
+    "rentEurPerM2Year": null,
+    "serviceChargeEurPerM2Year": 61,
+    "parkingRatio": "1:130",
+    "parkingPriceEurYear": 3500,
+    "availability": "In overleg",
+    "energyLabel": "A+++",
+    "yearBuilt": 1966
+  }
+}

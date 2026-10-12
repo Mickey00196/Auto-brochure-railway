@@ -60,7 +60,9 @@ meta tags, and visible text:
   is kept, since 1:348 LFA is not the same promise as 1:348 BVO.
 - **Rental price office** (€/m²/year — only when the page states a per-m²
   figure; a lump-sum monthly rent is a different quantity and is left blank)
-- **Rental service charges** (€/m²/year)
+- **Rental service charges** (€/m²/year) — from the characteristics row, or
+  from the description when that row says none is known ("Geen servicekosten
+  bekend") but the copy states the figure
 - **Rental price parking space** (€/space/year; per-month figures ×12)
 - **Available** (acceptance, e.g. "Per direct" / "In overleg")
 - **Energy rating** and **year of construction**

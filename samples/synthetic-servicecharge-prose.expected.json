@@ -1,0 +1,8 @@
+{
+  "fixture": "synthetic-servicecharge-prose.html",
+  "url": "https://www.example-broker.nl/aanbod/synthetic-servicecharge-prose/",
+  "notes": "Synthetic: the characteristics row says 'Op aanvraag', two rent lines mention 'exclusief servicekosten' (must not be read as the service charge), and the real figure sits under a 'Servicekosten:' heading.",
+  "expected": {
+    "serviceChargeEurPerM2Year": 45
+  }
+}

@@ -364,7 +364,45 @@ function extractListing() {
     rentRaw && /m²|m2|vierkante meter/i.test(rentRaw) ? parseNum(rentRaw) : toPerM2PerYear(rentRaw, out.availableAreaSqm);
 
   // --- rental service charges (same per-m² rule and lump-sum fallback) ---
-  const scRaw = fieldValue("servicekosten", "service charges", "service costs", "servicekosten kantoorruimte");
+  // funda's characteristics row often says "Geen servicekosten bekend" while
+  // the description states the figure ("De servicekosten bedragen circa € 61
+  // per m² v.v.o. per jaar"). A row without a number is no answer, so the
+  // description is read next: a sentence that names the service charges and
+  // states an amount after that word, or the line under a "Servicekosten"
+  // heading. "Huurprijs exclusief servicekosten: € 195" is the rent, not the
+  // service charge, and is skipped.
+  const SC_KW = /servicekosten|service\s*(?:charges?|costs?)/i;
+  const SC_NOT = /(?:excl(?:\.|usief|uding|usive)?|incl(?:\.|usief|uding|usive)?|plus|vermeerderd\s*met)\s*(?:de\s*|the\s*)?(?:servicekosten|service\s*(?:charges?|costs?))/i;
+  const amountFrom = (s) => {
+    const m = s.match(/(?:€|eur(?:o)?\b)\s*\d[\d.,]*/i);
+    if (!m) return null;
+    const rest = s.slice(m.index);
+    return m[0] + rest.slice(m[0].length).split("€")[0];
+  };
+  const scFromProse = () => {
+    for (let i = 0; i < textLines.length; i++) {
+      const t = textLines[i];
+      if (!SC_KW.test(t)) continue;
+      if (t.length <= 40 && /^[^€\d]*(?:servicekosten|service\s*(?:charges?|costs?))[^€\d]*$/i.test(t)) {
+        const next = textLines[i + 1];
+        if (next && !SC_KW.test(next)) {
+          const a = amountFrom(next);
+          if (a) return a;
+        }
+        continue;
+      }
+      for (const sentence of t.split(/(?<=[.;!?])\s+(?=[A-Z€•\-])/)) {
+        if (SC_NOT.test(sentence)) continue;
+        const kw = sentence.search(SC_KW);
+        if (kw < 0) continue;
+        const a = amountFrom(sentence.slice(kw));
+        if (a) return a;
+      }
+    }
+    return null;
+  };
+  const scLabelRaw = fieldValue("servicekosten", "service charges", "service costs", "servicekosten kantoorruimte");
+  const scRaw = scLabelRaw && /\d/.test(scLabelRaw) ? scLabelRaw : scFromProse();
   out.serviceChargeEurPerM2Year =
     scRaw && /m²|m2|vierkante meter/i.test(scRaw) ? parseNum(scRaw) : toPerM2PerYear(scRaw, out.availableAreaSqm);
 
