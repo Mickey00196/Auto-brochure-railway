@@ -1303,11 +1303,17 @@ async function readPage() {
   if (tab.url && !/^https?:/i.test(tab.url)) {
     throw new Error("This isn't a web page — open a listing first.");
   }
+  // injectImmediately: by default Chrome holds an injected script until the
+  // page has finished loading. A funda page whose spinner never stops (a
+  // tracker or ad request that hangs) never finishes, so the read waited
+  // forever and timed out — even though the listing was on screen. Running
+  // straight away reads whatever the page already shows.
+  //
   // Open a collapsed description first. Best effort: if it fails or takes
   // too long, the page is still read as it is.
   try {
     await withTimeout(
-      chrome.scripting.executeScript({ target: { tabId: tab.id }, func: expandHiddenText }),
+      chrome.scripting.executeScript({ target: { tabId: tab.id }, injectImmediately: true, func: expandHiddenText }),
       3500,
       "expand timed out",
     );
@@ -1315,7 +1321,7 @@ async function readPage() {
     /* read the page as it is */
   }
   const results = await withTimeout(
-    chrome.scripting.executeScript({ target: { tabId: tab.id }, func: extractListing }),
+    chrome.scripting.executeScript({ target: { tabId: tab.id }, injectImmediately: true, func: extractListing }),
     READ_TIMEOUT_MS,
     "Timed out reading this page — it may still be loading. Try again in a moment.",
   );
