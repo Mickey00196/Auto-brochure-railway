@@ -12,6 +12,8 @@ import { shortDate } from "@/components/ClientCard";
 import { RemoveFromFolderButton } from "@/components/RemoveFromFolderButton";
 import { AddFromLibraryModal } from "@/components/AddFromLibraryModal";
 import { LiveLinkPanel } from "@/components/LiveLinkPanel";
+import { BrochureSettingsPanel } from "@/components/BrochureSettingsPanel";
+import { BuildingNotesButton } from "@/components/BuildingNotesButton";
 
 /** A client's folder: only buildings explicitly copied in from the shared
  * library, never the library itself. Same photo cards as the library, with
@@ -62,6 +64,7 @@ export function ClientFolder({ client: initialClient, buildings: initial }: { cl
   return (
     <div className={buildings.length > 0 ? "pb-36" : ""}>
       <LiveLinkPanel client={client} onUpdated={setClient} />
+      <BrochureSettingsPanel client={client} onUpdated={setClient} />
 
       <div className="mb-5 mt-10 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-semibold tracking-tight">
@@ -93,19 +96,28 @@ export function ClientFolder({ client: initialClient, buildings: initial }: { cl
               building={building}
               cornerAction={<RemoveFromFolderButton building={building} onRemoved={() => handleRemoved(building.building_id)} />}
               note={
-                building.created_at ? (
-                  <>
-                    Copied {shortDate(building.created_at)}
-                    {building.source_building_id && (
-                      <>
-                        {", "}
-                        <Link href={`/buildings/${building.source_building_id}`} className="font-medium text-accent hover:underline">
-                          open the original
-                        </Link>
-                      </>
-                    )}
-                  </>
-                ) : null
+                <div className="flex flex-col gap-2">
+                  <BuildingNotesButton
+                    building={building}
+                    clientName={client.display_name}
+                    onSaved={(next) =>
+                      setBuildings((prev) => prev.map((b) => (b.building_id === next.building_id ? next : b)))
+                    }
+                  />
+                  {building.created_at && (
+                    <span>
+                      Copied {shortDate(building.created_at)}
+                      {building.source_building_id && (
+                        <>
+                          {", "}
+                          <Link href={`/buildings/${building.source_building_id}`} className="font-medium text-accent hover:underline">
+                            open the original
+                          </Link>
+                        </>
+                      )}
+                    </span>
+                  )}
+                </div>
               }
             />
           ))}

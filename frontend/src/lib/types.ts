@@ -37,6 +37,9 @@ export interface Building {
   public_transport_note: string | null;
   building_amenities: string[];
   description: string | null;
+  /** The broker's advice on a client's copy — shown on the live link. */
+  broker_note?: string | null;
+  watch_out?: string | null;
   photos: string[];
   source_url: string | null;
   // NULL = a shared library master. Set = a copy that belongs to one
@@ -118,6 +121,13 @@ export interface Client {
   building_count: number;
   is_live: boolean;
   public_slug: string | null;
+  /** How the live link presents itself (PUT /clients/{id}/brochure). */
+  brochure_language?: BrochureLanguage | null;
+  contact_name?: string | null;
+  contact_role?: string | null;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  logo_url?: string | null;
   /** First photo of up to three of the folder's buildings (overview cards). */
   preview_photos?: string[];
   /** Distinct submarkets/cities of the folder's buildings, in folder order. */
@@ -144,14 +154,35 @@ export interface PublicBuilding {
   airport_note: string | null;
   public_transport_note: string | null;
   building_amenities: string[];
+  broker_note?: string | null;
+  watch_out?: string | null;
   photos: string[];
   units: Unit[];
   /** Priced extras (parking first of all) as the client sees them. */
   addons?: { name: string; price: number; price_unit: string }[];
 }
 
+export type BrochureLanguage = "en" | "nl";
+
+export interface BrochureSettings {
+  brochure_language: BrochureLanguage;
+  contact_name: string | null;
+  contact_role: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  logo_url: string | null;
+}
+
 export interface PublicClient {
   display_name: string;
+  language?: BrochureLanguage;
+  contact_name?: string | null;
+  contact_role?: string | null;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  logo_url?: string | null;
+  /** When the shortlist last changed (ISO, UTC). */
+  updated_at?: string;
   buildings: PublicBuilding[];
 }
 

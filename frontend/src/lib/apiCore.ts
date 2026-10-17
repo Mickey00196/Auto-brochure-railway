@@ -1,6 +1,7 @@
 import type {
   AddOn,
   Building,
+  BrochureSettings,
   Client,
   ClientCopy,
   DashboardData,
@@ -83,6 +84,10 @@ export function makeApi(request: DoRequest) {
     updateClient: (id: string, payload: Partial<Client>) =>
       request<Client>(`/clients/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
     deleteClient: (id: string) => request<void>(`/clients/${id}`, { method: "DELETE" }),
+    updateClientBrochure: (id: string, payload: BrochureSettings) =>
+      request<Client>(`/clients/${id}/brochure`, { method: "PUT", body: JSON.stringify(payload) }),
+    updateBuildingNotes: (id: string, payload: { broker_note: string | null; watch_out: string | null }) =>
+      request<Building>(`/buildings/${id}/notes`, { method: "PUT", body: JSON.stringify(payload) }),
     setClientLive: (id: string, enable: boolean) =>
       request<Client>(`/clients/${id}/live`, { method: "POST", body: JSON.stringify({ enable }) }),
 

@@ -49,10 +49,12 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Everything except static assets, image optimization, and favicon —
-    // including /api/proxy/* (needs the same "must be logged in" gate as
-    // page navigation) and /api/login (exempted above via PUBLIC_PATHS,
-    // since it's the one route a logged-out visitor needs to reach).
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    // Everything except static assets, image optimization, the favicon and
+    // the brand files in public/brand (the logo on a client's live link,
+    // which a visitor with no account has to be able to load) — including
+    // /api/proxy/* (needs the same "must be logged in" gate as page
+    // navigation) and /api/login (exempted above via PUBLIC_PATHS, since
+    // it's the one route a logged-out visitor needs to reach).
+    "/((?!_next/static|_next/image|favicon.ico|brand/).*)",
   ],
 };

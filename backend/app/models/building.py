@@ -65,6 +65,12 @@ class Building(Base):
     building_amenities: Mapped[list] = mapped_column(JSON, default=list)
 
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The broker's own take, shown on a client's live link above the listing
+    # text: why this building made the shortlist, and what to keep in mind.
+    # Written on a client's copy (it's advice for that client), so never
+    # carried over by building_copy.py from the library master.
+    broker_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    watch_out: Mapped[str | None] = mapped_column(Text, nullable=True)
     photos: Mapped[list] = mapped_column(JSON, default=list)
     source_url: Mapped[str | None] = mapped_column(String, nullable=True)
 

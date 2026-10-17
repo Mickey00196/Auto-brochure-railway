@@ -148,6 +148,127 @@ body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+/* The client brochure's map (ShortlistMap variant="brochure"): Kadaster's
+   grey base map, navy pins with a white ring, card popups and quiet
+   controls, so it reads as part of the page rather than an embedded widget. */
+.shortlist-map--brochure {
+  background: #eceef1;
+}
+.shortlist-map--brochure .leaflet-tile-pane {
+  filter: saturate(0.8) contrast(0.95) brightness(1.03);
+}
+.shortlist-map--brochure .shortlist-pin span {
+  width: 30px;
+  height: 30px;
+  margin: 2px;
+  background: var(--dark);
+  color: #fff;
+  font-size: 11px;
+  border: 2.5px solid #fff;
+  box-shadow: 0 8px 18px -8px rgb(15 30 61 / 0.65);
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease;
+}
+.shortlist-map--brochure .shortlist-pin--active span,
+.shortlist-map--brochure .shortlist-pin:hover span {
+  background: var(--accent);
+  transform: scale(1.18);
+}
+.shortlist-map--brochure .leaflet-control-zoom {
+  margin: 16px;
+  border: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow:
+    0 1px 2px rgb(15 27 51 / 0.08),
+    0 10px 24px -14px rgb(15 27 51 / 0.35);
+}
+.shortlist-map--brochure .leaflet-control-zoom a {
+  width: 38px;
+  height: 38px;
+  line-height: 38px;
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--foreground);
+  border-bottom-color: var(--border);
+}
+.shortlist-map--brochure .leaflet-control-zoom a:hover {
+  background: var(--input-bg);
+}
+.shortlist-map--brochure .leaflet-control-attribution {
+  padding: 2px 8px;
+  border-radius: 8px 0 0 0;
+  background: rgb(255 255 255 / 0.78);
+  font-size: 10px;
+  color: var(--muted);
+}
+.shortlist-map--brochure .leaflet-control-attribution a {
+  color: inherit;
+}
+.leaflet-popup.shortlist-card-popup .leaflet-popup-content-wrapper {
+  padding: 0;
+  border-radius: 16px;
+  box-shadow: 0 18px 40px -16px rgb(15 27 51 / 0.5);
+}
+.leaflet-popup.shortlist-card-popup .leaflet-popup-content {
+  margin: 0;
+  min-width: 230px;
+}
+.leaflet-popup.shortlist-card-popup .leaflet-popup-tip {
+  box-shadow: none;
+}
+.shortlist-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 12px;
+  padding: 14px 16px 14px 14px;
+  color: var(--foreground) !important;
+  text-decoration: none;
+}
+.shortlist-card-num {
+  grid-row: span 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-top: 2px;
+  border-radius: 9999px;
+  background: var(--dark);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+.shortlist-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.shortlist-card-body strong {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 1.1;
+  color: var(--foreground);
+}
+.shortlist-card-body em {
+  margin-top: 3px;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.shortlist-card-go {
+  grid-column: 2;
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
 /* ── Public client brochure (/s/[slug], BrochureView.tsx) ─────────────────── */
 
 /* A document sent to a client always renders in the light palette, whatever
@@ -198,6 +319,14 @@ body {
   }
 }
 
+/* The Cushman & Wakefield logo reversed out to white, on the cover photo
+   and the navy footer. Screen only — on paper it prints in its own colours. */
+@media screen {
+  .brochure-logo-reversed {
+    filter: brightness(0) invert(1);
+  }
+}
+
 @keyframes brochure-settle {
   from {
     transform: scale(1.06);
@@ -223,12 +352,19 @@ body {
   }
 }
 
-/* "Download PDF" = window.print(). Cover on page 1, the comparison + map
-   together after it, then one building per page with its photos. */
+/* "Download PDF" = window.print(). Cover on page 1, the map overview on
+   page 2, then one building per page. Only small blocks (the key figures,
+   the advice, a floor row) refuse to split — a tall block that won't fit
+   would otherwise jump to the next page and leave a half-empty one behind. */
 @media print {
   @page {
     size: A4;
-    margin: 12mm;
+    margin: 12mm 12mm 14mm;
+    @bottom-right {
+      content: counter(page);
+      font: 500 8pt ui-sans-serif, system-ui, sans-serif;
+      color: #5b6b85;
+    }
   }
   .print-hidden {
     display: none !important;
@@ -286,22 +422,36 @@ body {
     background: #fff !important;
   }
   .brochure .brochure-lead-photo img {
-    height: 82mm !important;
+    height: 56mm !important;
     max-height: none !important;
   }
+  .brochure .brochure-floorplans img {
+    height: 26mm !important;
+  }
   .brochure .brochure-more-photos img {
-    height: 38mm !important;
+    height: 30mm !important;
     aspect-ratio: auto !important;
   }
   .brochure .brochure-pad {
     padding-top: 0 !important;
-    padding-bottom: 6mm !important;
+    padding-bottom: 4mm !important;
   }
-  .brochure footer * {
-    color: var(--muted) !important;
+  .brochure .brochure-building {
+    border-top: 0 !important;
   }
-  .leaflet-control-zoom,
+  .brochure .brochure-client-logo {
+    box-shadow: none !important;
+    border: 1px solid var(--border);
+  }
+  .leaflet-control-zoom {
+    display: none !important;
+  }
   .leaflet-control-attribution {
     display: none !important;
+  }
+  /* The base map's licence asks for its attribution, on paper too. */
+  .shortlist-map--brochure .leaflet-control-attribution {
+    display: block !important;
+    font-size: 7px;
   }
 }

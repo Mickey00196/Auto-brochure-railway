@@ -95,8 +95,30 @@ def update_building(building_id: str, payload: schemas.BuildingCreate, db: Sessi
     # never by a normal edit — the edit form doesn't know about them and
     # would otherwise send them back as None, silently un-scoping a client's
     # copy back into the shared library.
+    #
+    # The broker's notes are likewise only touched when the request names
+    # them, so saving the building from a form without them keeps them.
     for key, value in payload.model_dump(exclude={"client_id", "source_building_id"}).items():
+        if key in ("broker_note", "watch_out") and key not in payload.model_fields_set:
+            continue
         setattr(obj, key, value)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@router.put("/{building_id}/notes", response_model=schemas.BuildingOut)
+def update_building_notes(building_id: str, payload: schemas.BuildingNotesUpdate, db: Session = Depends(get_db)):
+    """The broker's advice on a building in a client's folder — what the
+    client reads above the listing text on their live link. Library
+    masters have no client to advise, so they don't take notes."""
+    obj = db.get(Building, building_id)
+    if not obj:
+        raise HTTPException(404, "Building not found")
+    if obj.client_id is None:
+        raise HTTPException(400, "Notes belong to a building in a client folder, not the library.")
+    obj.broker_note = payload.broker_note
+    obj.watch_out = payload.watch_out
     db.commit()
     db.refresh(obj)
     return obj

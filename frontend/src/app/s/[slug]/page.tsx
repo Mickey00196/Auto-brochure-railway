@@ -5,6 +5,7 @@ import "@fontsource/instrument-serif/latin-400.css";
 import type { PublicClient } from "@/lib/types";
 import { internalApiBaseUrl } from "@/lib/internalApiBaseUrl";
 import { BrochureView } from "@/components/BrochureView";
+import { brochureText } from "@/lib/brochureText";
 
 const INTERNAL_API_BASE_URL = internalApiBaseUrl();
 
@@ -35,15 +36,15 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const client = await getPublicClient(slug);
   const name = client?.display_name ?? "Client";
-  const count = client?.buildings.length ?? 0;
-  const description = `${count} office building${count === 1 ? "" : "s"} on this shortlist, shared by your broker.`;
+  const t = brochureText(client?.language);
+  const description = t.ogDescription(client?.buildings.length ?? 0);
   const image = client?.buildings.find((b) => b.photos.length > 0)?.photos[0];
   return {
-    title: `${name} – Office shortlist`,
+    title: t.title(name),
     description,
     robots: { index: false, follow: false },
     openGraph: {
-      title: `${name} – Office shortlist`,
+      title: t.title(name),
       description,
       images: image ? [image] : undefined,
     },

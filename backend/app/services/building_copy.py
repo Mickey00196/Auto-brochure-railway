@@ -23,6 +23,9 @@ _BUILDING_COPY_EXCLUDE = {
     "source_building_id",
     "created_at",
     "updated_at",
+    # Advice written for one client; a new folder starts without it.
+    "broker_note",
+    "watch_out",
 }
 _UNIT_COPY_EXCLUDE = {"unit_id", "building_id", "created_at", "updated_at"}
 _ADDON_COPY_EXCLUDE = {"addon_id", "unit_id", "building_id", "created_at"}

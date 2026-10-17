@@ -47,6 +47,18 @@ class Client(Base):
     is_live: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     public_slug: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # What the live link shows besides the buildings: the language it's in
+    # ("en" | "nl"; NULL reads as English), the broker the client should
+    # call — set per client, since a colleague may run the deal — and the
+    # client's own logo for the cover (a small data: URL, resized in the
+    # browser before upload). All nullable, for _add_missing_columns.
+    brochure_language: Mapped[str | None] = mapped_column(String, nullable=True)
+    contact_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    contact_role: Mapped[str | None] = mapped_column(String, nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String, nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String, nullable=True)
+    logo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)
@@ -72,6 +84,20 @@ class Client(Base):
     @property
     def live(self) -> bool:
         return bool(self.is_live)
+
+    @property
+    def last_changed_at(self) -> datetime:
+        """When this shortlist last changed — the folder itself, one of its
+        buildings or one of their spaces. The live link's "Updated" date, so
+        a client sees when the broker last touched it, not today's date."""
+        stamps = [self.updated_at]
+        for building in self.buildings:
+            stamps.append(building.updated_at)
+            stamps.extend(unit.updated_at for unit in building.units)
+        # Rows written in this process carry a UTC tzinfo, rows read back
+        # from the database don't — compare them all as naive UTC.
+        naive = [s.replace(tzinfo=None) if s.tzinfo else s for s in stamps if s is not None]
+        return max(naive)
 
     @property
     def preview_photos(self) -> list[str]:

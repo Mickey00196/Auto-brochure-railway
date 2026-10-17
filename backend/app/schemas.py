@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -83,6 +83,9 @@ class BuildingBase(BaseModel):
     public_transport_note: str | None = None
     building_amenities: list[str] = Field(default_factory=list)
     description: str | None = None
+    # The broker's advice on a client's copy — see models/building.py.
+    broker_note: str | None = None
+    watch_out: str | None = None
     photos: list[str] = Field(default_factory=list)
     source_url: str | None = None
     # NULL = library master (the default for anything created/imported the
@@ -175,6 +178,13 @@ class ClientBase(BaseModel):
     created_by: str | None = None
     contacts: list[dict[str, Any]] = Field(default_factory=list)
     search_brief: dict[str, Any] | None = None
+    # How the live link presents itself — see models/client.py.
+    brochure_language: Literal["en", "nl"] | None = None
+    contact_name: str | None = None
+    contact_role: str | None = None
+    contact_phone: str | None = None
+    contact_email: str | None = None
+    logo_url: str | None = Field(default=None, max_length=700_000)
 
 
 class ClientCreate(ClientBase):
@@ -221,6 +231,35 @@ class SetClientLiveRequest(BaseModel):
     enable: bool
 
 
+class ClientBrochureUpdate(BaseModel):
+    """PUT /clients/{id}/brochure — how this client's live link presents
+    itself. Replaces all six together; an empty string clears a field."""
+
+    brochure_language: Literal["en", "nl"] = "en"
+    contact_name: str | None = None
+    contact_role: str | None = None
+    contact_phone: str | None = None
+    contact_email: str | None = None
+    logo_url: str | None = Field(default=None, max_length=700_000)
+
+    @field_validator("contact_name", "contact_role", "contact_phone", "contact_email", "logo_url", mode="before")
+    @classmethod
+    def _blank_is_none(cls, v: object) -> object:
+        return v.strip() or None if isinstance(v, str) else v
+
+
+class BuildingNotesUpdate(BaseModel):
+    """PUT /buildings/{id}/notes — the broker's advice on a client's copy."""
+
+    broker_note: str | None = None
+    watch_out: str | None = None
+
+    @field_validator("broker_note", "watch_out", mode="before")
+    @classmethod
+    def _blank_is_none(cls, v: object) -> object:
+        return v.strip() or None if isinstance(v, str) else v
+
+
 # ─────────────────────────────────────── Public share link ───────────────────────────────────────
 
 
@@ -252,6 +291,8 @@ class PublicBuildingOut(BaseModel):
     airport_note: str | None = None
     public_transport_note: str | None = None
     building_amenities: list[str] = Field(default_factory=list)
+    broker_note: str | None = None
+    watch_out: str | None = None
     photos: list[str] = Field(default_factory=list)
     units: list["UnitOut"] = Field(default_factory=list)
     # Parking and other priced extras, so the client sees the parking price
@@ -262,7 +303,22 @@ class PublicBuildingOut(BaseModel):
 class PublicClientOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     display_name: str
+    # "en" | "nl" — the language the page is set in (NULL → English).
+    language: Literal["en", "nl"] = Field(default="en", validation_alias="brochure_language")
+    # The broker this client should contact, as set on the folder.
+    contact_name: str | None = None
+    contact_role: str | None = None
+    contact_phone: str | None = None
+    contact_email: str | None = None
+    logo_url: str | None = None
+    # When the shortlist last changed — the "Updated" date on the page.
+    updated_at: datetime = Field(validation_alias="last_changed_at")
     buildings: list[PublicBuildingOut] = Field(default_factory=list)
+
+    @field_validator("language", mode="before")
+    @classmethod
+    def _default_language(cls, v: object) -> str:
+        return v if v in ("en", "nl") else "en"
 
 
 # ─────────────────────────────────────────── Selection ───────────────────────────────────────────

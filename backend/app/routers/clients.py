@@ -28,6 +28,16 @@ def _unique_slug(db: Session, display_name: str) -> str:
     return f"{base}-{secrets.token_hex(8)}"
 
 
+_BROCHURE_FIELDS = {
+    "brochure_language",
+    "contact_name",
+    "contact_role",
+    "contact_phone",
+    "contact_email",
+    "logo_url",
+}
+
+
 @router.get("", response_model=list[schemas.ClientOut])
 def list_clients(db: Session = Depends(get_db)):
     return db.query(Client).all()
@@ -52,6 +62,26 @@ def get_client(client_id: str, db: Session = Depends(get_db)):
 
 @router.put("/{client_id}", response_model=schemas.ClientOut)
 def update_client(client_id: str, payload: schemas.ClientCreate, db: Session = Depends(get_db)):
+    obj = db.get(Client, client_id)
+    if not obj:
+        raise HTTPException(404, "Client not found")
+    # The live-link fields (language, contact, logo) are only changed when
+    # the request names them: a form that predates them — or only edits the
+    # folder's name — must not blank what the broker set for the link.
+    for key, value in payload.model_dump().items():
+        if key in _BROCHURE_FIELDS and key not in payload.model_fields_set:
+            continue
+        setattr(obj, key, value)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@router.put("/{client_id}/brochure", response_model=schemas.ClientOut)
+def update_client_brochure(client_id: str, payload: schemas.ClientBrochureUpdate, db: Session = Depends(get_db)):
+    """The live link's language, broker contact and client logo — kept
+    apart from PUT /clients/{id} so saving them never touches the folder's
+    own details, and the other way round."""
     obj = db.get(Client, client_id)
     if not obj:
         raise HTTPException(404, "Client not found")
