@@ -74,6 +74,7 @@ export function makeApi(request: DoRequest) {
     },
     createAddOn: (payload: Record<string, unknown>) =>
       request<AddOn>("/addons", { method: "POST", body: JSON.stringify(payload) }),
+    deleteAddOn: (id: string) => request<void>(`/addons/${id}`, { method: "DELETE" }),
 
     neighbourhoods: () => request<Neighbourhood[]>("/neighbourhoods"),
 

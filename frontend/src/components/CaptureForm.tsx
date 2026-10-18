@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Car, Check, Pencil, Plane, Train, TriangleAlert, X } from "lucide-react";
 import type { Client, DuplicateCandidate } from "@/lib/types";
+import { matchUnits, mergeBuilding, mergeUnit } from "@/lib/captureMerge";
 import { api, PROXY_BASE_URL } from "@/lib/api";
 import { PhotoPicker } from "@/components/PhotoPicker";
 import { SUGGESTED_AMENITIES } from "@/components/AmenityMultiSelect";
@@ -154,6 +155,9 @@ export function CaptureForm({
   const [selectedClientId, setSelectedClientId] = useState("");
   const [duplicates, setDuplicates] = useState<DuplicateCandidate[]>([]);
   const [duplicatesDismissed, setDuplicatesDismissed] = useState(false);
+  // Set by "Update" on the duplicate warning: saving then merges this
+  // capture into that building instead of adding a new one.
+  const [updateTarget, setUpdateTarget] = useState<DuplicateCandidate | null>(null);
 
   function update<K extends keyof Form>(key: K, value: Form[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -356,7 +360,7 @@ export function CaptureForm({
     setError(null);
     try {
       const num = (s: string) => toNumber(s);
-      const building = await api.createBuilding({
+      const buildingPayload = {
         name: form.name.trim(),
         address: form.address.trim(),
         postal_code: form.postalCode.trim() || null,
@@ -377,7 +381,7 @@ export function CaptureForm({
           .split(",")
           .map((s) => s.trim())
           .filter(Boolean),
-      });
+      };
 
       // The space on offer: one unit per floor when sizes per floor were
       // given, otherwise a single unit. A floor's own rent and availability
@@ -403,10 +407,8 @@ export function CaptureForm({
             return area && hasTerms ? [{ floor: f?.floor.trim() || null, area, ...general(f) }] : [];
           })();
 
-      const unitIds: string[] = [];
-      for (const piece of pieces) {
-        const unit = await api.createUnit({
-          building_id: building.building_id,
+      const unitFields = (piece: Piece, buildingId: string) => ({
+          building_id: buildingId,
           floor: piece.floor,
           available_area_m2: piece.area,
           min_divisible_area_m2: minDivisible != null && minDivisible < piece.area ? minDivisible : null,
@@ -418,10 +420,62 @@ export function CaptureForm({
           parking_ratio: form.parkingRatio.trim() || null,
           availability: piece.availability,
           contract_term: form.contractTerm.trim() || null,
-        });
+      });
+      const parkingPrice = num(form.parkingPriceEurYear);
+
+      if (updateTarget) {
+        // Update the building already in the library: what this listing
+        // states replaces the stored value, everything else is kept. Spaces
+        // are matched by floor; new floors are added, other spaces stay.
+        const buildingId = updateTarget.building_id;
+        const existing = await api.building(buildingId);
+        await api.updateBuilding(buildingId, mergeBuilding(existing, buildingPayload));
+        const stored = existing.units ?? [];
+        const matches = matchUnits(pieces, stored);
+        const unitIds: string[] = [];
+        for (const [i, piece] of pieces.entries()) {
+          const match = matches[i];
+          const fields = unitFields(piece, buildingId);
+          // A field the capture left at its "nothing stated" default must
+          // not overwrite what's stored.
+          const stated = {
+            ...fields,
+            rent_price_type: undefined,
+            service_charge_price_type: undefined,
+            min_divisible_area_m2: fields.min_divisible_area_m2 ?? undefined,
+          };
+          const unit = match ? await api.updateUnit(match.unit_id, mergeUnit(match, stated)) : await api.createUnit(fields);
+          unitIds.push(unit.unit_id);
+        }
+        if (parkingPrice != null) {
+          const anchorUnit = unitIds[0] ?? stored[0]?.unit_id;
+          const addons = await api.addons({ buildingId });
+          for (const old of addons.filter((a) => /park/i.test(a.name))) await api.deleteAddOn(old.addon_id);
+          if (anchorUnit) {
+            await api.createAddOn({
+              name: "Parking space",
+              price: parkingPrice,
+              price_unit: "EUR / space / year",
+              unit_id: anchorUnit,
+              building_id: buildingId,
+            });
+          }
+        }
+        if (selectedClientId) {
+          await api.copyBuildingToClient(buildingId, selectedClientId);
+          router.push(`/clients/${selectedClientId}`);
+          return;
+        }
+        router.push(`/buildings/${buildingId}`);
+        return;
+      }
+
+      const building = await api.createBuilding(buildingPayload);
+      const unitIds: string[] = [];
+      for (const piece of pieces) {
+        const unit = await api.createUnit(unitFields(piece, building.building_id));
         unitIds.push(unit.unit_id);
       }
-      const parkingPrice = num(form.parkingPriceEurYear);
       if (parkingPrice != null && unitIds.length) {
         await api.createAddOn({
           name: "Parking space",
@@ -496,7 +550,25 @@ export function CaptureForm({
         </div>
       )}
 
-      {duplicates.length > 0 && !duplicatesDismissed && (
+      {updateTarget && (
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-accent/30 bg-accent/5 p-4 sm:p-5">
+          <p className="min-w-0 flex-1 text-sm">
+            <span className="font-semibold">Updating {updateTarget.name || updateTarget.address}.</span>{" "}
+            Saving replaces what this listing states and keeps everything it doesn&apos;t. Spaces are matched by floor:
+            new floors are added, other spaces stay as they are.
+          </p>
+          <span className="flex shrink-0 items-center gap-3">
+            <Link href={`/buildings/${updateTarget.building_id}`} target="_blank" className="text-xs font-semibold text-accent hover:underline">
+              View current
+            </Link>
+            <button type="button" onClick={() => setUpdateTarget(null)} className="text-xs font-medium text-muted underline hover:text-foreground">
+              Cancel, add as new
+            </button>
+          </span>
+        </div>
+      )}
+
+      {duplicates.length > 0 && !duplicatesDismissed && !updateTarget && (
         <div className="mt-4 rounded-2xl border border-amber-300/50 bg-warn-bg p-4 sm:p-5">
           <div className="flex items-start gap-2.5">
             <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warn-foreground" aria-hidden="true" />
@@ -522,9 +594,18 @@ export function CaptureForm({
                     {d.is_draft ? ", draft without spaces" : `, ${d.space_count} space${d.space_count === 1 ? "" : "s"}`}
                   </div>
                 </div>
-                <Link href={`/buildings/${d.building_id}`} className="shrink-0 text-xs font-semibold text-accent hover:underline">
-                  Open that one
-                </Link>
+                <span className="flex shrink-0 items-center gap-3">
+                  <Link href={`/buildings/${d.building_id}`} target="_blank" className="text-xs font-medium text-muted hover:text-foreground hover:underline">
+                    View
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setUpdateTarget(d)}
+                    className="rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground transition hover:opacity-90"
+                  >
+                    Update
+                  </button>
+                </span>
               </li>
             ))}
           </ul>
@@ -1001,7 +1082,7 @@ export function CaptureForm({
               disabled={submitting}
               className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-white px-[18px] text-sm font-semibold text-dark transition hover:bg-white/90 disabled:opacity-60"
             >
-              {submitting ? "Saving…" : "Save building"}
+              {submitting ? "Saving…" : updateTarget ? "Update building" : "Save building"}
             </button>
           </span>
         </div>
