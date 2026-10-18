@@ -1280,26 +1280,45 @@ async function expandHiddenText() {
   for (const el of targets) {
     try { el.click(); } catch (e) { /* one stubborn element must not stop the read */ }
   }
-  // Wait for the text to land (it may be fetched), then for it to settle.
-  // A page that already had the text (only clipped by CSS) doesn't grow at
-  // all, so give up waiting after a short while instead of the full budget.
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const startedAt = performance.now();
-  let last = lengthNow();
-  let grew = false;
-  while (performance.now() - startedAt < 2500) {
-    await sleep(100);
-    const now = lengthNow();
-    if (now > before + 100) grew = true;
-    if (grew && now === last) break;
-    if (!grew && performance.now() - startedAt > 1200) break;
-    last = now;
-  }
-  return { clicked: targets.length, grewBy: lengthNow() - before };
+  // Wait for the text to land (it may be fetched), then for it to settle —
+  // by listening for changes to the page rather than re-reading the whole
+  // page's text every 100 ms. A page that already had the text (only
+  // clipped by CSS) doesn't grow at all: give up on it after 600 ms.
+  return await new Promise((resolve) => {
+    let finished = false;
+    let grew = false;
+    let lastLength = before;
+    let checkTimer = null;
+    const timers = [];
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      observer.disconnect();
+      clearTimeout(checkTimer);
+      timers.forEach(clearTimeout);
+      resolve({ clicked: targets.length, grewBy: lengthNow() - before });
+    };
+    const check = () => {
+      checkTimer = null;
+      const now = lengthNow();
+      if (now > before + 100) {
+        // Settled once the length stops changing between two looks.
+        if (grew && now === lastLength) return finish();
+        grew = true;
+        lastLength = now;
+        checkTimer = setTimeout(check, 120);
+      }
+    };
+    const observer = new MutationObserver(() => {
+      if (!checkTimer) checkTimer = setTimeout(check, 50);
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    timers.push(setTimeout(() => { if (!grew) finish(); }, 600));
+    timers.push(setTimeout(finish, 2500));
+  });
 }
 
-async function readPage() {
-  const startedAt = performance.now();
+async function activeListingTab() {
   const [tab] = await withTimeout(
     chrome.tabs.query({ active: true, currentWindow: true }),
     READ_TIMEOUT_MS,
@@ -1311,43 +1330,45 @@ async function readPage() {
   if (tab.url && !/^https?:/i.test(tab.url)) {
     throw new Error("This isn't a web page — open a listing first.");
   }
-  // injectImmediately: by default Chrome holds an injected script until the
-  // page has finished loading. A funda page whose spinner never stops (a
-  // tracker or ad request that hangs) never finishes, so the read waited
-  // forever and timed out — even though the listing was on screen. Running
-  // straight away reads whatever the page already shows.
-  //
-  // Open a collapsed description first. Best effort: if it fails or takes
-  // too long, the page is still read as it is.
-  try {
-    await withTimeout(
-      chrome.scripting.executeScript({ target: { tabId: tab.id }, injectImmediately: true, func: expandHiddenText }),
-      3500,
-      "expand timed out",
-    );
-  } catch (e) {
-    /* read the page as it is */
-  }
-  const results = await withTimeout(
-    chrome.scripting.executeScript({ target: { tabId: tab.id }, injectImmediately: true, func: extractListing }),
-    READ_TIMEOUT_MS,
-    "Timed out reading this page — it may still be loading. Try again in a moment.",
-  );
-  const data = results && results[0] && results[0].result;
-  if (!data) throw new Error("Nothing could be read from this page.");
-  return { data, ms: Math.round(performance.now() - startedAt) };
+  return tab;
 }
 
-async function prepare() {
-  setStatus("", "Reading this page…");
-  captureBtn.disabled = true;
-  const [{ data, ms }, appUrl] = await Promise.all([readPage(), getAppUrl()]);
+// injectImmediately: by default Chrome holds an injected script until the
+// page has finished loading. A funda page whose spinner never stops (a
+// tracker or ad request that hangs) never finishes, so the read waited
+// forever and timed out — even though the listing was on screen. Running
+// straight away reads whatever the page already shows.
+async function runInTab(tabId, func, timeoutMs, message) {
+  const results = await withTimeout(
+    chrome.scripting.executeScript({ target: { tabId }, injectImmediately: true, func }),
+    timeoutMs,
+    message,
+  );
+  return results && results[0] && results[0].result;
+}
 
-  if (data.blocked) {
-    setStatus("warn", "This looks like a verification page — open the real listing, then reopen this popup.");
+// The last read of each listing, for this browser session only: reopening
+// the popup on the same page shows it at once while a fresh read runs.
+const CACHE_MS = 10 * 60 * 1000;
+const cacheKey = (tab) => (tab.url ? "read:" + tab.url : null);
+async function cachedRead(tab) {
+  const key = cacheKey(tab);
+  if (!key || !chrome.storage.session) return null;
+  try {
+    const hit = (await chrome.storage.session.get(key))[key];
+    return hit && Date.now() - hit.at < CACHE_MS ? hit.data : null;
+  } catch (e) {
     return null;
   }
+}
+function rememberRead(tab, data) {
+  const key = cacheKey(tab);
+  if (!key || !chrome.storage.session) return;
+  chrome.storage.session.set({ [key]: { at: Date.now(), data } }).catch(() => {});
+}
 
+// Puts a read on screen and makes it the one Capture sends.
+function show(data, appUrl, ms, stillChecking) {
   const { url, photoCount, dropped } = buildHandoffUrl(appUrl, data);
   readyUrl = url;
   captureBtn.disabled = false;
@@ -1362,11 +1383,61 @@ async function prepare() {
   if (short) {
     note += ` of ${target} on this page. Open “Alle media” on the listing, then reopen this popup to pick up the rest.`;
   } else {
-    note += ". Click to send it to your library.";
+    note += stillChecking ? ". Opening the full description…" : ". Click to send it to your library.";
   }
   if (dropped) note += ` (${dropped} left out to keep the link short enough.)`;
   setStatus(short ? "warn" : "ok", note);
   renderPreview(data, photoCount, dropped);
+  return url;
+}
+
+// Settles once the full description has been opened and read (or there
+// was nothing to open). Capture waits for it briefly so nothing is lost.
+let descriptionPass = null;
+
+// Show what the page already holds at once (~0.1–0.2 s), then open a
+// collapsed description in the background and update the preview only if
+// that added text. Before, the popup showed nothing until the description
+// had been clicked open and had settled.
+async function prepare() {
+  setStatus("", "Reading this page…");
+  captureBtn.disabled = true;
+  const startedAt = performance.now();
+  const [tab, appUrl] = await Promise.all([activeListingTab(), getAppUrl()]);
+  const elapsed = () => Math.round(performance.now() - startedAt);
+
+  const cached = await cachedRead(tab);
+  if (cached && !cached.blocked) show(cached, appUrl, elapsed(), true);
+
+  // The description click goes out together with the first read, so its
+  // text is already on its way while the page is being read.
+  const opening = runInTab(tab.id, expandHiddenText, 3500, "expand timed out").catch(() => null);
+  const data = await runInTab(
+    tab.id,
+    extractListing,
+    READ_TIMEOUT_MS,
+    "Timed out reading this page — it may still be loading. Try again in a moment.",
+  );
+  if (!data) throw new Error("Nothing could be read from this page.");
+  if (data.blocked) {
+    setStatus("warn", "This looks like a verification page — open the real listing, then reopen this popup.");
+    return null;
+  }
+  const url = show(data, appUrl, elapsed(), true);
+
+  descriptionPass = (async () => {
+    let final = data;
+    try {
+      const opened = await opening;
+      if (opened && opened.grewBy > 100) {
+        final = (await runInTab(tab.id, extractListing, READ_TIMEOUT_MS, "re-read timed out")) || data;
+      }
+    } catch (e) {
+      /* the first read stands */
+    }
+    show(final, appUrl, elapsed(), false);
+    rememberRead(tab, final);
+  })();
   return url;
 }
 
@@ -1381,6 +1452,12 @@ captureBtn.addEventListener("click", async () => {
   // Every branch below must end in either a url or a visible status — a
   // click that just does nothing is indistinguishable from the extension
   // being broken, even when the real cause was already shown and missed.
+  if (descriptionPass) {
+    // Clicked while the full description was still being opened: give it a
+    // moment, so what it adds (service charges, parking) isn't left out.
+    setStatus("", "Finishing the description…");
+    await Promise.race([descriptionPass, new Promise((r) => setTimeout(r, 2500))]);
+  }
   let url = readyUrl;
   if (!url) {
     try {
