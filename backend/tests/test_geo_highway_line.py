@@ -501,37 +501,28 @@ def test_trunk_and_motorway_can_both_match_when_opted_in():
 # ---------------------------------------------------------------------------
 
 
-def test_nearby_distances_runs_lookups_concurrently_not_sequentially(monkeypatch):
-    """The whole point of parallelizing: three independent network calls
-    (Google Places, the station/motorway_junction Overpass query, and
-    nearest_highway_line) must overlap, not queue up one after another.
-    Each fetch below sleeps briefly; sequential execution would take
-    roughly the sum of every sleep, concurrent execution roughly the
-    longest single branch's own total.
-
-    That longest branch is nearest_highway_line, not either of the other
-    two: an empty Overpass response (as below) makes it retry once at the
-    wider radius — two sequential sleeps by design, even while its whole
-    branch runs in parallel with the other two. So "concurrent" here means
-    ~2 sleeps (the true floor), not ~1 — the assertion checks for that,
-    comfortably below the ~4-sleep total a fully sequential implementation
-    (Google + station-Overpass + highway-line's own two hops) would take.
-    """
+def test_google_and_the_exit_query_run_side_by_side(monkeypatch):
+    """Google (public transport) and the one Overpass query (motorway exit)
+    overlap; only the fallbacks, needed when those come back empty, run one
+    after another (so Overpass never sees two queries at once)."""
     monkeypatch.setenv("GOOGLE_MAPS_GEOCODING_API_KEY", "test-key")
     sleep_seconds = 0.2
+    exit_node = {"type": "node", "id": 1, "lat": 52.34, "lon": 4.86,
+                 "tags": {"highway": "motorway_junction", "ref": "S109"}}
 
     def fetch(url: str, body: bytes | None) -> str:
         time.sleep(sleep_seconds)
         if "place/nearbysearch" in url:
-            return json.dumps({"status": "ZERO_RESULTS", "results": []})
-        return _overpass_response([])  # both Overpass paths: genuinely nothing found
+            return json.dumps({"status": "OK", "results": [
+                {"name": "Amsterdam Zuid", "geometry": {"location": {"lat": 52.339, "lng": 4.873}}}]})
+        return _overpass_response([exit_node])
 
     start = time.monotonic()
-    nearby_distances(52.3376, 4.8721, fetch=fetch)
+    d = nearby_distances(52.3376, 4.8721, fetch=fetch)
     elapsed = time.monotonic() - start
 
-    assert elapsed < sleep_seconds * 3
-
+    assert d.highway and d.public_transport
+    assert elapsed < sleep_seconds * 2
 
 # ---------------------------------------------------------------------------
 # The exit-only fallback that keeps "Highway" filled when the combined
@@ -554,21 +545,51 @@ def test_highway_comes_from_the_exit_only_query_when_the_combined_query_fails():
         raise TimeoutError("The read operation timed out")  # the combined query and the road query
 
     d = nearby_distances(52.3863673, 4.889874, fetch=fetch)
-    assert d.highway is not None and d.highway.startswith("Exit 3 Coenplein ")
+    assert d.highway is not None and d.highway.startswith("Coenplein ")
 
 
-def test_exit_only_query_gives_up_after_one_failed_request():
-    """No retry: a hanging Overpass was what made the lookup take 41 s."""
+def test_exit_only_query_retries_once_after_being_throttled():
+    """Overpass answers "429 Too Many Requests" when it's busy; one retry
+    after a short pause, then give up."""
+    import app.services.geo as geo
     from app.services.geo import nearest_motorway_junction
 
     calls = []
 
     def fetch(url: str, body: bytes | None) -> str:
         calls.append(url)
-        raise TimeoutError("The read operation timed out")
+        raise TimeoutError("HTTP Error 429: Too Many Requests")
 
-    assert nearest_motorway_junction(52.3863673, 4.889874, fetch=fetch) is None
-    assert len(calls) == 1
+    geo.JUNCTION_RETRY_PAUSE_SECONDS, saved = 0.0, geo.JUNCTION_RETRY_PAUSE_SECONDS
+    try:
+        assert nearest_motorway_junction(52.3863673, 4.889874, fetch=fetch) is None
+    finally:
+        geo.JUNCTION_RETRY_PAUSE_SECONDS = saved
+    assert len(calls) == 2
+
+
+def test_only_one_overpass_query_runs_at_a_time(monkeypatch):
+    """Three at once got the app rate-limited (429) and left Highway blank."""
+    import threading
+
+    monkeypatch.setenv("GOOGLE_MAPS_GEOCODING_API_KEY", "test-key")
+    lock = threading.Lock()
+    active = [0]
+    peak = [0]
+
+    def fetch(url: str, body: bytes | None) -> str:
+        if "place/nearbysearch" in url:
+            return json.dumps({"status": "ZERO_RESULTS", "results": []})
+        with lock:
+            active[0] += 1
+            peak[0] = max(peak[0], active[0])
+        time.sleep(0.05)
+        with lock:
+            active[0] -= 1
+        return _overpass_response([])
+
+    nearby_distances(52.3376, 4.8721, fetch=fetch)
+    assert peak[0] == 1
 
 
 def test_highway_falls_back_to_the_nearest_motorway_road():

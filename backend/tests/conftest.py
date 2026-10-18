@@ -70,3 +70,13 @@ def client(raw_client, db_session):
     token = login.json()["access_token"]
     raw_client.headers.update({"Authorization": f"Bearer {token}"})
     return raw_client
+
+
+@pytest.fixture(autouse=True)
+def _fresh_distance_cache():
+    """Distance lookups are cached per spot; tests reuse the same spots."""
+    from app.services import geo
+
+    geo._DISTANCE_CACHE.clear()
+    yield
+    geo._DISTANCE_CACHE.clear()

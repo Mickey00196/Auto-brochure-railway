@@ -80,6 +80,7 @@ import math
 import os
 import urllib.parse
 import urllib.request
+import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from typing import Callable
@@ -603,8 +604,9 @@ def _overpass_nearby(
 # "Highway" blank). Given its own, longer budget and one retry, since it is
 # the only source for that field.
 JUNCTION_RADIUS_M = 15_000
-JUNCTION_TIMEOUT_SECONDS = 7
-JUNCTION_ATTEMPTS = 1
+JUNCTION_TIMEOUT_SECONDS = 3.5
+JUNCTION_ATTEMPTS = 2
+JUNCTION_RETRY_PAUSE_SECONDS = 1.0
 
 # The most a distance lookup may take in total, whatever the outside
 # services do. The capture page waits on this; a public Overpass instance
@@ -614,7 +616,7 @@ LOOKUP_DEADLINE_SECONDS = 8
 
 
 def _junction_query(lat: float, lon: float) -> str:
-    return f"""[out:json][timeout:{JUNCTION_TIMEOUT_SECONDS - 4}];
+    return f"""[out:json][timeout:3];
 node(around:{JUNCTION_RADIUS_M},{lat},{lon})["highway"="motorway_junction"];
 out;"""
 
@@ -626,8 +628,11 @@ def nearest_motorway_junction(lat: float, lon: float, *, fetch: Fetcher = _http)
     # The primary mirror only: overpass.osm.ch answered the same Amsterdam
     # query with nothing (see OVERPASS_MIRRORS), so asking it would only
     # turn "couldn't reach the data" into a wrong "no exit nearby". A failed
-    # request is retried; a real answer, even an empty one, is final.
+    # request (a timeout, or Overpass's "429 Too Many Requests") is retried
+    # once after a short pause; a real answer, even an empty one, is final.
     for attempt in range(JUNCTION_ATTEMPTS):
+        if attempt:
+            time.sleep(JUNCTION_RETRY_PAUSE_SECONDS)
         try:
             data = json.loads(junction_fetch(OVERPASS_MIRRORS[0], payload))
         except Exception:
@@ -644,18 +649,9 @@ def nearest_motorway_junction(lat: float, lon: float, *, fetch: Fetcher = _http)
                 continue
             distance = haversine_m(lat, lon, point[0], point[1])
             if best is None or distance < best[0]:
-                best = (distance, _junction_label(tags))
+                best = (distance, _label(tags, "Motorway exit"))
         return best
     return None
-
-
-def _junction_label(tags: dict) -> str:
-    """"Exit 3 Coenplein" / "Coenplein" / "Motorway exit"."""
-    name = tags.get("name")
-    ref = tags.get("ref")
-    if ref and name:
-        return f"Exit {ref} {name}"
-    return str(name) if name else (f"Exit {ref}" if ref else "Motorway exit")
 
 
 def _highway_line_query(lat: float, lon: float, radius_m: int, *, include_trunk_roads: bool) -> str:
@@ -794,6 +790,10 @@ def nearest_highway_line(
     return None
 
 
+DISTANCE_CACHE_SECONDS = 24 * 3600
+_DISTANCE_CACHE: dict[tuple[float, float, str], tuple[float, "Distances"]] = {}
+
+
 def nearby_distances(
     lat: float, lon: float, transport_mode: str = "nearest_any", *, fetch: Fetcher = _http
 ) -> Distances:
@@ -802,65 +802,90 @@ def nearby_distances(
     # search at all.
     best: dict[str, tuple[float, str]] = {"airport": _nearest_known_airport(lat, lon)}
 
-    # The three network lookups below are independent of one another — each
-    # only needs (lat, lon), not any other one's result — so they run
-    # concurrently rather than one after another. Sequentially, a caller
-    # paid the sum of every call's latency (worst case: Google Places +
-    # the station/motorway_junction Overpass query + nearest_highway_line's
-    # own up-to-two-radius sequence, each a real network round trip); done
-    # at once, a caller pays roughly whichever one is slowest. This does
-    # not make any single call faster — there's no way to make a real
-    # network request to Google or Overpass "instant" — it only stops
-    # paying for all of them back to back.
+    # Successful answers are remembered per spot: "Look up again", the same
+    # building captured twice, or a building next door then cost the public
+    # Overpass server nothing. It throttles hard ("429 Too Many Requests")
+    # once one server sends it several queries at a time.
+    cache_key = (round(lat, 4), round(lon, 4), transport_mode)
+    cached = _DISTANCE_CACHE.get(cache_key)
+    if cached and time.monotonic() - cached[0] < DISTANCE_CACHE_SECONDS:
+        return cached[1]
+
     api_key = _google_maps_api_key()
     place_type = _GOOGLE_PLACE_TYPES.get(transport_mode, _GOOGLE_TRANSIT_FALLBACK_TYPE) if api_key else None
 
+    # At most ONE Overpass query at a time. With Google configured (public
+    # transport comes from Google), that is the light exit-only query for
+    # the highway. Without Google, it is the combined station + exit query,
+    # since it is the only source for public transport too. Running three
+    # Overpass queries at once got the app rate-limited and left Highway
+    # blank on every capture.
+    #
     # Not a `with` block: leaving one waits for every thread, which is
     # exactly the wait the deadline is there to cut off. A lookup still
     # running at the deadline finishes in the background and is ignored.
-    pool = ThreadPoolExecutor(max_workers=4)
+    deadline = time.monotonic() + LOOKUP_DEADLINE_SECONDS
+    pool = ThreadPoolExecutor(max_workers=2)
+
+    def within_deadline(futures):
+        wait([f for f in futures if f], timeout=max(0.0, deadline - time.monotonic()))
+
+    def done(future, empty):
+        if future is None or not future.done():
+            return empty
+        try:
+            return future.result()
+        except Exception:
+            logger.warning("Distance lookup raised", exc_info=True)
+            return empty
+
     try:
         google_future = (
             pool.submit(_google_nearby, lat, lon, place_type, api_key, fetch=fetch, kind="public_transport")
             if api_key else None
         )
-        overpass_future = pool.submit(_overpass_nearby, lat, lon, transport_mode, fetch=fetch)
-        highway_line_future = pool.submit(nearest_highway_line, lat, lon, fetch=fetch)
-        junction_future = pool.submit(nearest_motorway_junction, lat, lon, fetch=fetch)
-        futures = [f for f in (google_future, overpass_future, highway_line_future, junction_future) if f]
-        wait(futures, timeout=LOOKUP_DEADLINE_SECONDS)
+        if api_key:
+            junction_future = pool.submit(nearest_motorway_junction, lat, lon, fetch=fetch)
+            within_deadline([google_future, junction_future])
+            transit = done(google_future, None)
+            junction = done(junction_future, None)
+            overpass_best = {"highway": junction} if junction else {}
+            if not transit and time.monotonic() < deadline:
+                # Google found no stop: the combined query also looks for
+                # stations — run only now, one Overpass query at a time.
+                stations_future = pool.submit(_overpass_nearby, lat, lon, transport_mode, fetch=fetch)
+                within_deadline([stations_future])
+                for kind, value in done(stations_future, {}).items():
+                    overpass_best.setdefault(kind, value)
+        else:
+            combined_future = pool.submit(_overpass_nearby, lat, lon, transport_mode, fetch=fetch)
+            within_deadline([combined_future])
+            transit = None
+            overpass_best = done(combined_future, {})
+            if "highway" not in overpass_best and time.monotonic() < deadline:
+                junction_future = pool.submit(nearest_motorway_junction, lat, lon, fetch=fetch)
+                within_deadline([junction_future])
+                junction = done(junction_future, None)
+                if junction:
+                    overpass_best["highway"] = junction
 
-        def done(future, empty):
-            if future is None or not future.done():
-                return empty
-            try:
-                return future.result()
-            except Exception:
-                logger.warning("Distance lookup raised", exc_info=True)
-                return empty
-
-        transit = done(google_future, None)
-        overpass_best = done(overpass_future, {})
-        highway_line = done(highway_line_future, None)
-        junction = done(junction_future, None)
+        highway_line = None
+        if "highway" not in overpass_best and time.monotonic() < deadline:
+            # No exit found: the nearest point on a motorway itself ("A10 3.2 km").
+            line_future = pool.submit(nearest_highway_line, lat, lon, fetch=fetch)
+            within_deadline([line_future])
+            highway_line = done(line_future, None)
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
     if transit:
         best["public_transport"] = transit
-    # Fallback for public_transport whenever Google found nothing (no key
-    # configured, the call failed, or it genuinely had no results) — and
-    # the only source for highway access.
     for kind, value in overpass_best.items():
         best.setdefault(kind, value)
-    # Highway, in order: the combined query's exit, the exit-only query's,
-    # then the nearest point on a motorway itself ("A10 3.2 km").
-    if junction:
-        best.setdefault("highway", junction)
     if highway_line:
         best.setdefault("highway", highway_line)
 
-    return Distances(
+    result = Distances(
         latitude=lat,
         longitude=lon,
         public_transport=f"{best['public_transport'][1]} {format_distance(best['public_transport'][0])}"
@@ -870,6 +895,10 @@ def nearby_distances(
         distance_to_highway_km=round(highway_line[0] / 1000, 2) if highway_line else None,
         nearest_highway_name=highway_line[1] if highway_line else None,
     )
+    # Only remember complete answers, so a throttled lookup is retried next time.
+    if result.highway and result.public_transport:
+        _DISTANCE_CACHE[cache_key] = (time.monotonic(), result)
+    return result
 
 
 def distances_for_address(
