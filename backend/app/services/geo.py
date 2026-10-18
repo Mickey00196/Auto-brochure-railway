@@ -80,7 +80,7 @@ import math
 import os
 import urllib.parse
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from typing import Callable
 
@@ -603,8 +603,14 @@ def _overpass_nearby(
 # "Highway" blank). Given its own, longer budget and one retry, since it is
 # the only source for that field.
 JUNCTION_RADIUS_M = 15_000
-JUNCTION_TIMEOUT_SECONDS = 20
-JUNCTION_ATTEMPTS = 2
+JUNCTION_TIMEOUT_SECONDS = 7
+JUNCTION_ATTEMPTS = 1
+
+# The most a distance lookup may take in total, whatever the outside
+# services do. The capture page waits on this; a public Overpass instance
+# that hangs once took the whole request to 41 s (two 20 s junction
+# attempts back to back). Anything not back by then counts as not found.
+LOOKUP_DEADLINE_SECONDS = 8
 
 
 def _junction_query(lat: float, lon: float) -> str:
@@ -809,7 +815,11 @@ def nearby_distances(
     api_key = _google_maps_api_key()
     place_type = _GOOGLE_PLACE_TYPES.get(transport_mode, _GOOGLE_TRANSIT_FALLBACK_TYPE) if api_key else None
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    # Not a `with` block: leaving one waits for every thread, which is
+    # exactly the wait the deadline is there to cut off. A lookup still
+    # running at the deadline finishes in the background and is ignored.
+    pool = ThreadPoolExecutor(max_workers=4)
+    try:
         google_future = (
             pool.submit(_google_nearby, lat, lon, place_type, api_key, fetch=fetch, kind="public_transport")
             if api_key else None
@@ -817,11 +827,24 @@ def nearby_distances(
         overpass_future = pool.submit(_overpass_nearby, lat, lon, transport_mode, fetch=fetch)
         highway_line_future = pool.submit(nearest_highway_line, lat, lon, fetch=fetch)
         junction_future = pool.submit(nearest_motorway_junction, lat, lon, fetch=fetch)
+        futures = [f for f in (google_future, overpass_future, highway_line_future, junction_future) if f]
+        wait(futures, timeout=LOOKUP_DEADLINE_SECONDS)
 
-        transit = google_future.result() if google_future else None
-        overpass_best = overpass_future.result()
-        highway_line = highway_line_future.result()
-        junction = junction_future.result()
+        def done(future, empty):
+            if future is None or not future.done():
+                return empty
+            try:
+                return future.result()
+            except Exception:
+                logger.warning("Distance lookup raised", exc_info=True)
+                return empty
+
+        transit = done(google_future, None)
+        overpass_best = done(overpass_future, {})
+        highway_line = done(highway_line_future, None)
+        junction = done(junction_future, None)
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
     if transit:
         best["public_transport"] = transit

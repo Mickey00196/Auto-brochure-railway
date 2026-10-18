@@ -557,20 +557,18 @@ def test_highway_comes_from_the_exit_only_query_when_the_combined_query_fails():
     assert d.highway is not None and d.highway.startswith("Exit 3 Coenplein ")
 
 
-def test_exit_only_query_retries_once_after_a_failed_request():
+def test_exit_only_query_gives_up_after_one_failed_request():
+    """No retry: a hanging Overpass was what made the lookup take 41 s."""
     from app.services.geo import nearest_motorway_junction
 
     calls = []
 
     def fetch(url: str, body: bytes | None) -> str:
         calls.append(url)
-        if len(calls) == 1:
-            raise TimeoutError("The read operation timed out")
-        return json.dumps({"elements": [{"type": "node", "id": 1, "lat": 52.39, "lon": 4.86, "tags": {"highway": "motorway_junction", "name": "Coenplein"}}]})
+        raise TimeoutError("The read operation timed out")
 
-    result = nearest_motorway_junction(52.3863673, 4.889874, fetch=fetch)
-    assert len(calls) == 2
-    assert result is not None and result[1] == "Coenplein"
+    assert nearest_motorway_junction(52.3863673, 4.889874, fetch=fetch) is None
+    assert len(calls) == 1
 
 
 def test_highway_falls_back_to_the_nearest_motorway_road():
@@ -591,3 +589,21 @@ def test_highway_falls_back_to_the_nearest_motorway_road():
 
     d = nearby_distances(52.3863673, 4.889874, fetch=fetch)
     assert d.highway is not None and d.highway.startswith("A10 ")
+
+
+def test_a_hanging_lookup_cannot_hold_the_request_past_the_deadline(monkeypatch):
+    import app.services.geo as geo
+
+    monkeypatch.setattr(geo, "LOOKUP_DEADLINE_SECONDS", 0.5)
+
+    def fetch(url: str, body: bytes | None) -> str:
+        time.sleep(3)  # every outside service hangs
+        return json.dumps({"elements": []})
+
+    start = time.monotonic()
+    d = nearby_distances(52.3376, 4.8721, fetch=fetch)
+    elapsed = time.monotonic() - start
+
+    assert elapsed < 1.5
+    assert d.airport is not None  # the built-in airport list needs no network
+    assert d.highway is None
