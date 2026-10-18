@@ -604,9 +604,22 @@ def _overpass_nearby(
 # "Highway" blank). Given its own, longer budget and one retry, since it is
 # the only source for that field.
 JUNCTION_RADIUS_M = 15_000
-JUNCTION_TIMEOUT_SECONDS = 3.5
+JUNCTION_TIMEOUT_SECONDS = 2.5
 JUNCTION_ATTEMPTS = 2
 JUNCTION_RETRY_PAUSE_SECONDS = 1.0
+# The exit query is tiny, so it can afford to ask more than one public
+# Overpass instance: lz4.overpass-api.de timed out or answered "429 Too
+# Many Requests" on every lookup on 18 Oct. All of these hold the full
+# planet (unlike overpass.osm.ch, which is Switzerland only). Tried in order
+# within JUNCTION_BUDGET_SECONDS; the first real answer wins.
+JUNCTION_MIRRORS = [
+    "https://lz4.overpass-api.de/api/interpreter",
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+]
+JUNCTION_BUDGET_SECONDS = 7.5
 
 # The most a distance lookup may take in total, whatever the outside
 # services do. The capture page waits on this; a public Overpass instance
@@ -625,32 +638,37 @@ def nearest_motorway_junction(lat: float, lon: float, *, fetch: Fetcher = _http)
     """(distance_metres, label) of the nearest motorway exit, or None."""
     junction_fetch = functools.partial(_http, timeout=JUNCTION_TIMEOUT_SECONDS) if fetch is _http else fetch
     payload = _junction_query(lat, lon).encode("utf-8")
-    # The primary mirror only: overpass.osm.ch answered the same Amsterdam
-    # query with nothing (see OVERPASS_MIRRORS), so asking it would only
-    # turn "couldn't reach the data" into a wrong "no exit nearby". A failed
-    # request (a timeout, or Overpass's "429 Too Many Requests") is retried
-    # once after a short pause; a real answer, even an empty one, is final.
+    # Each full-planet mirror in turn (never overpass.osm.ch: Switzerland
+    # only, so its "nothing here" would be a wrong answer). A failed request
+    # (timeout, "429 Too Many Requests", 502) moves on to the next mirror,
+    # going round once more after a short pause if time allows; a real
+    # answer, even an empty one, is final.
+    started = time.monotonic()
     for attempt in range(JUNCTION_ATTEMPTS):
         if attempt:
             time.sleep(JUNCTION_RETRY_PAUSE_SECONDS)
-        try:
-            data = json.loads(junction_fetch(OVERPASS_MIRRORS[0], payload))
-        except Exception:
-            logger.warning("Overpass junction query failed for (%s, %s), attempt %s", lat, lon, attempt + 1, exc_info=True)
-            continue
-        if "elements" not in data:
-            logger.warning("Overpass junction query returned no 'elements' for (%s, %s): %r", lat, lon, data)
-            continue
-        best: tuple[float, str] | None = None
-        for el in data["elements"]:
-            tags = el.get("tags") or {}
-            point = _element_point(el)
-            if tags.get("highway") != "motorway_junction" or not point:
+        for mirror in JUNCTION_MIRRORS:
+            if time.monotonic() - started > JUNCTION_BUDGET_SECONDS:
+                return None
+            try:
+                data = json.loads(junction_fetch(mirror, payload))
+            except Exception as e:
+                logger.warning("Overpass junction query via %s failed for (%s, %s): %s", mirror, lat, lon, e)
                 continue
-            distance = haversine_m(lat, lon, point[0], point[1])
-            if best is None or distance < best[0]:
-                best = (distance, _label(tags, "Motorway exit"))
-        return best
+            if "elements" not in data:
+                logger.warning("Overpass junction query via %s returned no 'elements': %r", mirror, data)
+                continue
+            logger.info("Overpass junction query answered by %s for (%s, %s)", mirror, lat, lon)
+            best: tuple[float, str] | None = None
+            for el in data["elements"]:
+                tags = el.get("tags") or {}
+                point = _element_point(el)
+                if tags.get("highway") != "motorway_junction" or not point:
+                    continue
+                distance = haversine_m(lat, lon, point[0], point[1])
+                if best is None or distance < best[0]:
+                    best = (distance, _label(tags, "Motorway exit"))
+            return best
     return None
 
 

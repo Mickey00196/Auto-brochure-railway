@@ -548,9 +548,9 @@ def test_highway_comes_from_the_exit_only_query_when_the_combined_query_fails():
     assert d.highway is not None and d.highway.startswith("Coenplein ")
 
 
-def test_exit_only_query_retries_once_after_being_throttled():
-    """Overpass answers "429 Too Many Requests" when it's busy; one retry
-    after a short pause, then give up."""
+def test_exit_query_moves_on_to_the_next_mirror_when_one_is_throttled():
+    """lz4.overpass-api.de answered "429 Too Many Requests" or timed out on
+    every lookup; the next full-planet mirror is asked instead."""
     import app.services.geo as geo
     from app.services.geo import nearest_motorway_junction
 
@@ -558,14 +558,36 @@ def test_exit_only_query_retries_once_after_being_throttled():
 
     def fetch(url: str, body: bytes | None) -> str:
         calls.append(url)
-        raise TimeoutError("HTTP Error 429: Too Many Requests")
+        if url == geo.JUNCTION_MIRRORS[0]:
+            raise TimeoutError("HTTP Error 429: Too Many Requests")
+        return json.dumps({"elements": [{"type": "node", "id": 1, "lat": 52.34, "lon": 4.86,
+                                         "tags": {"highway": "motorway_junction", "ref": "S109"}}]})
 
-    geo.JUNCTION_RETRY_PAUSE_SECONDS, saved = 0.0, geo.JUNCTION_RETRY_PAUSE_SECONDS
-    try:
-        assert nearest_motorway_junction(52.3863673, 4.889874, fetch=fetch) is None
-    finally:
-        geo.JUNCTION_RETRY_PAUSE_SECONDS = saved
-    assert len(calls) == 2
+    result = nearest_motorway_junction(52.3376, 4.8721, fetch=fetch)
+    assert calls == geo.JUNCTION_MIRRORS[:2]
+    assert result is not None and result[1] == "S109"
+
+
+def test_exit_query_never_asks_the_switzerland_only_mirror():
+    import app.services.geo as geo
+
+    assert "overpass.osm.ch" not in " ".join(geo.JUNCTION_MIRRORS)
+
+
+def test_exit_query_gives_up_within_its_budget(monkeypatch):
+    import app.services.geo as geo
+    from app.services.geo import nearest_motorway_junction
+
+    monkeypatch.setattr(geo, "JUNCTION_BUDGET_SECONDS", 0.3)
+    monkeypatch.setattr(geo, "JUNCTION_RETRY_PAUSE_SECONDS", 0.0)
+
+    def fetch(url: str, body: bytes | None) -> str:
+        time.sleep(0.2)
+        raise TimeoutError("The read operation timed out")
+
+    start = time.monotonic()
+    assert nearest_motorway_junction(52.3376, 4.8721, fetch=fetch) is None
+    assert time.monotonic() - start < 1.0
 
 
 def test_only_one_overpass_query_runs_at_a_time(monkeypatch):
