@@ -1233,7 +1233,10 @@ function withTimeout(promise, ms, message) {
 // the text has arrived. Only elements that open text in place are clicked: a
 // real link to another page is never followed. Must be fully self-contained.
 async function expandHiddenText() {
-  const EXPAND_RE = /^(?:lees|toon|bekijk)\s+(?:de\s+)?(?:volledige\s+|hele\s+)?(?:omschrijving|beschrijving)$|^(?:lees|toon)\s+(?:meer|verder)$|^meer\s+lezen$|^read\s+(?:the\s+)?(?:full\s+)?(?:description|more)$|^show\s+(?:the\s+)?(?:full\s+)?(?:description|more)$/i;
+  // Only the description's own expander. Generic "Lees meer" / "Toon meer"
+  // controls elsewhere on funda (other listings, reviews, the map) were
+  // clicked too, and the page kept loading after a capture.
+  const EXPAND_RE = /^(?:lees|toon|bekijk)\s+(?:de\s+)?(?:volledige\s+|hele\s+)?(?:omschrijving|beschrijving)$|^read\s+(?:the\s+)?full\s+description$|^show\s+(?:the\s+)?full\s+description$/i;
   const textOf = (el) => (el.textContent || "").replace(/\s+/g, " ").trim();
   const navigates = (el) => {
     const a = el.closest("a[href]");
@@ -1242,6 +1245,10 @@ async function expandHiddenText() {
     return !(href === "" || href.startsWith("#") || /^javascript:/i.test(href));
   };
   if (!document.body) return { clicked: 0 };
+  // Never while the page is still setting itself up: a click landing in the
+  // middle of funda's own start-up is the likeliest way to leave it loading
+  // for good. The hidden text is still read either way (collectText).
+  if (document.readyState === "loading" || performance.now() < 3000) return { clicked: 0, skipped: "page still loading" };
   // The element that holds the expander label; the click bubbles to
   // whatever handler sits on an ancestor. Found via text nodes, which is
   // quick even on a heavy page.
@@ -1266,6 +1273,7 @@ async function expandHiddenText() {
       !navigates(el),
   );
   if (!targets.length) return { clicked: 0 };
+  targets.length = 1; // one click, on the first description expander only
 
   const lengthNow = () => (document.body ? document.body.textContent.length : 0);
   const before = lengthNow();

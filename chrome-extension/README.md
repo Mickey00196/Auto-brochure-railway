@@ -106,10 +106,14 @@ for you to complete — it never invents values.
   wrong with your capture: extensions only fully wire up their toolbar popup
   the first time something wakes them, which used to mean the first click —
   and right after Chrome has just launched (still restoring windows/tabs),
-  that first click can land before it's ready. From v2.6 the extension has a
-  background service worker that wakes itself the moment Chrome starts
-  instead, so it should already be ready by the time you get to it. If you
-  still see this, reload the extension at `chrome://extensions` once.
+  that first click can land before it's ready. Click the icon a second
+  time. (v2.6–2.12.5 had a background script to wake it at Chrome start;
+  v2.12.6 removed it so the extension does nothing at all until you click
+  it.)
+- **funda keeps loading after a capture.** Up to v2.12.5 the popup clicked
+  every "Lees meer" / "Toon meer" on the page, even while funda was still
+  starting up. From v2.12.6 it clicks only the description's own "Lees de
+  volledige omschrijving", once, and never in the page's first seconds.
 - **The popup opens but the button click seems to do nothing.** Before v2.7,
   a couple of failure paths (reading the page timing out, or retrying after
   an earlier failure) left the popup exactly as it was — no error, nothing —

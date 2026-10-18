@@ -92,7 +92,12 @@ for (const file of readdirSync(samplesDir).filter((f) => f.endsWith(".expected.j
   const page = await browser.newPage();
   await page.route(spec.url, (r) => r.fulfill({ status: 200, contentType: "text/html", body: html }));
   await page.goto(spec.url, { waitUntil: "load" });
-  if (expandSrc) await page.evaluate((s) => new Function(`return (${s})`)()(), expandSrc);
+  if (expandSrc) {
+    // The popup never clicks in a page's first 3 s (it may still be setting
+    // itself up); a person has been on the listing longer than that, so wait.
+    await page.waitForFunction(() => performance.now() >= 3000, null, { timeout: 5000 });
+    await page.evaluate((s) => new Function(`return (${s})`)()(), expandSrc);
+  }
   const data = await page.evaluate((s) => new Function(`return (${s})`)()(), extractSrc);
   await page.close();
   results.push({ sample: file.replace(".expected.json", ""), fields: compare(spec.expected, data) });
