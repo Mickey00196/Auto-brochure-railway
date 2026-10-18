@@ -31,7 +31,9 @@ const esc = (s: string) =>
 // attribution "Kadaster"), so the pins carry the colour. It only covers the
 // Netherlands, so a shortlist with a building abroad — or PDOK not answering
 // — falls back to the greyed OpenStreetMap layer.
-const PDOK_GREY = "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/grijs/EPSG:3857/{z}/{x}/{y}.png";
+// The address is the ResourceURL from PDOK's own WMTS GetCapabilities. Its
+// zoom levels ("TileMatrix") are two digits — "06", not "6" — hence {zz}.
+const PDOK_GREY = "https://service.pdok.nl/kadaster/brt-achtergrondkaart/wmts/v2_0/grijs/EPSG:3857/{zz}/{x}/{y}.png";
 const OSM = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const inNetherlands = (b: { lat: number; lng: number }) => b.lat > 50.7 && b.lat < 53.7 && b.lng > 3.2 && b.lng < 7.3;
@@ -87,7 +89,9 @@ export default function ShortlistMap({
         attribution: 'Kaart: <a href="https://www.kadaster.nl">Kadaster</a>',
         maxZoom: 19,
         minZoom: 6,
-      });
+        // Leaflet calls a function-valued option with the tile's coordinates.
+        zz: (c: { z: number }) => String(c.z).padStart(2, "0"),
+      } as L.TileLayerOptions);
       let loaded = 0;
       let failed = 0;
       pdok.on("tileload", () => (loaded += 1));
