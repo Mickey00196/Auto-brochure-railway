@@ -67,9 +67,24 @@ def _add_missing_columns() -> None:
         for table in Base.metadata.sorted_tables:
             if not inspector.has_table(table.name):
                 continue
-            existing = {col["name"] for col in inspector.get_columns(table.name)}
+            db_columns = {col["name"]: col for col in inspector.get_columns(table.name)}
+            existing = set(db_columns)
             for column in table.columns:
                 if column.name in existing:
+                    # A column the model has since made optional (e.g.
+                    # clients.company_name, once required) keeps its old
+                    # NOT NULL in a database created before that, and every
+                    # insert without it then fails. Relaxing it never touches
+                    # data. SQLite can't alter a column in place; its dev
+                    # databases are recreated instead.
+                    if (
+                        column.nullable
+                        and not column.primary_key
+                        and not db_columns[column.name].get("nullable", True)
+                        and engine.dialect.name == "postgresql"
+                    ):
+                        conn.execute(text(f'ALTER TABLE {table.name} ALTER COLUMN "{column.name}" DROP NOT NULL'))
+                        print(f"init_db: made {table.name}.{column.name} optional, as the model says")
                     continue
                 if not column.nullable or column.primary_key:
                     raise RuntimeError(
